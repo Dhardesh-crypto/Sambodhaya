@@ -8,7 +8,7 @@ const store = {
   set(k, v) { try { localStorage.setItem("sambodhaya-" + k, JSON.stringify(v)); } catch (e) {} },
   del(k) { try { localStorage.removeItem("sambodhaya-" + k); } catch (e) {} },
 };
-const IMG = { bg: "img/temple-bg.webp", dog: "img/tup-calm.webp" };
+const IMG = { bg: "img/temple-bg.webp", dog: "img/temple-dog.jpg", entrance: "img/entrance.jpg" };
 
 // UI wording (not teaching). Thai first; English is a draft.
 const UI = (th, en) => ({ th, en });
@@ -104,43 +104,73 @@ function Prototype() {
   return <p className="proto" role="note"><span aria-hidden="true">🕯️</span> {t(UI("ต้นแบบ · วัดนี้ยังไม่เปิดใช้สาธารณะ เนื้อหาบางส่วนยังรอตรวจ และยังไม่ได้ทดสอบกับเด็กจริง", "Prototype · this temple is not yet open to the public. Some content is still under review and it has not yet been tested with real children."))}</p>;
 }
 
-/* ---------- 🚪 Entrance ---------- */
+/* ---------- 🚪 Entrance: the illustrated temple with clickable areas ---------- */
+// Hotspots in % of the 1280×853 entrance artwork (img/entrance.jpg, used unchanged).
+const HOTSPOTS = [
+  { to: "library", l: 5.2, tp: 27.7, w: 12.0, h: 11.0, label: UI("ห้องสมุด · หอหลักฐาน: รู้ว่ามาจากไหน", "Library · Evidence Hall: where things come from") },
+  { to: "learn", l: 29.4, tp: 28.8, w: 11.2, h: 9.9, label: UI("ศาลาเรียนรู้: เรียน ฝึก และสังเกต", "Learning Hall: learn, practise and observe") },
+  { to: "media", l: 59.9, tp: 29.1, w: 13.4, h: 9.7, label: UI("ศาลาสื่อ: อ่าน ฟัง หรือดู", "Media Hall: read, listen or watch") },
+  { to: "access", l: 84.9, tp: 27.9, w: 13.7, h: 10.8, label: UI("ศาลาสากล: หลายภาษาและการเข้าถึง", "Universal Hall: languages and access") },
+  { to: "yard", l: 43.4, tp: 40.9, w: 13.5, h: 7.6, label: UI("ลานกลาง: อยากไปไหนวันนี้?", "Central Courtyard: where would you like to go today?") },
+  { to: "rest", l: 5.8, tp: 48.5, w: 14.2, h: 11.0, label: UI("พื้นที่พัก: พักใจได้เสมอ", "Rest Area: rest any time") },
+  { to: "care", l: 81.4, tp: 48.2, w: 15.3, h: 12.1, label: UI("ผู้ดูแลวัดและผู้ช่วย AI", "Temple caretaker and AI helper") },
+  { to: "yard", l: 34.9, tp: 62.4, w: 13.1, h: 24.6, label: UI("หมาวัด: ไม่รู้จะไปไหน ถามผมได้เลย", "Temple dog: not sure where to go? Ask me") },
+  { to: "yard", l: 49.1, tp: 60.1, w: 13.8, h: 14.4, label: UI("หมาวัด: ไม่รู้จะไปไหน ถามผมได้เลย", "Temple dog: not sure where to go? Ask me"), dup: true },
+  { to: "yard", l: 19.1, tp: 57.4, w: 9.2, h: 31.7, label: UI("เข้าวัด", "Enter the temple") },
+  { to: "exit", l: 71.9, tp: 57.4, w: 9.2, h: 31.7, label: UI("ออกจากวัด", "Leave the temple") },
+];
+const HUBS = [
+  { to: "yard", icon: "🌳", name: UI("ลานกลาง", "Central Courtyard"), sub: UI("อยากไปไหนวันนี้?", "Where would you like to go today?") },
+  { to: "learn", icon: "🧘", name: UI("ศาลาเรียนรู้", "Learning Hall"), sub: UI("เรียน ฝึก และสังเกตไปทีละก้าว", "Learn, practise and observe, one step at a time") },
+  { to: "library", icon: "📚", name: UI("หอหลักฐาน · ห้องสมุด", "Evidence Library"), sub: UI("ดูต้นทาง หลักฐาน และสถานะการตรวจ", "Sources, evidence and checking status") },
+  { to: "garden", icon: "🌿", name: UI("สวนสังเกตใจ", "Practice Garden"), sub: UI("กาย • ความรู้สึก • จิต • ธรรม", "Body • feelings • mind • Dhamma") },
+  { to: "journey", icon: "👣", name: UI("เส้นทางของฉัน", "My Journey"), sub: UI("ตามรอยเรื่องของพระพุทธเจ้าทีละก้าว", "Follow the Buddha's story step by step") },
+  { to: "media", icon: "📖🎧🎬", name: UI("ศาลาสื่อ", "Media Hall"), sub: UI("อ่าน ฟัง หรือดู", "Read, listen or watch") },
+  { to: "access", icon: "🌍♿", name: UI("ศาลาสากล", "Universal Hall"), sub: UI("หลายภาษาและการเข้าถึง", "Languages and access") },
+  { to: "rest", icon: "🪷", name: UI("พื้นที่พัก", "Rest Area"), sub: UI("พักใจได้เสมอ", "Rest any time") },
+  { to: "care", icon: "🤝", name: UI("ผู้ดูแลวัดและหมาวัด", "Caretaker & temple dog"), sub: UI("มีคำถาม หรืออยากให้ช่วย", "Questions, or need a hand") },
+];
 function Gate() {
   const { go, t, settings } = useApp();
   return (
-    <section className="gate" style={settings.textOnly ? null : { backgroundImage: `url(${IMG.bg})` }}>
-      <div className="gate-card">
-        <p className="brand-th">วัดสัมโพธายะ</p>
-        <p className="brand-en">SAMBODHAYA</p>
-        <h1>{t(UI("ยินดีต้อนรับสู่วัดสัมโพธายะ", "Welcome to Wat Sambodhaya"))}</h1>
-        <p className="lede">{t(UI("ที่นี่คุณเข้ามาพัก เรียนรู้ หรือเดินดูได้ตามสบาย", "Here you can rest, learn or simply look around, as you like."))}</p>
-        <button className="bell" onClick={() => ringBell(settings.mute)} aria-label={t(UI("ฟังเสียงระฆัง", "Ring the bell"))}>
+    <section className="gate">
+      <h1 className="sr-only">{t(UI("วัดสัมโพธายะออนไลน์", "Wat Sambodhaya Online"))}</h1>
+      {!settings.textOnly && (
+        <div className="temple-map">
+          <img src={IMG.entrance} width="1280" height="853"
+            alt={t(UI("ภาพวัดสัมโพธายะออนไลน์: ประตูไม้สองบานเปิดเข้าสู่ลานกลางที่มีต้นไม้ใหญ่ ศาลาโดยรอบมีป้าย ห้องสมุด ศาลาเรียนรู้ ศาลาสื่อ ศาลาสากล พื้นที่พัก และผู้ดูแลวัด หมาวัดนั่งรอต้อนรับที่ทางเดิน",
+              "Wat Sambodhaya Online: two wooden gates open onto a courtyard with a great tree. Around it, signs mark the Library, Learning Hall, Media Hall, Universal Hall, Rest Area and Caretaker. The temple dog waits on the path to welcome you."))} />
+          {HOTSPOTS.map((h, k) => (
+            <button key={k} className="hotspot" style={{ left: h.l + "%", top: h.tp + "%", width: h.w + "%", height: h.h + "%" }}
+              onClick={() => go(h.to)} aria-label={t(h.label)} title={t(h.label)} tabIndex={h.dup ? -1 : 0} aria-hidden={h.dup ? "true" : undefined} />
+          ))}
+        </div>
+      )}
+      <div className="gate-actions">
+        <button className="bell" onClick={() => ringBell(settings.mute)}>
           <span aria-hidden="true">🔔</span> {t(UI("ฟังเสียงระฆัง", "Ring the bell"))}
           <span className="bell-note">{t(UI("เลือกกดเองได้ • ไม่เปิดเอง", "Only if you press it • never plays by itself"))}</span>
         </button>
         <button className="btn big" onClick={() => go("yard")}>{t(UI("เข้าวัด →", "Enter the temple →"))}</button>
-        <div className="gate-row">
-          <button className="chip" onClick={() => go("access")}><span aria-hidden="true">🌐</span> {t(UI("ภาษา", "Language"))}</button>
-          <button className="chip" onClick={() => go("access")}><span aria-hidden="true">♿</span> {t(UI("การเข้าถึง", "Accessibility"))}</button>
-        </div>
-        <p className="quiet">{t(UI("ไม่ต้องสมัคร • ไม่ต้องตอบคำถาม • อยากเดินดูเฉย ๆ ก็ได้", "No sign-up • no questions to answer • just looking around is fine"))}</p>
-        <p className="rights">{t(UI("ที่นี่คุณ ถามได้ • ไม่เชื่อได้ • ตรวจได้ • ข้ามได้ • พักได้ • ออกได้", "Here you may ask • disagree • check • skip • rest • leave"))}</p>
-        <p className="privacy">{t(UI("วัดนี้ไม่ขอชื่อ และไม่เก็บข้อมูลส่วนตัว การตั้งค่าภาษาและตัวอักษรจำไว้ในเครื่องนี้เท่านั้น", "This temple doesn't ask your name or keep personal data. Language and text settings are remembered on this device only."))}</p>
-        <Teach text={UI("เข้ามาเพื่อเรียนรู้ ออกไปเพื่อรู้จักใจของตนเอง", "Come in to learn; go out to know your own mind.")} />
       </div>
+      <h2 className="hubs-title">{t(UI("อยากไปไหนวันนี้?", "Where would you like to go today?"))}</h2>
+      <ul className="hubs">
+        {HUBS.map((h) => (
+          <li key={h.to}><button className="hub" onClick={() => go(h.to)}>
+            <span className="hub-icon" aria-hidden="true">{h.icon}</span>
+            <span className="hub-text"><span className="hub-name">{t(h.name)}</span><span className="hub-sub">{t(h.sub)}</span></span>
+          </button></li>
+        ))}
+      </ul>
+      <p className="quiet center">{t(UI("ไม่ต้องสมัคร • ไม่ต้องตอบคำถาม • อยากเดินดูเฉย ๆ ก็ได้", "No sign-up • no questions to answer • just looking around is fine"))}</p>
+      <p className="rights center">{t(UI("ที่นี่คุณ ถามได้ • ไม่เชื่อได้ • ตรวจได้ • ข้ามได้ • พักได้ • ออกได้", "Here you may ask • disagree • check • skip • rest • leave"))}</p>
+      <p className="privacy center">{t(UI("วัดนี้ไม่ขอชื่อ และไม่เก็บข้อมูลส่วนตัว การตั้งค่าภาษาและตัวอักษรจำไว้ในเครื่องนี้เท่านั้น", "This temple doesn't ask your name or keep personal data. Language and text settings are remembered on this device only."))}</p>
     </section>
   );
 }
 
 /* ---------- 🌳 Courtyard ---------- */
-const ZONES = [
-  { id: "library", icon: "📚", name: UI("หอพระไตรปิฎก", "Tipiṭaka Hall"), want: UI("อยากรู้ว่ามาจากไหน", "I want to know where it comes from") },
-  { id: "learn", icon: "🧘", name: UI("ศาลาเรียนรู้และฝึก", "Hall of Learning and Practice"), want: UI("อยากเรียนรู้", "I want to learn") },
-  { id: "media", icon: "📖🎧🎬", name: UI("ศาลาสื่อ", "Media Hall"), want: UI("อยากอ่าน ฟัง หรือดู", "I want to read, listen or watch") },
-  { id: "rest", icon: "🌿", name: UI("พื้นที่พักสงบ", "Quiet Rest Area"), want: UI("อยากพัก", "I want to rest") },
-  { id: "access", icon: "🌍", name: UI("ศาลานานาชาติและการเข้าถึง", "Global Access Hall"), want: UI("อยากเปลี่ยนภาษา", "I want to change language") },
-  { id: "care", icon: "🤝", name: UI("จุดผู้ดูแลวัด", "Temple Caretaker"), want: UI("อยากขอความช่วยเหลือ", "I want help") },
-];
+const ZONES = HUBS.filter((h) => h.to !== "yard");
 function Yard() {
   const { go, t, settings, trail, clearTrail } = useApp();
   const [explore, setExplore] = useState(false);
@@ -168,10 +198,10 @@ function Yard() {
       {explore && (
         <div className="signposts" aria-label={t(UI("พื้นที่ในวัด", "Places in the temple"))}>
           {ZONES.map((z) => (
-            <button key={z.id} className="sign" onClick={() => go(z.id)}>
+            <button key={z.to} className="sign" onClick={() => go(z.to)}>
               <span className="sign-icon" aria-hidden="true">{z.icon}</span>
               <span className="sign-name">{t(z.name)}</span>
-              <span className="sign-want">{t(z.want)}</span>
+              <span className="sign-want">{t(z.sub)}</span>
             </button>
           ))}
         </div>
@@ -210,6 +240,10 @@ function Learn() {
         ))}
       </ol>
       <p className="quiet">{t(UI("คำถามของ U08 ยังไม่มีใน Child Output Records จึงแสดงเพียงชื่อเรื่อง", "U08 has no child question in the Child Output Records yet, so only its topic is shown."))} <Tag kind="unknown" /></p>
+      <div className="step">
+        <h2><span aria-hidden="true">💬</span> {t(UI("คุยคำถามกับพระหรือครู", "Talk a question through with a monk or teacher"))}</h2>
+        <p><Tag kind="unknown" /> {t(UI("ยังไม่เปิดในต้นแบบนี้ เมื่อเปิดแล้ว การสนทนาจะอยู่ภายใต้กฎความเป็นส่วนตัวและความปลอดภัยของเด็ก", "Not open in this prototype. When it opens, conversations will follow the temple's privacy and child-safety rules."))}</p>
+      </div>
     </section>
   );
 }
@@ -225,6 +259,8 @@ function Passport({ unit, srcKey, onClose }) {
       <dl>
         <dt>{t(UI("ต้นทาง", "Source"))}</dt><dd><strong>{s.id}</strong> · {s.pali}<br />{s.th}</dd>
         <dt>{t(UI("ใช้ในเรื่องนี้", "Used here"))}</dt><dd>{use ? use.use : "—"}</dd>
+        <dt>{t(UI("บาลี", "Pāli"))}</dt><dd><Tag kind="unknown" /> {t(UI("ยังไม่ได้เชื่อม", "Not yet connected"))}</dd>
+        <dt>{t(UI("คำแปล", "Translation"))}</dt><dd><Tag kind="unknown" /> {t(UI("ยังไม่ได้เชื่อม", "Not yet connected"))}</dd>
         <dt>{t(UI("ผู้พูด", "Speaker"))}</dt><dd><Tag kind="unknown" /> {t(UI("ดูได้ใน Source Record ซึ่งยังไม่ได้เชื่อมกับต้นแบบนี้", "Shown in the Source Record, which is not yet connected to this prototype"))}</dd>
         <dt>{t(UI("ข้อความต้นทางเต็ม", "Full source text"))}</dt><dd><Tag kind="unknown" /> {t(UI("ยังไม่ได้เชื่อมห้องสมุดสัมโพธายะในต้นแบบนี้ เราจึงยังไม่แสดงข้อความต้นทาง แทนที่จะเดา", "The Sambodhaya Library is not yet connected to this prototype, so the source text isn't shown rather than guessed."))}</dd>
         <dt>{t(UI("สถานะของเรื่อง", "Status of this story"))}</dt><dd><code>{unit.status}</code></dd>
@@ -373,7 +409,7 @@ function Library() {
   const used = Object.keys(SOURCES).map((key) => ({ key, s: SOURCES[key], units: UNITS.filter((u) => u.sources.some((x) => x.key === key)) }));
   return (
     <section className="zone">
-      <h1 className="zone-title"><span aria-hidden="true">📚</span> {t(UI("หอพระไตรปิฎก", "Tipiṭaka Hall"))}</h1>
+      <h1 className="zone-title"><span aria-hidden="true">📚</span> {t(UI("หอหลักฐาน · ห้องสมุด", "Evidence Library"))}</h1>
       <p className="lede">{t(UI("อยากรู้ว่ามาจากไหน?", "Want to know where things come from?"))}</p>
       <p>{t(UI("เข้ามาดูหนังสือ คำสอน และที่มาของข้อมูลได้ที่นี่", "Come in to see the books, the teachings and where the information comes from."))}</p>
       <Dog say={UI("อยากรู้ไหมว่าเรื่องเมื่อกี้มาจากไหน? ตามรอยกลับไปดูได้ที่นี่", "Curious where that story came from? You can follow it back here.")} />
@@ -471,7 +507,7 @@ function Access() {
   const set = (k, v) => setSettings({ ...settings, [k]: v });
   return (
     <section className="zone">
-      <h1 className="zone-title"><span aria-hidden="true">🌍♿</span> {t(UI("ภาษาและการเข้าถึง", "Language and access"))}</h1>
+      <h1 className="zone-title"><span aria-hidden="true">🌍♿</span> {t(UI("ศาลาสากล", "Universal Hall"))}</h1>
       <p className="lede">{t(UI("เลือกภาษาและวิธีที่ช่วยให้คุณใช้วัดได้สบายขึ้น", "Choose the language and settings that make the temple easier for you."))}</p>
       <p>{t(UI("ถ้าอ่าน ฟัง หรือดูแบบหนึ่งไม่สะดวก เราจะพยายามมีอีกทางให้เลือก", "If reading, listening or watching one way is hard, we'll try to offer another way."))}</p>
       <fieldset className="setting">
@@ -506,6 +542,19 @@ function Access() {
 }
 
 /* ---------- 🌿 Quiet rest area ---------- */
+function BreathSpace() {
+  const { t, settings } = useApp();
+  const [on, setOn] = useState(false);
+  return (
+    <div className="rest-space">
+      <div className={"breath" + (on && !settings.calmMotion ? " moving" : "")} aria-hidden="true" />
+      <button className="chip" onClick={() => setOn(!on)} aria-pressed={on}>{on ? "⏸️ " + t(UI("หยุด", "Stop")) : "🫧 " + t(UI("หายใจช้า ๆ ตามสบาย (ถ้าอยาก)", "Breathe slowly, at your own pace (if you like)"))}</button>
+      {on && <p className="quiet center">{t(UI("ไม่ต้องกลั้นหายใจ ไม่ต้องนับ วงกลมแค่ขยายและหดช้า ๆ ให้ดูตาม ถ้าไม่สบายให้หยุดได้เลย", "No holding your breath and no counting. The circle just grows and shrinks slowly, if you'd like to follow it. Stop whenever it doesn't feel good."))}</p>}
+      <p className="quiet center">{t(UI("หรือลุกขึ้นเดินช้า ๆ สักพัก แล้วค่อยกลับมาก็ได้", "Or get up and walk slowly for a while, then come back."))}</p>
+    </div>
+  );
+}
+
 function Rest() {
   const { t, settings, setSettings } = useApp();
   const [playing, setPlaying] = useState(false);
@@ -515,7 +564,7 @@ function Rest() {
       <h1 className="zone-title"><span aria-hidden="true">🌿</span> {t(UI("พื้นที่พักสงบ", "Quiet rest area"))}</h1>
       <p className="rest-line">{t(UI("พักตรงนี้ได้ ไม่ต้องรีบ", "You can rest here. No need to hurry."))}</p>
       <p className="quiet center">{t(UI("ไม่อยากทำอะไรก็ไม่ต้องทำ อยู่เงียบ ๆ ได้ และกลับเมื่อพร้อม", "If you don't want to do anything, you don't have to. You can stay quietly and go back when you're ready."))}</p>
-      <div className="rest-space" aria-hidden="true" />
+      <BreathSpace />
       <div className="row center">
         {!playing ? <button className="chip" disabled={settings.mute} onClick={() => { startCalm(); setPlaying(true); }}>🎧 ▶️ {t(UI("ฟังเสียงลมเบา ๆ", "Play a soft wind sound"))}</button>
           : <button className="chip" onClick={() => { stopCalm(); setPlaying(false); }}>⏸️ {t(UI("หยุดเสียง", "Stop the sound"))}</button>}
@@ -523,6 +572,92 @@ function Rest() {
       </div>
       <p className="quiet center">{t(UI("เสียงลมนี้สร้างขึ้นในเครื่องของคุณ ไม่ใช่บทสวดหรือคำสอน", "This wind sound is generated on your device. It isn't a chant or a teaching."))}</p>
       <p className="quiet center">{t(UI("ถ้าต้องการความช่วยเหลือจากคนจริง ไปที่ 🤝 ขอความช่วยเหลือ หรือบอกผู้ใหญ่ที่คุณไว้ใจได้", "If you need help from a real person, go to 🤝 Ask for help, or tell an adult you trust."))}</p>
+    </section>
+  );
+}
+
+/* ---------- 🌿 Practice Garden (part of the Learning–Practice–Observation hall) ---------- */
+const FOUR = [
+  { k: "body", icon: "🧍", name: UI("กาย", "Body") },
+  { k: "feel", icon: "💗", name: UI("ความรู้สึก", "Feelings") },
+  { k: "mind", icon: "🧠", name: UI("จิต", "Mind") },
+  { k: "dhamma", icon: "☸", name: UI("ธรรม", "Dhamma") },
+];
+// Verbatim from LEARN • PRACTICE • OBSERVE (ส่วนที่ 2–3).
+const OBSERVE = [
+  { h: "ระลึกชอบ", p: "ฝึกรู้ตัวและสังเกตสิ่งที่กำลังเกิดขึ้น", en: ["Right mindfulness", "Practise being aware and noticing what is happening."] },
+  { h: "เห็นความเปลี่ยนแปลง", p: "สังเกตว่าสิ่งต่าง ๆ ที่เกิดขึ้นมีการเปลี่ยนแปลง", en: ["Seeing change", "Notice that things which arise change."] },
+  { h: "ไม่รีบถือว่าเป็นเรา", p: "เรียนรู้ที่จะสังเกตความคิดและความรู้สึกก่อนรีบสรุปว่ามันคือตัวเราทั้งหมด", en: ["Not rushing to call it ‘me’", "Learn to observe thoughts and feelings before concluding that they are all of who we are."] },
+];
+function Garden() {
+  const { t, lang } = useApp();
+  const [open, setOpen] = useState(null);
+  const [note, setNote] = useState("");
+  return (
+    <section className="zone garden">
+      <h1 className="zone-title"><span aria-hidden="true">🌿</span> {t(UI("สวนสังเกตใจ", "Practice Garden"))}</h1>
+      <p className="lede">{t(UI("ที่นี่ไม่ต้องตอบให้ถูก ดูตามจริงได้", "Here you don't have to get it right. Just look at what's really there."))}</p>
+      <p className="quiet">{t(UI("ไม่ต้องหลับตา ไม่ต้องนั่งท่าไหน ไม่ต้องเล่าเรื่องส่วนตัว และหยุดได้ทุกเมื่อ", "No need to close your eyes or sit any special way, no need to share anything personal, and you can stop any time."))}</p>
+      <div className="four-dim">
+        {FOUR.map((f) => (
+          <button key={f.k} className={"tile" + (open === f.k ? " on" : "")} aria-expanded={open === f.k} onClick={() => { setOpen(open === f.k ? null : f.k); setNote(""); }}>
+            <span className="tile-icon" aria-hidden="true">{f.icon}</span>{t(f.name)}
+          </button>
+        ))}
+      </div>
+      {open && (
+        <div className="step mirror">
+          <h2><span aria-hidden="true">🪞</span> {t(FOUR.find((f) => f.k === open).name)}</h2>
+          <label htmlFor="garden-note" className="mirror-q">{t(UI("ตอนนี้ฉันสังเกตอะไรได้บ้าง?", "What can I notice right now?"))}</label>
+          <textarea id="garden-note" rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder={t(UI("เขียนไว้คิดเองได้ ไม่ถูกส่งไปไหน และไม่ถูกบันทึก", "Write just for yourself. It isn't sent anywhere and isn't saved."))} />
+          <div className="row"><button className="chip" onClick={() => setNote(t(UI("ยังไม่เห็นอะไร", "I haven't noticed anything yet")))}>{t(UI("ยังไม่เห็นอะไร", "I haven't noticed anything yet"))}</button><button className="chip" onClick={() => setOpen(null)}>{t(UI("ข้าม", "Skip"))}</button></div>
+          <p className="quiet"><Tag kind="unknown" /> {t(UI("คำอธิบายและต้นทางของการสังเกตด้านนี้ ยังรอ Source Record จากห้องสมุด เราจึงยังไม่อธิบายเอง", "The explanation and source for this kind of observing are still waiting for a Source Record from the library, so we don't explain it ourselves yet."))}</p>
+        </div>
+      )}
+      <div className="step">
+        <h2>{t(UI("แนวทางการสังเกต", "Ways of observing"))}</h2>
+        {OBSERVE.map((o) => (
+          <div key={o.h} className="teach k-explain">
+            <span className="teach-tags"><Tag kind="explain" />{lang === "en" && <Tag kind="draft" />}</span>
+            <strong>{lang === "en" ? o.en[0] : o.h}</strong>
+            <span className="teach-text">{lang === "en" ? o.en[1] : o.p}</span>
+          </div>
+        ))}
+      </div>
+      <p className="quiet">{t(UI("ไม่มีคะแนน ไม่วัดระดับจิตหรือระดับธรรม และไม่สัญญาว่าการฝึกจะทำให้ทุกข์หายทันที ถ้าต้องการความช่วยเหลือจากคนจริง บอกผู้ใหญ่ที่ไว้ใจได้", "No scores, no measuring of anyone's mind or practice, and no promise that practice makes suffering vanish at once. If you need help from a real person, tell an adult you trust."))}</p>
+    </section>
+  );
+}
+
+/* ---------- 👣 My Journey: the U01–U08 storyline and your own footprints ---------- */
+// The four rhythms are verbatim from the temple's main page ("4 จังหวะของประสบการณ์เดิม").
+const RHYTHMS = [
+  { icon: "🌑", h: "ก่อนเข้า — ฉันกำลังพบอะไร?", en: "Before entering — what am I facing?" },
+  { icon: "🕯️", h: "ระหว่างทาง — พระองค์ทรงตรวจอย่างไร?", en: "Along the way — how did he check?" },
+  { icon: "🪞", h: "กระจก — แล้วฉันเห็นอะไร?", en: "The mirror — and what do I see?" },
+  { icon: "🌅", h: "ก่อนออก — อะไรที่ฉันจะนำกลับไปดูต่อในชีวิต?", en: "Before leaving — what will I take back to keep looking at in life?" },
+];
+function Journey() {
+  const { go, t, lang, trail, remember } = useApp();
+  const visited = new Set(trail.map((f) => f.u));
+  return (
+    <section className="zone journey">
+      <h1 className="zone-title"><span aria-hidden="true">👣</span> {t(UI("เส้นทางของฉัน", "My Journey"))}</h1>
+      <p className="lede">{t(UI("ตามรอยเรื่องของพระพุทธเจ้าทีละก้าว และดูทางของตัวเองไปพร้อมกัน", "Follow the Buddha's story step by step, and look at your own path alongside it."))}</p>
+      <ol className="rhythms">{RHYTHMS.map((r) => <li key={r.icon}><span aria-hidden="true">{r.icon}</span> {lang === "en" ? r.en : r.h}</li>)}</ol>
+      <ol className="path">
+        {UNITS.map((u, k) => (
+          <li key={u.code} className={visited.has(k) ? "been" : ""}>
+            <button onClick={() => go("unit", k)}>
+              <span className="path-n">{k + 1}</span>
+              <span className="path-t">{t(u.title)}</span>
+              {visited.has(k) && <span className="path-foot" aria-label={t(UI("เคยมาแล้ว", "visited"))}>👣</span>}
+            </button>
+          </li>
+        ))}
+      </ol>
+      <Teach text={UI("เส้นเรื่องชีวิตในแอปหยุดที่ปรินิพพาน.", "The life story in this app ends at the parinibbāna.")} />
+      <p className="quiet">{t(UI("ไม่ต้องเริ่มที่ข้อแรก และไม่ต้องเดินให้ครบ รอยเท้าไม่ใช่คะแนน", "You don't have to start at the first step or walk them all. Footprints aren't a score."))} {!remember && t(UI("ถ้าอยากให้วัดจำรอยเท้าไว้ในเครื่องนี้ เปิดได้ที่ 🌍 ศาลาสากล", "To let the temple remember your footprints on this device, switch it on in the 🌍 Universal Hall."))}</p>
     </section>
   );
 }
@@ -535,7 +670,7 @@ function Care() {
   const options = [UI("ตรงนี้หนูไม่เข้าใจ", "I don't understand this part"), UI("หนูคิดว่าตรงนี้อาจผิด", "I think this part might be wrong"), UI("หนูหาทางไม่เจอ", "I can't find my way")];
   return (
     <section className="zone">
-      <h1 className="zone-title"><span aria-hidden="true">🤝</span> {t(UI("จุดผู้ดูแลวัด", "Temple caretaker"))}</h1>
+      <h1 className="zone-title"><span aria-hidden="true">🤝</span> {t(UI("ผู้ดูแลวัดและผู้ช่วย AI", "Temple caretaker and AI helper"))}</h1>
       <p className="lede">{t(UI("มีอะไรให้เราช่วยไหม?", "Can we help with anything?"))}</p>
       <p>{t(UI("พูดง่าย ๆ ได้เลย:", "Just say it simply:"))}</p>
       <div className="three">{options.map((o, k) => <button key={k} className={"tile" + (pick === k ? " on" : "")} onClick={() => setPick(k)}>{t(o)}</button>)}</div>
@@ -575,7 +710,7 @@ function Exit() {
 }
 
 /* ---------- app shell & router ---------- */
-const VIEWS = ["gate", "yard", "learn", "unit", "library", "media", "access", "rest", "care", "exit"];
+const VIEWS = ["gate", "yard", "learn", "unit", "library", "media", "access", "rest", "care", "exit", "garden", "journey"];
 function parseHash() {
   const h = (location.hash || "").replace("#", "");
   const m = h.match(/^u0([1-8])$/); if (m) return { view: "unit", arg: +m[1] - 1 };
@@ -624,6 +759,8 @@ function App() {
         {V === "rest" && <Rest />}
         {V === "care" && <Care />}
         {V === "exit" && <Exit />}
+        {V === "garden" && <Garden />}
+        {V === "journey" && <Journey />}
       </main>
       {V === "gate" ? <footer className="foot"><Wayfinding /></footer> : <footer className="foot"><p className="rights">{t(UI("ที่นี่คุณ ถามได้ • ไม่เชื่อได้ • ตรวจได้ • ข้ามได้ • พักได้ • ออกได้", "Here you may ask • disagree • check • skip • rest • leave"))}</p></footer>}
     </Ctx.Provider>
