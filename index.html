@@ -33,7 +33,7 @@
 }
 :root[data-size="s"] { --fs: 15px; } :root[data-size="l"] { --fs: 20px; } :root[data-size="xl"] { --fs: 24px; }
 :root[data-contrast="on"] { --ink: #120b05; --muted: #2f2419; --line-soft: #8a7a66; --paper: #ffffff; --cream: #ffffff; }
-html { background: var(--paper); font-size: var(--fs); }
+html { background: var(--paper); font-size: var(--fs); overflow-x: clip; }
 body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--body); line-height: 1.65; -webkit-font-smoothing: antialiased; }
 #root { max-width: 1280px; margin: 0 auto; padding-inline: 16px; padding-block: 0 40px; }
 .zone, .yard, .proto, .top, .foot { max-width: 920px; margin-inline: auto; }
@@ -72,7 +72,7 @@ code { font-size: .82em; background: var(--leaf-soft); border-radius: 6px; paddi
 .wayfinding { display: flex; gap: 6px; flex-wrap: wrap; }
 .way { background: var(--cream); border: 1.5px solid var(--ink); border-radius: 999px; padding: 3px 12px; font-size: .9rem; }
 .way.exit { background: #fbe9dc; }
-.proto { margin: 10px 0 0; font-size: .85rem; color: var(--muted); background: #fff6dc; border: 1.5px dashed #d9b75a; border-radius: 12px; padding: 6px 12px; max-width: none; }
+.proto { margin: 10px auto 0; font-size: .85rem; color: var(--muted); background: #fff6dc; border: 1.5px dashed #d9b75a; border-radius: 12px; padding: 6px 12px; max-width: none; }
 .foot { margin-top: 36px; padding-top: 16px; border-top: 1.5px solid var(--line-soft); text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .rights { font-family: var(--display); color: var(--leaf); }
 
@@ -85,8 +85,9 @@ code { font-size: .82em; background: var(--leaf-soft); border-radius: 6px; paddi
 .teach-text { font-size: 1.12rem; }
 
 /* entrance: the illustrated temple map */
-.gate { margin-top: 12px; display: flex; flex-direction: column; gap: 16px; align-items: center; }
-.temple-map { position: relative; width: 100%; border-radius: 22px; overflow: hidden; border: var(--line); box-shadow: var(--pop); line-height: 0; }
+.gate { display: flex; flex-direction: column; gap: 16px; align-items: center; }
+/* desktop: full-bleed hero, edge to edge, no frame */
+.temple-map { position: relative; width: 100vw; margin-inline: calc(50% - 50vw); line-height: 0; border-bottom: 2px solid var(--ink); }
 .temple-map img { display: block; width: 100%; height: auto; }
 .hotspot { position: absolute; padding: 0; margin: 0; background: transparent; border: 0; border-radius: 14px; cursor: pointer; transition: box-shadow .25s, background-color .25s; }
 .hotspot:hover { background: rgba(255, 244, 200, .18); box-shadow: 0 0 0 3px rgba(255, 220, 120, .95), 0 0 22px 6px rgba(255, 214, 102, .55); }
@@ -231,6 +232,15 @@ textarea { font: inherit; width: 100%; box-sizing: border-box; border: 1.5px sol
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
 
 @media (max-width: 720px) {
+  .proto { font-size: .78rem; }
+  .hotspot { display: none; }
+  .hubs { grid-template-columns: minmax(0, 1fr) !important; gap: 10px; }
+  .hub { min-height: 72px; padding: 12px 16px; border-width: 2px; }
+  .hub-icon { font-size: 2rem; width: 2.4rem; text-align: center; }
+  .hub-name { font-size: 1.25rem; }
+  .hub-sub { font-size: .95rem; }
+  .gate-actions { flex-direction: column; width: 100%; }
+  .gate-actions .btn, .gate-actions .bell { width: 100%; }
   .four, .four-dim, .hubs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .rhythms { grid-template-columns: minmax(0, 1fr); }
   .path li:nth-child(even) { padding-left: 0; }
