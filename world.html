@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>วัด 3 มิติ · Sambodhaya</title>
+<meta name="robots" content="noindex,nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Itim&family=Mali:wght@400;600;700&display=swap">
+<style>
+/* Layout: the 3D temple fills the screen; calm paper-coloured panels float above it.
+   Same tokens as the Sambodhaya site so the two feel like one place. */
+:root {
+  --ink: #3a2a1d; --paper: #fdf8ee; --cream: #fffdf8; --saffron: #e98a2b; --saffron-deep: #a5560f;
+  --leaf: #4f9a5d; --leaf-soft: #e6f3e3; --gold: #f2cc62; --muted: #6e5c4c;
+  --display: "Itim", "Mali", "Thonburi", system-ui, sans-serif; --body: "Mali", "Itim", "Thonburi", system-ui, sans-serif;
+  color-scheme: light;
+}
+[hidden] { display: none !important; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #f3d9a6; color: var(--ink); font-family: var(--body); }
+#view { position: fixed; inset: 0; display: block; width: 100%; height: 100%; touch-action: none; outline: none; }
+button { font: inherit; color: inherit; cursor: pointer; }
+:focus-visible { outline: 3px solid var(--saffron-deep); outline-offset: 2px; }
+.panel { background: rgba(255, 253, 248, .96); border: 2px solid var(--ink); border-radius: 18px; box-shadow: 3px 3px 0 rgba(58, 42, 29, .5); }
+.btn { background: var(--saffron); color: var(--cream); border: 2px solid var(--ink); border-radius: 12px; padding: 6px 16px; font-family: var(--display); font-size: 1.05rem; box-shadow: 2px 2px 0 rgba(58, 42, 29, .55); text-decoration: none; display: inline-block; }
+.chip { background: var(--cream); border: 1.5px solid var(--ink); border-radius: 999px; padding: 4px 12px; font-size: .92rem; }
+.chip.on { background: var(--gold); }
+.quiet { color: var(--muted); font-size: .85rem; margin: 0; }
+
+/* top bar */
+.hud-top { position: fixed; top: calc(10px + env(safe-area-inset-top, 0px)); left: 10px; right: 10px; display: flex; gap: 8px; align-items: flex-start; justify-content: space-between; pointer-events: none; z-index: 5; }
+.hud-top > * { pointer-events: auto; }
+.brand { font-family: var(--display); font-size: 1.15rem; padding: 6px 12px; text-decoration: none; color: var(--ink); white-space: nowrap; }
+.hud-tools { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.proto { position: fixed; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); font-size: .75rem; padding: 3px 12px; background: #fff6dc; border: 1.5px dashed #d9b75a; border-radius: 999px; z-index: 4; white-space: nowrap; max-width: calc(100% - 20px); overflow: hidden; text-overflow: ellipsis; }
+
+/* proximity prompt */
+.prompt { position: fixed; left: 50%; bottom: 70px; transform: translateX(-50%); padding: 8px 14px; display: flex; gap: 10px; align-items: center; z-index: 5; max-width: calc(100% - 24px); }
+.prompt strong { font-family: var(--display); font-weight: 400; font-size: 1.15rem; }
+.key { display: inline-grid; place-items: center; min-width: 26px; height: 26px; border: 1.5px solid var(--ink); border-radius: 6px; background: var(--cream); font-family: var(--display); }
+
+/* dialogs */
+.dialog { position: fixed; z-index: 10; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(560px, calc(100% - 24px)); max-height: calc(100% - 24px); overflow: auto; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; }
+.dialog h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 1.6rem; color: var(--saffron-deep); }
+.dialog p { margin: 0; line-height: 1.6; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.places { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.places button { width: 100%; text-align: left; background: var(--cream); border: 1.5px solid var(--ink); border-radius: 12px; padding: 8px 10px; display: flex; gap: 8px; align-items: center; }
+.places .ic { font-size: 1.4rem; }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.swatches { display: flex; gap: 6px; flex-wrap: wrap; }
+.sw { width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--ink); }
+.sw.on { box-shadow: 0 0 0 3px var(--gold); }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field > span { font-family: var(--display); }
+.preview { width: 96px; height: 96px; object-fit: cover; border-radius: 12px; border: 2px solid var(--ink); background: var(--leaf-soft); }
+.note { background: var(--leaf-soft); border-radius: 12px; padding: 8px 12px; font-size: .9rem; }
+.warn { background: #fdecec; border-radius: 12px; padding: 8px 12px; font-size: .9rem; }
+
+/* loading */
+.loading { position: fixed; inset: 0; display: grid; place-items: center; background: var(--paper); z-index: 20; font-family: var(--display); font-size: 1.4rem; text-align: center; padding: 20px; }
+
+/* touch controls */
+.touch { display: none; }
+@media (pointer: coarse) {
+  .touch { display: block; }
+  .stick { position: fixed; left: calc(18px + env(safe-area-inset-left, 0px)); bottom: calc(40px + env(safe-area-inset-bottom, 0px)); width: 120px; height: 120px; border-radius: 50%; background: rgba(255, 253, 248, .55); border: 2px solid rgba(58, 42, 29, .6); z-index: 6; touch-action: none; }
+  .knob { position: absolute; left: 50%; top: 50%; width: 50px; height: 50px; margin: -25px 0 0 -25px; border-radius: 50%; background: var(--cream); border: 2px solid var(--ink); }
+  .tbtns { position: fixed; right: calc(18px + env(safe-area-inset-right, 0px)); bottom: calc(44px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 10px; z-index: 6; }
+  .tbtns button { width: 64px; height: 64px; border-radius: 50%; background: rgba(255, 253, 248, .85); border: 2px solid var(--ink); font-family: var(--display); font-size: 1rem; }
+  .prompt { bottom: 180px; }
+}
+@media (max-width: 600px) { .places { grid-template-columns: minmax(0, 1fr); } .hud-tools .label { display: none; } }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/",
+  "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.1.0/lib/three-vrm.module.min.js"
+} }
+</script>
+</head>
+<body>
+<canvas id="view" tabindex="0" aria-label="วัดสัมโพธายะแบบ 3 มิติ ใช้ปุ่มลูกศรหรือ W A S D เพื่อเดิน"></canvas>
+<div class="loading" id="loading">กำลังเตรียมวัด…</div>
+
+<div class="hud-top">
+  <a class="brand panel" href="index.html">☸ วัดสัมโพธายะ</a>
+  <div class="hud-tools">
+    <button class="chip" id="btn-places">🗺️ <span class="label" data-th="ที่ต่าง ๆ ในวัด" data-en="Places">ที่ต่าง ๆ ในวัด</span></button>
+    <button class="chip" id="btn-avatar">🧍 <span class="label" data-th="ตัวละครของฉัน" data-en="My avatar">ตัวละครของฉัน</span></button>
+    <button class="chip" id="btn-calm" aria-pressed="false">🍃 <span class="label" data-th="ลดการเคลื่อนไหว" data-en="Calm motion">ลดการเคลื่อนไหว</span></button>
+    <button class="chip" id="btn-help">❔</button>
+    <a class="chip" href="index.html#exit" style="text-decoration:none">🚪 <span class="label" data-th="ออกจากวัด" data-en="Leave">ออกจากวัด</span></a>
+  </div>
+</div>
+
+<div class="prompt panel" id="prompt" hidden>
+  <span class="key" aria-hidden="true">E</span>
+  <span><strong id="prompt-name"></strong><br><span class="quiet" id="prompt-sub"></span></span>
+  <button class="btn" id="prompt-go">เข้า</button>
+</div>
+
+<div class="dialog panel" id="dlg" role="dialog" aria-modal="true" aria-labelledby="dlg-title" hidden>
+  <h2 id="dlg-title"></h2>
+  <div id="dlg-body"></div>
+</div>
+
+<div class="touch" aria-hidden="true">
+  <div class="stick" id="stick"><div class="knob" id="knob"></div></div>
+  <div class="tbtns"><button id="t-jump">⤴︎</button><button id="t-act">E</button></div>
+</div>
+
+<p class="proto" role="note">🕯️ ต้นแบบ · เล่นคนเดียว ไม่มีอะไรถูกส่งออกจากเครื่องนี้ · ยังไม่ได้ทดสอบกับเด็กจริง</p>
+<script type="module" src="src/world.js"></script>
+</body>
+</html>

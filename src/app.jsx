@@ -154,6 +154,7 @@ function Gate() {
           <span className="bell-note">{t(UI("เลือกกดเองได้ • ไม่เปิดเอง", "Only if you press it • never plays by itself"))}</span>
         </button>
         <button className="btn big" onClick={() => go("yard")}>{t(UI("เข้าวัด →", "Enter the temple →"))}</button>
+        <a className="btn world-link" href="world.html">🎮 {t(UI("เดินในวัดแบบ 3 มิติ (ทดลอง)", "Walk the temple in 3D (trial)"))}</a>
       </div>
       <h2 className="hubs-title">{t(UI("อยากไปไหนวันนี้?", "Where would you like to go today?"))}</h2>
       <ul className="hubs">
