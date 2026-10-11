@@ -668,23 +668,12 @@ function Journey() {
 /* ---------- 🤝 Caretaker ---------- */
 function Care() {
   const { t } = useApp();
-  const [pick, setPick] = useState(null);
-  const [note, setNote] = useState("");
-  const options = [UI("ตรงนี้หนูไม่เข้าใจ", "I don't understand this part"), UI("หนูคิดว่าตรงนี้อาจผิด", "I think this part might be wrong"), UI("หนูหาทางไม่เจอ", "I can't find my way")];
   return (
     <section className="zone">
       <h1 className="zone-title"><span aria-hidden="true">🤝</span> {t(UI("ผู้ดูแลวัดและผู้ช่วย AI", "Temple caretaker and AI helper"))}</h1>
       <p className="lede">{t(UI("มีอะไรให้เราช่วยไหม?", "Can we help with anything?"))}</p>
       <p>{t(UI("พูดง่าย ๆ ได้เลย:", "Just say it simply:"))}</p>
-      <div className="three">{options.map((o, k) => <button key={k} className={"tile" + (pick === k ? " on" : "")} onClick={() => setPick(k)}>{t(o)}</button>)}</div>
-      {pick != null && (
-        <div className="care-form">
-          <label htmlFor="care-note">{t(UI("อยากบอกอะไรเพิ่มไหม? (ไม่ต้องใส่ชื่อ โรงเรียน หรือข้อมูลส่วนตัว)", "Anything to add? (No need for your name, school or personal details)"))}</label>
-          <textarea id="care-note" rows={3} value={note} onChange={(e) => setNote(e.target.value)} />
-          <p className="notice"><Tag kind="unknown" /> {t(UI("ในต้นแบบนี้ ข้อความยังส่งถึงผู้ดูแลไม่ได้ ระบบรับเรื่องยังไม่ได้สร้าง", "In this prototype, messages can't reach the caretakers yet. The reporting system hasn't been built."))}</p>
-          <p className="quiet">{t(UI("เมื่อระบบพร้อม คุณจะเห็นสถานะง่าย ๆ เพียง: รับเรื่องแล้ว • กำลังตรวจ • แก้แล้ว/ชี้แจงแล้ว", "When it's ready, you'll see a simple status: received • being checked • fixed or explained"))}</p>
-        </div>
-      )}
+      <FeedbackForm />
       <div className="safety-note" role="note">
         <strong>{t(UI("ถ้าเป็นเรื่องที่ไม่ปลอดภัย หรือหนักใจมาก", "If something is unsafe or very worrying"))}</strong>
         <span>{t(UI("ให้บอกผู้ใหญ่ที่คุณไว้ใจได้ เช่น พ่อแม่ ผู้ปกครอง หรือคุณครู วัดนี้ไม่ใช่ที่รักษาหรือวินิจฉัยปัญหาสุขภาพ", "Tell an adult you trust, such as a parent, carer or teacher. This temple isn't a place for diagnosing or treating health problems."))}</span>
@@ -712,8 +701,234 @@ function Exit() {
   );
 }
 
+/* ---------- sending forms (Netlify Forms; nothing else receives the data) ---------- */
+async function sendForm(name, fields, file) {
+  const fd = new FormData();
+  fd.append("form-name", name);
+  Object.entries(fields).forEach(([k, v]) => fd.append(k, v == null ? "" : String(v)));
+  if (file) fd.append("attachment", file, file.name);
+  const r = await fetch("/", { method: "POST", body: fd });
+  if (!r.ok) throw new Error("HTTP " + r.status);
+}
+const MB = 1024 * 1024;
+
+/* ---------- 💬 feedback & bug reports ---------- */
+const FB_TYPES = [
+  { k: "unclear", icon: "🙋", label: UI("ตรงนี้ไม่เข้าใจ", "I don't understand this part") },
+  { k: "wrong", icon: "🔎", label: UI("คิดว่าตรงนี้อาจผิด", "I think this might be wrong") },
+  { k: "lost", icon: "🧭", label: UI("หาทางไม่เจอ", "I can't find my way") },
+  { k: "bug", icon: "🐞", label: UI("แจ้งปัญหาการใช้งาน", "Report a bug") },
+  { k: "idea", icon: "💡", label: UI("ข้อเสนอแนะ", "Suggestion") },
+];
+function FeedbackForm({ onDone, compact }) {
+  const { t, lang, view } = useApp();
+  const [type, setType] = useState(null);
+  const [msg, setMsg] = useState("");
+  const [device, setDevice] = useState(true);
+  const [file, setFile] = useState(null);
+  const [email, setEmail] = useState("");
+  const [state, setState] = useState("idle"); // idle | sending | sent | error
+  const page = (location.hash || "#gate") + (document.referrer.includes("world.html") ? " (from 3D)" : "");
+  const deviceInfo = `${innerWidth}x${innerHeight} · ${navigator.userAgent.replace(/\s*\([^)]*\)/g, " ").slice(0, 120)}`;
+  const tooBig = file && file.size > 5 * MB;
+  const canSend = type && msg.trim().length >= 3 && !tooBig && state !== "sending";
+  const submit = async (e) => {
+    e.preventDefault(); if (!canSend) return;
+    setState("sending");
+    try {
+      await sendForm("feedback", { type, message: msg.trim(), page, lang, device: device ? deviceInfo : "(not shared)", email: email.trim(), "bot-field": "" }, file);
+      setState("sent");
+    } catch (err) { setState("error"); }
+  };
+  if (state === "sent") return (
+    <div className="fb-done" role="status">
+      <p className="lede">🙏 {t(UI("ได้รับแล้ว ขอบคุณที่ช่วยดูแลวัด", "Received. Thank you for helping look after the temple."))}</p>
+      <p>{t(UI("สถานะ: รับเรื่องแล้ว ผู้ดูแลจะตรวจและแก้เมื่อมีหลักฐาน", "Status: received. The caretakers will check it and fix things where the evidence supports it."))}</p>
+      {onDone && <button className="btn" onClick={onDone}>{t(UI("ปิด", "Close"))}</button>}
+    </div>
+  );
+  return (
+    <form className={"fb-form" + (compact ? " compact" : "")} onSubmit={submit} noValidate>
+      <fieldset className="fb-types">
+        <legend>{t(UI("อยากบอกเรื่องอะไร?", "What would you like to tell us?"))}</legend>
+        {FB_TYPES.map((x) => (
+          <label key={x.k} className={"fb-type" + (type === x.k ? " on" : "")}>
+            <input type="radio" name="fb-type" value={x.k} checked={type === x.k} onChange={() => setType(x.k)} />
+            <span aria-hidden="true">{x.icon}</span> {t(x.label)}
+          </label>
+        ))}
+      </fieldset>
+      <label className="fb-field" htmlFor="fb-msg">{t(UI("เล่าสั้น ๆ ก็ได้", "A short description is fine"))}
+        <textarea id="fb-msg" rows={4} maxLength={2000} value={msg} onChange={(e) => setMsg(e.target.value)} required />
+      </label>
+      <p className="warn-kids">{t(UI("ไม่ต้องใส่ชื่อจริง โรงเรียน ที่อยู่ หรือเบอร์โทร", "No need for your real name, school, address or phone number."))}</p>
+      <details className="study">
+        <summary>{t(UI("เพิ่มเติม (ไม่ใส่ก็ได้)", "Extras (optional)"))}</summary>
+        <label className="fb-field" htmlFor="fb-file">{t(UI("ภาพหน้าจอ (ไม่เกิน 5 MB)", "Screenshot (up to 5 MB)"))}
+          <input id="fb-file" type="file" accept="image/*" onChange={(e) => setFile(e.target.files[0] || null)} />
+        </label>
+        {tooBig && <p className="notice">{t(UI("ไฟล์ใหญ่เกิน 5 MB", "The file is larger than 5 MB"))}</p>}
+        <label className="fb-field" htmlFor="fb-email">{t(UI("อีเมลสำหรับตอบกลับ (สำหรับผู้ใหญ่เท่านั้น)", "Email for a reply (adults only)"))}
+          <input id="fb-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
+        </label>
+      </details>
+      <div className="fb-attach">
+        <span>{t(UI("แนบไปด้วย:", "Attached:"))} <code>{page}</code></span>
+        <label className="toggle"><input type="checkbox" checked={device} onChange={(e) => setDevice(e.target.checked)} /> <span>{t(UI("ขนาดจอและชนิดเบราว์เซอร์ (ช่วยหาบั๊ก)", "Screen size and browser type (helps find bugs)"))}</span></label>
+      </div>
+      {state === "error" && <p className="notice" role="alert">{t(UI("ส่งไม่สำเร็จ ลองอีกครั้ง หรือคัดลอกข้อความไว้ก่อน", "Couldn't send. Try again, or copy your message first."))}</p>}
+      <div className="row">
+        <button type="submit" className="btn" disabled={!canSend}>{state === "sending" ? t(UI("กำลังส่ง…", "Sending…")) : t(UI("ส่ง", "Send"))}</button>
+        {onDone && <button type="button" className="chip" onClick={onDone}>{t(UI("ยกเลิก", "Cancel"))}</button>}
+      </div>
+      <p className="quiet">{t(UI("ข้อความจะถึงผู้ดูแลวัดเท่านั้น ไม่เปิดเผยต่อสาธารณะ", "Messages reach the temple caretakers only and are never made public."))}</p>
+    </form>
+  );
+}
+function FeedbackWidget() {
+  const { t } = useApp();
+  const [open, setOpen] = useState(false);
+  useEffect(() => { const f = () => setOpen(false); addEventListener("hashchange", f); return () => removeEventListener("hashchange", f); }, []);
+  useEffect(() => { if (!open) return; const k = (e) => { if (e.key === "Escape") setOpen(false); }; addEventListener("keydown", k); return () => removeEventListener("keydown", k); }, [open]);
+  return (
+    <>
+      <button className="fb-fab" onClick={() => setOpen(true)} aria-haspopup="dialog">💬 <span>{t(UI("ส่งความคิดเห็น / แจ้งปัญหา", "Feedback / report a problem"))}</span></button>
+      {open && (
+        <div className="fb-overlay" onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}>
+          <div className="fb-panel" role="dialog" aria-modal="true" aria-labelledby="fb-title">
+            <h2 id="fb-title">💬 {t(UI("ส่งความคิดเห็น / แจ้งปัญหา", "Feedback / report a problem"))}</h2>
+            <FeedbackForm compact onDone={() => setOpen(false)} />
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+function FeedbackPage() {
+  const { t } = useApp();
+  return (
+    <section className="zone">
+      <h1 className="zone-title"><span aria-hidden="true">💬</span> {t(UI("ส่งความคิดเห็น / แจ้งปัญหา", "Feedback / report a problem"))}</h1>
+      <FeedbackForm />
+    </section>
+  );
+}
+
+/* ---------- 🤲 donation & development fund (adults) ---------- */
+function Copy({ text }) {
+  const { t } = useApp();
+  const [ok, setOk] = useState(false);
+  return <button type="button" className="chip" onClick={() => { navigator.clipboard?.writeText(text).then(() => { setOk(true); setTimeout(() => setOk(false), 1500); }).catch(() => {}); }}>{ok ? "✓ " + t(UI("คัดลอกแล้ว", "Copied")) : "📋 " + t(UI("คัดลอก", "Copy"))}</button>;
+}
+function Support() {
+  const { t, lang, go } = useApp();
+  const S = SUPPORT;
+  const ready = !!(S.recipient && (S.promptpayQr || S.promptpayId || S.bank) && S.retentionDays && S.contact);
+  const [method, setMethod] = useState(S.promptpayQr || S.promptpayId ? "promptpay" : "bank");
+  const [f, setF] = useState({ anonymous: false, name: "", amount: "", date: "", time: "", note: "", email: "", thanks: "private", adult: false, consent: false });
+  const [file, setFile] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [state, setState] = useState("idle");
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value });
+  useEffect(() => { if (!file || !file.type.startsWith("image/")) { setPreview(null); return; } const u = URL.createObjectURL(file); setPreview(u); return () => URL.revokeObjectURL(u); }, [file]);
+  const fileOk = file && file.size <= 8 * MB && /^(image\/|application\/pdf)/.test(file.type);
+  const valid = ready && (f.anonymous || f.name.trim()) && Number(f.amount) > 0 && f.date && fileOk && f.adult && f.consent && state !== "sending";
+  const submit = async (e) => {
+    e.preventDefault(); if (!valid) return;
+    setState("sending");
+    try {
+      await sendForm("donation", { name: f.anonymous ? "(anonymous)" : f.name.trim(), amount: f.amount, date: f.date, time: f.time, method, note: f.note.trim(), email: f.email.trim(), thanks: f.anonymous ? "private" : f.thanks, adult: "yes", consent: "yes", lang, "bot-field": "" }, file);
+      setState("sent"); window.scrollTo(0, 0);
+    } catch (err) { setState("error"); }
+  };
+  const waiting = <p className="notice"><Tag kind="unknown" /> {t(UI("รอข้อมูลจริงจากทีมผู้ดูแล ยังไม่ได้ใส่", "Awaiting the real details from the temple team; not filled in yet."))}</p>;
+  if (state === "sent") return (
+    <section className="zone support">
+      <h1 className="zone-title">🙏 {t(UI("ขอบคุณที่ร่วมสมทบทุน", "Thank you for your support"))}</h1>
+      <div className="step">
+        <p className="lede">{t(UI("ได้รับการแจ้งโอนแล้ว", "We've received your transfer notice."))}</p>
+        <ol className="flow-steps"><li className="on">① {t(UI("โอน", "Transfer"))}</li><li className="on">② {t(UI("แจ้งสลิป", "Send slip"))}</li><li className="now">③ {t(UI("รอตรวจสอบ", "Awaiting check"))}</li></ol>
+        <p>{t(UI("สถานะ: รอตรวจสอบ ผู้ดูแลจะตรวจยอดกับบัญชีก่อน แล้วจึงขอบคุณตามที่คุณเลือกไว้", "Status: awaiting check. The caretakers verify the amount against the account first, then thank you the way you chose."))}</p>
+        <div className="row"><button className="btn" onClick={() => go("gate")}>{t(UI("กลับประตูวัด", "Back to the temple gate"))}</button></div>
+      </div>
+    </section>
+  );
+  return (
+    <section className="zone support">
+      <p className="eyebrow-adult">{t(UI("สำหรับผู้ใหญ่", "For adults"))}</p>
+      <h1 className="zone-title">🤲 {t(UI("สมทบทุนพัฒนาและสร้างวัด", "Support the temple's development"))}</h1>
+      <p className="lede">{t(UI("วัดสัมโพธายะเปิดให้ทุกคนใช้ฟรีเสมอ ไม่ต้องบริจาคก็เรียนได้ครบทุกอย่าง", "Wat Sambodhaya is always free for everyone. Nothing here requires a donation."))}</p>
+      <p>{t(UI("ถ้าอยากช่วย เงินสมทบจะนำไปใช้กับ", "If you'd like to help, contributions go towards"))}:</p>
+      <ul className="uses">
+        <li><span aria-hidden="true">🏯</span> {t(UI("สร้างและพัฒนาวัด ทั้งวัดออนไลน์และพื้นที่จริง", "Building and developing the temple, online and physical"))}</li>
+        <li><span aria-hidden="true">🤖</span> {t(UI("ค่าเครื่องมือ AI รายเดือน เช่น Claude, Midjourney และ AI APIs", "Monthly AI tools such as Claude, Midjourney and AI APIs"))}</li>
+        <li><span aria-hidden="true">📚</span> {t(UI("คอร์สและแหล่งเรียนรู้ที่ทีมต้องใช้", "Courses and learning resources the team needs"))}</li>
+        <li><span aria-hidden="true">🖥️</span> {t(UI("เซิร์ฟเวอร์และโฮสติ้ง", "Servers and hosting"))}</li>
+      </ul>
+      {S.taxNote ? <p className="quiet">{t(S.taxNote)}</p> : <p className="quiet"><Tag kind="unknown" /> {t(UI("ข้อมูลเรื่องใบลดหย่อนภาษี: รอข้อมูลจากทีม", "Tax receipts: awaiting information from the team"))}</p>}
+
+      <ol className="flow-steps" aria-label={t(UI("ขั้นตอน", "Steps"))}><li className="now">① {t(UI("โอน", "Transfer"))}</li><li>② {t(UI("แจ้งสลิป", "Send slip"))}</li><li>③ {t(UI("รอตรวจสอบ", "Awaiting check"))}</li></ol>
+
+      <div className="step">
+        <h2>① {t(UI("โอนเงิน", "Make the transfer"))}</h2>
+        {S.recipient ? <p>{t(UI("ผู้รับเงิน", "Recipient"))}: <strong>{t(S.recipient)}</strong></p> : waiting}
+        <div className="row" role="tablist">
+          <button role="tab" aria-selected={method === "promptpay"} className={"chip" + (method === "promptpay" ? " on" : "")} onClick={() => setMethod("promptpay")}>📱 PromptPay / QR</button>
+          <button role="tab" aria-selected={method === "bank"} className={"chip" + (method === "bank" ? " on" : "")} onClick={() => setMethod("bank")}>🏦 {t(UI("โอนผ่านธนาคาร", "Bank transfer"))}</button>
+        </div>
+        {method === "promptpay" && (S.promptpayQr || S.promptpayId ? (
+          <div className="pay">
+            {S.promptpayQr && <img className="qr" src={S.promptpayQr} alt={t(UI("คิวอาร์โค้ดพร้อมเพย์ของวัด", "The temple's PromptPay QR code"))} />}
+            {S.promptpayId && <p>PromptPay: <strong className="mono">{S.promptpayId}</strong> <Copy text={S.promptpayId} /></p>}
+            <p className="quiet">{t(UI("สแกนด้วยแอปธนาคาร แล้วตรวจชื่อผู้รับให้ตรงก่อนกดยืนยัน", "Scan with your banking app and check the recipient name before confirming."))}</p>
+          </div>) : waiting)}
+        {method === "bank" && (S.bank ? (
+          <dl className="pay bank">
+            <dt>{t(UI("ธนาคาร", "Bank"))}</dt><dd>{S.bank.bank}</dd>
+            <dt>{t(UI("ชื่อบัญชี", "Account name"))}</dt><dd>{S.bank.name}</dd>
+            <dt>{t(UI("เลขที่บัญชี", "Account number"))}</dt><dd><strong className="mono">{S.bank.number}</strong> <Copy text={S.bank.number.replace(/\D/g, "")} /></dd>
+          </dl>) : waiting)}
+      </div>
+
+      <form className="step" onSubmit={submit} noValidate>
+        <h2>② {t(UI("แจ้งการโอนและแนบสลิป", "Tell us about your transfer"))}</h2>
+        <label className="toggle"><input type="checkbox" checked={f.anonymous} onChange={set("anonymous")} /> <span>{t(UI("ไม่ประสงค์ออกนาม", "I'd like to stay anonymous"))}</span></label>
+        {!f.anonymous && <label className="fb-field" htmlFor="d-name">{t(UI("ชื่อผู้สมทบ", "Your name"))} *<input id="d-name" value={f.name} onChange={set("name")} autoComplete="name" /></label>}
+        <div className="grid2">
+          <label className="fb-field" htmlFor="d-amount">{t(UI("จำนวนเงิน (บาท)", "Amount (THB)"))} *<input id="d-amount" type="number" min="1" step="0.01" inputMode="decimal" value={f.amount} onChange={set("amount")} /></label>
+          <label className="fb-field" htmlFor="d-date">{t(UI("วันที่โอน", "Transfer date"))} *<input id="d-date" type="date" value={f.date} onChange={set("date")} /></label>
+          <label className="fb-field" htmlFor="d-time">{t(UI("เวลาโอน (ถ้าจำได้)", "Transfer time (if you know it)"))}<input id="d-time" type="time" value={f.time} onChange={set("time")} /></label>
+        </div>
+        <label className="fb-field" htmlFor="d-slip">{t(UI("สลิปการโอน (รูปหรือ PDF ไม่เกิน 8 MB)", "Transfer slip (image or PDF, up to 8 MB)"))} *
+          <input id="d-slip" type="file" accept="image/*,application/pdf" onChange={(e) => setFile(e.target.files[0] || null)} />
+        </label>
+        {file && !fileOk && <p className="notice" role="alert">{t(UI("ใช้ได้เฉพาะรูปหรือ PDF ขนาดไม่เกิน 8 MB", "Only images or PDFs up to 8 MB"))}</p>}
+        {preview && <img className="slip-preview" src={preview} alt={t(UI("ตัวอย่างสลิปที่เลือก", "Preview of the chosen slip"))} />}
+        <p className="quiet">{t(UI("สลิปมีชื่อและเลขบัญชีของคุณ เราใช้เพื่อยืนยันการโอนเท่านั้น", "Your slip shows your name and account number. We use it only to confirm the transfer."))}</p>
+        <label className="fb-field" htmlFor="d-note">{t(UI("ข้อความถึงวัด (ไม่ใส่ก็ได้)", "A message to the temple (optional)"))}<textarea id="d-note" rows={2} maxLength={500} value={f.note} onChange={set("note")} /></label>
+        <label className="fb-field" htmlFor="d-email">{t(UI("อีเมลสำหรับแจ้งผลการตรวจ (ไม่ใส่ก็ได้)", "Email to hear when it's verified (optional)"))}<input id="d-email" type="email" value={f.email} onChange={set("email")} autoComplete="email" /></label>
+        {!f.anonymous && (
+          <fieldset className="fb-types">
+            <legend>{t(UI("การขอบคุณ", "How we thank you"))}</legend>
+            <label className={"fb-type" + (f.thanks === "private" ? " on" : "")}><input type="radio" name="d-thanks" value="private" checked={f.thanks === "private"} onChange={set("thanks")} /> {t(UI("ขอบคุณเป็นการส่วนตัว ไม่แสดงชื่อ", "Thank me privately; don't show my name"))}</label>
+            <label className={"fb-type" + (f.thanks === "public" ? " on" : "")}><input type="radio" name="d-thanks" value="public" checked={f.thanks === "public"} onChange={set("thanks")} /> {t(UI("แสดงชื่อในรายชื่อผู้สนับสนุน (ไม่แสดงจำนวนเงิน)", "Show my name on the supporters list (never the amount)"))}</label>
+          </fieldset>
+        )}
+        <label className="toggle"><input type="checkbox" checked={f.adult} onChange={set("adult")} /> <span>{t(UI("ฉันอายุ 18 ปีขึ้นไป หรือได้รับอนุญาตจากผู้ปกครอง", "I'm 18 or older, or have a parent's or guardian's permission"))} *</span></label>
+        <label className="toggle consent"><input type="checkbox" checked={f.consent} onChange={set("consent")} /> <span>
+          {t(UI("ฉันยินยอมให้ผู้ดูแลวัดเก็บข้อมูลและสลิปนี้ เพื่อยืนยันการโอนและขอบคุณเท่านั้น", "I agree that the temple caretakers may keep this information and slip, only to verify the transfer and thank me"))}
+          {" "}({t(UI("เก็บไว้", "kept for"))} {S.retentionDays ? `${S.retentionDays} ${t(UI("วัน", "days"))}` : "…"}{t(UI(" ขอลบได้ที่ ", "; request deletion at "))}{S.contact || "…"}) *</span></label>
+        {!ready && <p className="notice"><Tag kind="unknown" /> {t(UI("ยังส่งไม่ได้: รอข้อมูลบัญชี ผู้รับเงิน ระยะเวลาเก็บข้อมูล และช่องทางติดต่อจริงจากทีม", "Can't be sent yet: awaiting the real account, recipient, retention period and contact from the team."))}</p>}
+        {state === "error" && <p className="notice" role="alert">{t(UI("ส่งไม่สำเร็จ ลองอีกครั้ง", "Couldn't send. Please try again."))}</p>}
+        <div className="row"><button type="submit" className="btn big" disabled={!valid}>{state === "sending" ? t(UI("กำลังส่ง…", "Sending…")) : t(UI("ส่งการแจ้งโอน", "Send transfer notice"))}</button></div>
+        <p className="quiet">* {t(UI("จำเป็นต้องกรอก", "required"))}</p>
+      </form>
+    </section>
+  );
+}
+
 /* ---------- app shell & router ---------- */
-const VIEWS = ["gate", "yard", "learn", "unit", "library", "media", "access", "rest", "care", "exit", "garden", "journey"];
+const VIEWS = ["gate", "yard", "learn", "unit", "library", "media", "access", "rest", "care", "exit", "garden", "journey", "support", "feedback"];
 function parseHash() {
   const h = (location.hash || "").replace("#", "");
   const m = h.match(/^u0([1-8])$/); if (m) return { view: "unit", arg: +m[1] - 1 };
@@ -764,8 +979,11 @@ function App() {
         {V === "exit" && <Exit />}
         {V === "garden" && <Garden />}
         {V === "journey" && <Journey />}
+        {V === "support" && <Support />}
+        {V === "feedback" && <FeedbackPage />}
       </main>
-      {V === "gate" ? <footer className="foot"><Wayfinding /></footer> : <footer className="foot"><p className="rights">{t(UI("ที่นี่คุณ ถามได้ • ไม่เชื่อได้ • ตรวจได้ • ข้ามได้ • พักได้ • ออกได้", "Here you may ask • disagree • check • skip • rest • leave"))}</p></footer>}
+      {V !== "feedback" && <FeedbackWidget />}
+      {V === "gate" ? <footer className="foot"><Wayfinding /><a className="adult-link" href="#support">🤲 {t(UI("สมทบทุนพัฒนาและสร้างวัด (สำหรับผู้ใหญ่)", "Support the temple's development (for adults)"))}</a></footer> : <footer className="foot"><p className="rights">{t(UI("ที่นี่คุณ ถามได้ • ไม่เชื่อได้ • ตรวจได้ • ข้ามได้ • พักได้ • ออกได้", "Here you may ask • disagree • check • skip • rest • leave"))}</p><a className="adult-link" href="#support">🤲 {t(UI("สมทบทุนพัฒนาและสร้างวัด (สำหรับผู้ใหญ่)", "Support the temple's development (for adults)"))}</a></footer>}
     </Ctx.Provider>
   );
 }

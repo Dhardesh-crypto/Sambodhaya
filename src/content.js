@@ -135,3 +135,18 @@ const WHEEL_IMAGE = {
     "The Sambodhaya wheel: the outer ring shows the 12 links of dependent origination, the middle ring the five aggregates, and the centre the goal and Nibbāna, with boxes for the key connections and the way out. A young novice welcomes visitors on the left and the temple dog invites exploring on the right."),
   related: ["SN22_59", "SN12_23"],
 };
+
+/* Donation & development fund settings.
+ * Leave a value as null until the team provides the real one; the page then shows
+ * "awaiting details" and the donation form stays disabled. Never put sample or
+ * made-up account details here.
+ */
+const SUPPORT = {
+  recipient: null,      // e.g. { th: "ชื่อผู้รับเงิน / มูลนิธิ", en: "Recipient name" }
+  promptpayQr: null,    // path to the team's real PromptPay QR image, e.g. "img/promptpay-qr.png"
+  promptpayId: null,    // PromptPay phone or tax ID as text, shown with a copy button
+  bank: null,           // e.g. { bank: "ธนาคาร…", name: "ชื่อบัญชี", number: "xxx-x-xxxxx-x" }
+  taxNote: null,        // e.g. { th: "…", en: "…" } about tax receipts, if any
+  retentionDays: null,  // how long slips are kept before deletion, e.g. 365
+  contact: null,        // e.g. "email@example.org" for privacy or deletion requests
+};
