@@ -107,28 +107,28 @@ function Prototype() {
 /* ---------- 🚪 Entrance: the illustrated temple with clickable areas ---------- */
 // Hotspots in % of the 1280×853 entrance artwork (img/entrance.jpg, used unchanged).
 const HOTSPOTS = [
-  { to: "library", l: 5.2, tp: 27.7, w: 12.0, h: 11.0, label: UI("ห้องสมุด · หอหลักฐาน: รู้ว่ามาจากไหน", "Library · Evidence Hall: where things come from") },
-  { to: "learn", l: 29.4, tp: 28.8, w: 11.2, h: 9.9, label: UI("ศาลาเรียนรู้: เรียน ฝึก และสังเกต", "Learning Hall: learn, practise and observe") },
-  { to: "media", l: 59.9, tp: 29.1, w: 13.4, h: 9.7, label: UI("ศาลาสื่อ: อ่าน ฟัง หรือดู", "Media Hall: read, listen or watch") },
-  { to: "access", l: 84.9, tp: 27.9, w: 13.7, h: 10.8, label: UI("ศาลาสากล: หลายภาษาและการเข้าถึง", "Universal Hall: languages and access") },
-  { to: "yard", l: 43.4, tp: 40.9, w: 13.5, h: 7.6, label: UI("ลานกลาง: อยากไปไหนวันนี้?", "Central Courtyard: where would you like to go today?") },
-  { to: "rest", l: 5.8, tp: 48.5, w: 14.2, h: 11.0, label: UI("พื้นที่พัก: พักใจได้เสมอ", "Rest Area: rest any time") },
-  { to: "care", l: 81.4, tp: 48.2, w: 15.3, h: 12.1, label: UI("ผู้ดูแลวัดและผู้ช่วย AI", "Temple caretaker and AI helper") },
-  { to: "yard", l: 34.9, tp: 62.4, w: 13.1, h: 24.6, label: UI("หมาวัด: ไม่รู้จะไปไหน ถามผมได้เลย", "Temple dog: not sure where to go? Ask me") },
+  { to: "library", pin: "📚", l: 5.2, tp: 27.7, w: 12.0, h: 11.0, label: UI("ห้องสมุด · หอหลักฐาน: รู้ว่ามาจากไหน", "Library · Evidence Hall: where things come from") },
+  { to: "learn", pin: "🧘", l: 29.4, tp: 28.8, w: 11.2, h: 9.9, label: UI("ศาลาเรียนรู้: เรียน ฝึก และสังเกต", "Learning Hall: learn, practise and observe") },
+  { to: "media", pin: "🎬", l: 59.9, tp: 29.1, w: 13.4, h: 9.7, label: UI("ศาลาสื่อ: อ่าน ฟัง หรือดู", "Media Hall: read, listen or watch") },
+  { to: "access", pin: "🌍", l: 84.9, tp: 27.9, w: 13.7, h: 10.8, label: UI("ศาลาสากล: หลายภาษาและการเข้าถึง", "Universal Hall: languages and access") },
+  { to: "yard", pin: "🌳", l: 43.4, tp: 40.9, w: 13.5, h: 7.6, label: UI("ลานกลาง: อยากไปไหนวันนี้?", "Central Courtyard: where would you like to go today?") },
+  { to: "rest", pin: "🪷", l: 5.8, tp: 48.5, w: 14.2, h: 11.0, label: UI("พื้นที่พัก: พักใจได้เสมอ", "Rest Area: rest any time") },
+  { to: "care", pin: "🤝", l: 81.4, tp: 48.2, w: 15.3, h: 12.1, label: UI("ผู้ดูแลวัดและผู้ช่วย AI", "Temple caretaker and AI helper") },
+  { to: "yard", pin: "🐕", l: 34.9, tp: 62.4, w: 13.1, h: 24.6, label: UI("หมาวัด: ไม่รู้จะไปไหน ถามผมได้เลย", "Temple dog: not sure where to go? Ask me") },
   { to: "yard", l: 49.1, tp: 60.1, w: 13.8, h: 14.4, label: UI("หมาวัด: ไม่รู้จะไปไหน ถามผมได้เลย", "Temple dog: not sure where to go? Ask me"), dup: true },
-  { to: "yard", l: 19.1, tp: 57.4, w: 9.2, h: 31.7, label: UI("เข้าวัด", "Enter the temple") },
-  { to: "exit", l: 71.9, tp: 57.4, w: 9.2, h: 31.7, label: UI("ออกจากวัด", "Leave the temple") },
+  { to: "yard", pin: "🚪", pinPos: "top", l: 19.1, tp: 57.4, w: 9.2, h: 31.7, label: UI("เข้าวัด", "Enter the temple") },
+  { to: "exit", pin: "🚪", pinPos: "top", l: 71.9, tp: 57.4, w: 9.2, h: 31.7, label: UI("ออกจากวัด", "Leave the temple") },
 ];
 const HUBS = [
-  { to: "yard", icon: "🌳", name: UI("ลานกลาง", "Central Courtyard"), sub: UI("อยากไปไหนวันนี้?", "Where would you like to go today?") },
-  { to: "learn", icon: "🧘", name: UI("ศาลาเรียนรู้", "Learning Hall"), sub: UI("เรียน ฝึก และสังเกตไปทีละก้าว", "Learn, practise and observe, one step at a time") },
-  { to: "library", icon: "📚", name: UI("หอหลักฐาน · ห้องสมุด", "Evidence Library"), sub: UI("ดูต้นทาง หลักฐาน และสถานะการตรวจ", "Sources, evidence and checking status") },
+  { to: "yard", thumb: "img/hubs/yard.jpg", icon: "🌳", name: UI("ลานกลาง", "Central Courtyard"), sub: UI("อยากไปไหนวันนี้?", "Where would you like to go today?") },
+  { to: "learn", thumb: "img/hubs/learn.jpg", icon: "🧘", name: UI("ศาลาเรียนรู้", "Learning Hall"), sub: UI("เรียน ฝึก และสังเกตไปทีละก้าว", "Learn, practise and observe, one step at a time") },
+  { to: "library", thumb: "img/hubs/library.jpg", icon: "📚", name: UI("หอหลักฐาน · ห้องสมุด", "Evidence Library"), sub: UI("ดูต้นทาง หลักฐาน และสถานะการตรวจ", "Sources, evidence and checking status") },
   { to: "garden", icon: "🌿", name: UI("สวนสังเกตใจ", "Practice Garden"), sub: UI("กาย • ความรู้สึก • จิต • ธรรม", "Body • feelings • mind • Dhamma") },
   { to: "journey", icon: "👣", name: UI("เส้นทางของฉัน", "My Journey"), sub: UI("ตามรอยเรื่องของพระพุทธเจ้าทีละก้าว", "Follow the Buddha's story step by step") },
-  { to: "media", icon: "📖🎧🎬", name: UI("ศาลาสื่อ", "Media Hall"), sub: UI("อ่าน ฟัง หรือดู", "Read, listen or watch") },
-  { to: "access", icon: "🌍♿", name: UI("ศาลาสากล", "Universal Hall"), sub: UI("หลายภาษาและการเข้าถึง", "Languages and access") },
-  { to: "rest", icon: "🪷", name: UI("พื้นที่พัก", "Rest Area"), sub: UI("พักใจได้เสมอ", "Rest any time") },
-  { to: "care", icon: "🤝", name: UI("ผู้ดูแลวัดและหมาวัด", "Caretaker & temple dog"), sub: UI("มีคำถาม หรืออยากให้ช่วย", "Questions, or need a hand") },
+  { to: "media", thumb: "img/hubs/media.jpg", icon: "📖🎧🎬", name: UI("ศาลาสื่อ", "Media Hall"), sub: UI("อ่าน ฟัง หรือดู", "Read, listen or watch") },
+  { to: "access", thumb: "img/hubs/access.jpg", icon: "🌍♿", name: UI("ศาลาสากล", "Universal Hall"), sub: UI("หลายภาษาและการเข้าถึง", "Languages and access") },
+  { to: "rest", thumb: "img/hubs/rest.jpg", icon: "🪷", name: UI("พื้นที่พัก", "Rest Area"), sub: UI("พักใจได้เสมอ", "Rest any time") },
+  { to: "care", thumb: "img/hubs/care.jpg", icon: "🤝", name: UI("ผู้ดูแลวัดและหมาวัด", "Caretaker & temple dog"), sub: UI("มีคำถาม หรืออยากให้ช่วย", "Questions, or need a hand") },
 ];
 function Gate() {
   const { go, t, settings } = useApp();
@@ -142,7 +142,9 @@ function Gate() {
               "Wat Sambodhaya Online: two wooden gates open onto a courtyard with a great tree. Around it, signs mark the Library, Learning Hall, Media Hall, Universal Hall, Rest Area and Caretaker. The temple dog waits on the path to welcome you."))} />
           {HOTSPOTS.map((h, k) => (
             <button key={k} className="hotspot" style={{ left: h.l + "%", top: h.tp + "%", width: h.w + "%", height: h.h + "%" }}
-              onClick={() => go(h.to)} aria-label={t(h.label)} title={t(h.label)} tabIndex={h.dup ? -1 : 0} aria-hidden={h.dup ? "true" : undefined} />
+              onClick={() => go(h.to)} aria-label={t(h.label)} title={t(h.label)} tabIndex={h.dup ? -1 : 0} aria-hidden={h.dup ? "true" : undefined}>
+              {h.pin && <span className={"pin" + (h.pinPos === "top" ? " pin-top" : "")} aria-hidden="true">{h.pin}</span>}
+            </button>
           ))}
         </div>
       )}
@@ -157,7 +159,7 @@ function Gate() {
       <ul className="hubs">
         {HUBS.map((h) => (
           <li key={h.to}><button className="hub" onClick={() => go(h.to)}>
-            <span className="hub-icon" aria-hidden="true">{h.icon}</span>
+            {h.thumb && !settings.textOnly ? <img className="hub-thumb" src={h.thumb} alt="" width="270" height="180" loading="lazy" /> : <span className="hub-icon" aria-hidden="true">{h.icon}</span>}
             <span className="hub-text"><span className="hub-name">{t(h.name)}</span><span className="hub-sub">{t(h.sub)}</span></span>
           </button></li>
         ))}
