@@ -241,7 +241,8 @@ path(0, 13, 0, BRIDGE.zc - BRIDGE.half + 0.5, ROAD); path(0, BRIDGE.zc + BRIDGE.
 }
 
 /* ---------------- lanterns ---------------- */
-const lanternSpots = [[-5, 20], [5, 20], [-5, 30], [5, 30], [-5, 50], [5, 50], [-5, 63], [5, 63], [-5, 95], [5, 95], [-17, 0], [17, 0], [-4.5, -30], [4.5, -30]];
+// the pair by the gate stand just outside it, in front of the gate posts, so the doors can swing shut
+const lanternSpots = [[-5, 20], [5, 20], [-4.7, 39.5], [4.7, 39.5], [-5, 50], [5, 50], [-5, 63], [5, 63], [-5, 95], [5, 95], [-17, 0], [17, 0], [-4.5, -30], [4.5, -30]];
 const lantern = (x, z) => {
   add(new THREE.BoxGeometry(0.5, 2.4, 0.5), MAT.woodDark, x, 1.2, z);
   add(new THREE.BoxGeometry(1, 1, 1), MAT.glow, x, 2.9, z);
@@ -915,13 +916,13 @@ kinds.forEach(([name, h], k) => {
 }
 
 /* ---------------- small things that make it feel lived in ---------------- */
-const BELL = [-6.8, 24.5]; // beside the entrance road, between two lamp posts: rung without stepping off the road
+const BELL = [-6.8, 24.5]; // beside the entrance road: rung without stepping off the road
 props("bell", 4.6, [[BELL[0], BELL[1], 0.9]]); colliders.push({ x: BELL[0], z: BELL[1], r: 1.6 });
 const jars = [[-33, 7], [-19, 21], [-11, 39], [11, 39], [22, 19], [-36, -8]];
 props("jar", 1.1, jars.map(([x, z], i) => [x, z, i]), { extra: true }); jars.forEach(([x, z]) => colliders.push({ x, z, r: 0.7 }));
 const bushes = [[-9, 18], [9, 18], [-19, -5], [19, -5], [-24, -36], [24, -36], [-40, 0], [40, -4], [22, 52], [36, 40], [-8, -52], [8, -52]];
 props("bougainvillea", 2.4, bushes.map(([x, z], i) => [x, z, i * 2]), { extra: true }); bushes.forEach(([x, z]) => colliders.push({ x, z, r: 1.3 }));
-const pots = [[-4.7, 39.5], [4.7, 39.5], [-5.2, 15.8], [5.2, 15.8]]; // the gate pair stand outside it, clear of the doors
+const pots = [[-5.2, 15.8], [5.2, 15.8]];
 props("potplant", 1.6, pots.map(([x, z], i) => [x, z, i]), { extra: true }); pots.forEach(([x, z]) => colliders.push({ x, z, r: 0.6 }));
 const blooms = [[-9.5, 12], [9.5, 12]];
 props("lotus", 1, blooms.map(([x, z], i) => [x, z, i]), { extra: true }); blooms.forEach(([x, z]) => colliders.push({ x, z, r: 0.8 }));
