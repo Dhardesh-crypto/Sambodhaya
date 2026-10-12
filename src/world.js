@@ -55,15 +55,15 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = HIGH ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.0;
+renderer.toneMappingExposure = 0.95;
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0xf3d2a4, 80, 210);
+scene.fog = new THREE.Fog(0xf3d2a4, 90, 290);
 const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 600);
 
 // warm late-afternoon light, like the entrance artwork
 const hemi = new THREE.HemisphereLight(0xfff2d6, 0x6f8f4a, 0.9);
 scene.add(hemi);
-const sun = new THREE.DirectionalLight(0xffd4a0, 2.6);
+const sun = new THREE.DirectionalLight(0xffd4a0, 2.3);
 sun.position.set(-40, 55, 34);
 sun.castShadow = true;
 sun.shadow.mapSize.set(HIGH ? 4096 : 1024, HIGH ? 4096 : 1024);
@@ -102,18 +102,22 @@ function P(name, rx, ry, extra = {}) {
 const M = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.85, ...extra });
 const S = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.6, ...extra });
 const MAT = {
-  grass: S(0x86b85a, { roughness: 0.95 }), stone: P("brick_pavement_02", 3, 3, { color: new THREE.Color(1.75, 1.5, 1.2) }), stoneDark: M(0xb39f7d), wood: S(0x8a4a2a), woodDark: S(0x4a2a18),
-  roof: P("clay_roof_tiles_02", 0.4, 0.4, { color: 0xffb08a }), roofEdge: S(0xd9a640, { metalness: 0.6, roughness: 0.35 }), wall: P("beige_wall_001", 2, 1, { color: 0xfff4e2 }), gold: S(0xe8b84a, { metalness: 0.7, roughness: 0.3 }),
+  grass: new THREE.MeshStandardMaterial({ color: 0x7db552, roughness: 1, normalMap: HIGH ? tex("leafy_grass", "nor", 70, 70) : null, normalScale: new THREE.Vector2(0.6, 0.6) }), rock: P("mossy_rock", 3, 3), stone: P("brick_pavement_02", 3, 3, { color: new THREE.Color(1.75, 1.5, 1.2) }), stoneDark: M(0xb39f7d), wood: S(0x8a4a2a), woodDark: S(0x4a2a18),
+  roof: P("clay_roof_tiles_02", 0.4, 0.4, { color: 0xffb08a }), roofEdge: S(0xd9a640, { metalness: 0.55, roughness: 0.5 }), wall: P("beige_wall_001", 2, 1, { color: 0xfff4e2 }), gold: S(0xe0b24a, { metalness: 0.65, roughness: 0.45 }),
   floor: P("brown_planks_05", 4, 4), lacquer: S(0x8e1f17, { roughness: 0.45 }), roofGreen: S(0x2f6b4a, { roughness: 0.5 }),
-  leaf: M(0x5f9e4a), leafLight: M(0x7db85a), trunk: M(0x7a5536), water: new THREE.MeshStandardMaterial({ color: 0x6fb6c9, roughness: 0.2, metalness: 0.1, transparent: true, opacity: 0.9 }),
+  leaf: M(0x5f9e4a), leafLight: M(0x7db85a), trunk: M(0x7a5536), water: new THREE.MeshStandardMaterial({ color: 0x2f7f8a, roughness: 0.06, metalness: 0.15, transparent: true, opacity: 0.88 }),
   lotus: M(0xf28fb0), pad: M(0x4d8f45), glow: M(0xffd27a, { emissive: 0xffb84a, emissiveIntensity: 0.9 }), mountain: M(0x9fb0b8), mountainFar: M(0xbcc8cc),
 };
 const add = (geo, mat, x, y, z, parent = scene, cast = true) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = cast; m.receiveShadow = true; parent.add(m); return m; };
 const colliders = []; // circles {x, z, r}
 const blockers = [];  // rotated boxes {x, z, c, s, hx, hz}
-const floors = [];    // raised floors you can walk onto {minX, maxX, minZ, maxZ, y}
+const floors = [];    // raised floors you can walk onto, as rotated boxes {x, z, c, s, hx, hz, y}
 const camBlock = [];  // meshes the camera must not look through (walls, ceilings)
-const groundAt = (x, z) => { let y = 0; for (const f of floors) if (x > f.minX && x < f.maxX && z > f.minZ && z < f.maxZ) y = Math.max(y, f.y); return y; };
+const groundAt = (x, z) => {
+  let y = 0;
+  for (const f of floors) { const lx = (x - f.x) * f.c - (z - f.z) * f.s, lz = (x - f.x) * f.s + (z - f.z) * f.c; if (Math.abs(lx) < f.hx && Math.abs(lz) < f.hz) y = Math.max(y, f.y); }
+  return y;
+};
 
 /* ---------------- 3D props made for this temple (assets/models/*.glb) ---------------- */
 // Each prop loads once and is cloned; if a file can't load, the simple shapes stay instead.
@@ -133,7 +137,8 @@ function fitTo(obj, h) {
 }
 const propJobs = [];
 // place copies of a prop: list of [x, z, rotY, y?]; fallback() runs if the model is missing
-function props(name, h, list, { fallback, shadow = true, parent = scene } = {}) {
+function props(name, h, list, { fallback, shadow = true, parent = scene, extra = false } = {}) {
+  if (extra && !HIGH) return Promise.resolve(); // purely decorative: skipped in light mode
   const job = loadProp(name).then((src) => {
     if (!src) { if (fallback) fallback(); return; }
     src.traverse((o) => { if (o.isMesh) { o.castShadow = shadow; o.receiveShadow = true; if (o.material) o.material.envMapIntensity = 1; } });
@@ -161,10 +166,13 @@ function props(name, h, list, { fallback, shadow = true, parent = scene } = {}) 
     scene.backgroundRotation.y = SKY_TURN; scene.environmentRotation.y = SKY_TURN;
     dome.visible = false; hemi.intensity = 0.45; pm.dispose();
   });
-  for (let i = 0; i < 18; i++) {
-    const a = (i / 18) * Math.PI * 2, d = 150 + (i % 3) * 18, h = 30 + ((i * 37) % 25);
-    const m = add(new THREE.ConeGeometry(28 + (i % 4) * 6, h, 5), i % 2 ? MAT.mountain : MAT.mountainFar, Math.cos(a) * d, h / 2 - 2, Math.sin(a) * d, scene, false);
-    m.rotation.y = i;
+  // soft rolling hills fading into the haze
+  const hillGeo = new THREE.SphereGeometry(1, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2);
+  const hillMats = [S(0x6f9a5a, { roughness: 1 }), S(0x86a77a, { roughness: 1 }), S(0x9fb39a, { roughness: 1 })];
+  for (let i = 0; i < 22; i++) {
+    const a = (i / 22) * Math.PI * 2 + 0.1, d = 185 + (i % 3) * 25, h = 22 + ((i * 37) % 28), w = 40 + (i % 4) * 10;
+    const m = add(hillGeo, hillMats[i % 3], Math.cos(a) * d, -1, Math.sin(a) * d, scene, false);
+    m.scale.set(w, h, w * 0.8); m.rotation.y = i;
   }
 }
 
@@ -181,8 +189,9 @@ path(-8, -13, -12, -24); path(8, -13, 12, -24); path(-12, 8, -24, 13); path(12, 
 
 /* ---------------- the great tree at the centre ---------------- */
 {
-  add(new THREE.CylinderGeometry(6.5, 7, 1.2, 24), MAT.stoneDark, 0, 0.6, 0);
-  add(new THREE.CylinderGeometry(5.8, 5.8, 0.3, 24), M(0x6f5a3e), 0, 1.25, 0, scene, false);
+  add(new THREE.CylinderGeometry(6.5, 7, 1.2, 48), P("beige_wall_001", 6, 1, { color: 0xfff8ee }), 0, 0.6, 0);
+  add(new THREE.TorusGeometry(6.55, 0.09, 8, 64), MAT.gold, 0, 1.2, 0, scene, false).rotation.x = Math.PI / 2;
+  add(new THREE.CylinderGeometry(5.8, 5.8, 0.3, 48), S(0x5a4632, { roughness: 1 }), 0, 1.25, 0, scene, false);
   const simple = new THREE.Group(); scene.add(simple);
   add(new THREE.CylinderGeometry(1.4, 2.2, 10, 8), MAT.trunk, 0, 6, 0, simple);
   [[-2.5, 7, 0.8, -0.6], [2.4, 8, -0.4, 0.7], [0.5, 9, 2.2, 0.3]].forEach(([x, y, z, r]) => { const b = add(new THREE.CylinderGeometry(0.5, 0.8, 6, 6), MAT.trunk, x, y, z, simple); b.rotation.z = r; b.rotation.x = z * 0.2; });
@@ -206,17 +215,18 @@ props("lamppost", 4.2, lanternSpots.map(([x, z]) => [x, z, Math.atan2(-x, -z)]),
 
 /* ---------------- ponds with lotus ---------------- */
 const pond = (x, z, r) => {
-  add(new THREE.CylinderGeometry(r + 0.6, r + 0.6, 0.5, 28), MAT.stoneDark, x, 0.2, z, scene, false);
-  add(new THREE.CylinderGeometry(r, r, 0.52, 28), MAT.water, x, 0.22, z, scene, false);
+  add(new THREE.CylinderGeometry(r + 0.7, r + 0.9, 0.55, 40), MAT.rock, x, 0.22, z, scene, false);
+  add(new THREE.CylinderGeometry(r, r, 0.3, 40), MAT.water, x, 0.4, z, scene, false);
   for (let i = 0; i < 9; i++) {
     const a = i * 2.4, d = r * (0.3 + ((i * 7) % 6) / 10);
     const px = x + Math.cos(a) * d, pz = z + Math.sin(a) * d;
-    add(new THREE.CylinderGeometry(0.7, 0.7, 0.06, 10), MAT.pad, px, 0.52, pz, scene, false);
-    if (i % 2 === 0) { const f = add(new THREE.ConeGeometry(0.35, 0.6, 6), MAT.lotus, px, 0.85, pz); f.rotation.x = Math.PI; f.position.y = 0.85; }
+    add(new THREE.CylinderGeometry(0.7, 0.7, 0.06, 10), MAT.pad, px, 0.58, pz, scene, false);
+    if (i % 2 === 0) { const f = add(new THREE.ConeGeometry(0.35, 0.6, 6), MAT.lotus, px, 0.9, pz); f.rotation.x = Math.PI; }
   }
   colliders.push({ x, z, r: r + 0.6 });
 };
 pond(-14, 30, 6); pond(14, 30, 6); pond(-36, 22, 5); pond(36, 24, 4);
+props("bridge", 3, [[-14, 30, 0, 0.1]], { extra: true }); // a little footbridge across the left entrance pond (for looking at)
 
 /* ---------------- text signs (Thai-ready canvas textures) ---------------- */
 const signDraws = [];
@@ -239,84 +249,57 @@ function sign(title, sub, icon, x, y, z, w = 6) {
   s.scale.set(w, w * 220 / 512, 1); s.position.set(x, y, z); scene.add(s); return s;
 }
 
-/* ---------------- Thai-style hall: base, pillars, two-tier gabled roof, finials ---------------- */
+/* ---------------- Thai sala: the one building every hall is made from ---------------- */
 function gable(w, d, h, mat) {
   const s = new THREE.Shape(); s.moveTo(-w / 2, 0); s.lineTo(0, h); s.lineTo(w / 2, 0); s.lineTo(-w / 2, 0);
   const g = new THREE.ExtrudeGeometry(s, { depth: d, bevelEnabled: false }); g.translate(0, 0, -d / 2);
   return new THREE.Mesh(g, mat);
 }
-function hall(x, z, rotY, w = 12, d = 9) {
-  const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = rotY; scene.add(g);
-  add(new THREE.BoxGeometry(w + 2, 1, d + 2), MAT.stoneDark, 0, 0.5, 0, g);
-  add(new THREE.BoxGeometry(w, 4.6, d), MAT.wall, 0, 3.3, 0, g);
-  // front pillars and door
-  for (let i = -2; i <= 2; i++) add(new THREE.BoxGeometry(0.6, 5, 0.6), MAT.wood, i * (w / 4.4), 3.5, d / 2 + 0.5, g);
-  add(new THREE.BoxGeometry(2.6, 3.4, 0.3), MAT.woodDark, 0, 2.7, d / 2 + 0.05, g);
-  [-w / 3, w / 3].forEach((wx) => add(new THREE.BoxGeometry(1.8, 1.6, 0.25), MAT.glow, wx, 3.6, d / 2 + 0.05, g, false));
-  // roofs: lower wide tier and upper tier, each with a gold edge and chofa finials
-  const tiers = [[w + 3, d + 3, 3.4, 5.6], [w * 0.75, d * 0.8, 3.2, 8.2]];
-  tiers.forEach(([rw, rd, rh, ry]) => {
-    const r = gable(rw, rd, rh, MAT.roof); r.position.y = ry; r.castShadow = true; g.add(r);
-    const e = gable(rw + 0.3, 0.3, rh + 0.15, MAT.roofEdge); e.position.set(0, ry - 0.05, rd / 2); g.add(e);
-    const e2 = e.clone(); e2.position.z = -rd / 2; g.add(e2);
-    [-1, 1].forEach((sgn) => { const f = add(new THREE.ConeGeometry(0.25, 1.6, 5), MAT.gold, 0, ry + rh + 0.6, sgn * rd / 2, g); f.rotation.x = sgn * 0.5; });
-  });
-  // collision: approximate the footprint as a rotated box -> use a circle at the centre plus the rectangle
-  const c = Math.cos(rotY), s = Math.sin(rotY), hx = (w + 2) / 2, hz = (d + 2) / 2;
-  blockers.push({ x, z, c, s, hx, hz });
-  return g;
-}
-
-/* ---------------- place the halls ---------------- */
-const signs = [];
-const halls = {
-  library: hall(-30, -24, Math.PI / 5), media: hall(13, -38, -0.12), access: hall(30, -24, -Math.PI / 5),
-  care: hall(34, 6, -Math.PI / 2.4, 9, 7),
-};
-PLACES.forEach((p) => {
-  if (p.id === "yard" || p.id === "exit") return;
-  const yOffset = p.id === "garden" || p.id === "journey" || p.id === "rest" ? 5 : p.id === "learn" ? 9.6 : 7.2;
-  const [sx, sz] = { library: [-30, -18], learn: [-14, -31.4], media: [13, -31], access: [30, -18], care: [29, 9], rest: [-28, 14], garden: [0, -48], journey: [15, 49] }[p.id] || p.pos;
-  signs.push(sign(L === "en" ? p.en : p.th, p.sub[L === "en" ? 1 : 0], p.icon, sx, yOffset, sz, 5.2));
-});
-sign(tx("ลานกลาง", "Central Courtyard"), tx("อยากไปไหนวันนี้?", "Where would you like to go today?"), "🌳", 0, 21, 0, 8);
-
-/* ---------------- the Learning Hall: an open Thai sala you can walk into ---------------- */
-// Eight story boards (U01–U08, approved titles) line the walls and open the matching lesson.
-// At the front of the hall stands a Dhamma wheel, not a statue.
-const boards = [];
-{
-  const CX = -14, CZ = -38, W = 13, D = 11, FY = 0.35, H = 5.6;
-  const g = new THREE.Group(); g.position.set(CX, 0, CZ); scene.add(g);
-  halls.learn = g;
-  // stone base, steps and wooden floor
+// A sala you can walk into: stone base, wooden floor, red lacquer columns, a two-tier roof with
+// gold gable panels and chofa finials. Walls on three sides (front open), or none for a pavilion.
+// Everything is built in the hall's own coordinates: +z is the open front.
+function sala({ x, z, rot = 0, W = 13, D = 10, H = 5.6, walls = true }) {
+  const FY = 0.35;
+  const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = rot; scene.add(g);
+  const c = Math.cos(rot), s = Math.sin(rot);
+  const toWorld = (lx, lz) => [x + lx * c + lz * s, z - lx * s + lz * c];
+  const block = (lx, lz, hx, hz) => { const [bx, bz] = toWorld(lx, lz); blockers.push({ x: bx, z: bz, c, s, hx, hz }); };
+  const post = (lx, lz, r) => { const [px, pz] = toWorld(lx, lz); colliders.push({ x: px, z: pz, r }); };
+  // stone base, front step and wooden floor
   add(new THREE.BoxGeometry(W + 1.6, FY - 0.02, D + 1.6), MAT.stoneDark, 0, (FY - 0.02) / 2, 0, g, false);
   add(new THREE.BoxGeometry(W + 0.4, 0.06, D + 0.4), MAT.floor, 0, FY, 0, g, false);
-  add(new THREE.BoxGeometry(5, 0.18, 1), MAT.stoneDark, 0, 0.09, D / 2 + 1.2, g, false);
-  floors.push({ minX: CX - W / 2 - 0.8, maxX: CX + W / 2 + 0.8, minZ: CZ - D / 2 - 0.8, maxZ: CZ + D / 2 + 0.8, y: FY + 0.03 });
-  // walls: back and both sides; the front stays open like a sala
-  const wall = (w, d, x, z) => { const m = add(new THREE.BoxGeometry(w, H, d), MAT.wall, x, FY + H / 2, z, g); camBlock.push(m); return m; };
-  wall(W, 0.4, 0, -D / 2);
-  wall(0.4, D, -W / 2, 0); wall(0.4, D, W / 2, 0);
-  blockers.push({ x: CX, z: CZ - D / 2, c: 1, s: 0, hx: W / 2, hz: 0.3 });
-  blockers.push({ x: CX - W / 2, z: CZ, c: 1, s: 0, hx: 0.3, hz: D / 2 });
-  blockers.push({ x: CX + W / 2, z: CZ, c: 1, s: 0, hx: 0.3, hz: D / 2 });
-  // red lacquer wainscot along the walls
-  add(new THREE.BoxGeometry(W - 0.5, 1, 0.05), MAT.lacquer, 0, FY + 0.5, -D / 2 + 0.23, g, false);
-  [-1, 1].forEach((sg) => add(new THREE.BoxGeometry(0.05, 1, D - 0.2), MAT.lacquer, sg * (W / 2 - 0.23), FY + 0.5, 0.1, g, false));
-  // ceiling, lintel and red columns with gold capitals
-  camBlock.push(add(new THREE.BoxGeometry(W + 0.4, 0.25, D + 0.6), MAT.woodDark, 0, FY + H + 0.12, 0.1, g));
-  add(new THREE.BoxGeometry(W + 0.6, 0.6, 0.5), MAT.lacquer, 0, FY + H - 0.3, D / 2 + 0.2, g);
-  add(new THREE.BoxGeometry(W + 0.7, 0.12, 0.56), MAT.gold, 0, FY + H - 0.66, D / 2 + 0.2, g, false);
-  for (let i = 0; i < 6; i++) {
-    const x = -W / 2 + 0.3 + i * (W - 0.6) / 5;
-    add(new THREE.CylinderGeometry(0.28, 0.32, H, 16), MAT.lacquer, x, FY + H / 2, D / 2 + 0.2, g);
-    add(new THREE.CylinderGeometry(0.42, 0.3, 0.45, 16), MAT.gold, x, FY + H - 0.85, D / 2 + 0.2, g, false);
-    add(new THREE.CylinderGeometry(0.4, 0.4, 0.25, 16), MAT.gold, x, FY + 0.12, D / 2 + 0.2, g, false);
-    if (i > 0 && i < 5) colliders.push({ x: CX + x, z: CZ + D / 2 + 0.2, r: 0.45 });
+  add(new THREE.BoxGeometry(Math.min(5, W - 2), 0.18, 1), MAT.stoneDark, 0, 0.09, D / 2 + 1.2, g, false);
+  floors.push({ x, z, c, s, hx: W / 2 + 0.8, hz: D / 2 + 0.8, y: FY + 0.03 });
+  const colGeo = new THREE.CylinderGeometry(0.28, 0.32, H, 16), capGeo = new THREE.CylinderGeometry(0.42, 0.3, 0.45, 16), footGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.25, 16);
+  const column = (lx, lz, solid) => {
+    add(colGeo, MAT.lacquer, lx, FY + H / 2, lz, g);
+    add(capGeo, MAT.gold, lx, FY + H - 0.85, lz, g, false);
+    add(footGeo, MAT.gold, lx, FY + 0.12, lz, g, false);
+    if (solid) post(lx, lz, 0.45);
+  };
+  const beam = (w, lx, lz, ry = 0) => {
+    const b = add(new THREE.BoxGeometry(w, 0.6, 0.5), MAT.lacquer, lx, FY + H - 0.3, lz, g); b.rotation.y = ry;
+    const t = add(new THREE.BoxGeometry(w + 0.1, 0.12, 0.56), MAT.gold, lx, FY + H - 0.66, lz, g, false); t.rotation.y = ry;
+  };
+  let n = Math.max(3, Math.round(W / 2.6)); if (n % 2 === 0) n += 1; // odd gaps: the doorway in the middle stays open
+  if (walls) {
+    const wall = (w, d, lx, lz) => { const m = add(new THREE.BoxGeometry(w, H, d), MAT.wall, lx, FY + H / 2, lz, g); camBlock.push(m); };
+    wall(W, 0.4, 0, -D / 2); wall(0.4, D, -W / 2, 0); wall(0.4, D, W / 2, 0);
+    block(0, -D / 2, W / 2, 0.3); block(-W / 2, 0, 0.3, D / 2); block(W / 2, 0, 0.3, D / 2);
+    // red lacquer wainscot inside
+    add(new THREE.BoxGeometry(W - 0.5, 1, 0.05), MAT.lacquer, 0, FY + 0.5, -D / 2 + 0.23, g, false);
+    [-1, 1].forEach((sg) => add(new THREE.BoxGeometry(0.05, 1, D - 0.2), MAT.lacquer, sg * (W / 2 - 0.23), FY + 0.5, 0.1, g, false));
+    for (let i = 0; i <= n; i++) column(-W / 2 + 0.3 + i * (W - 0.6) / n, D / 2 + 0.2, i > 0 && i < n);
+  } else {
+    // open pavilion: columns on all four sides
+    for (let i = 0; i <= n; i++) { const lx = -W / 2 + 0.3 + i * (W - 0.6) / n; column(lx, D / 2 + 0.2, true); column(lx, -D / 2 + 0.2, true); }
+    beam(W + 0.6, 0, -D / 2 + 0.2);
+    [-1, 1].forEach((sg) => beam(D + 0.5, sg * (W / 2 - 0.3), 0, Math.PI / 2));
   }
-  // two-tier Thai roof with gold gable panels and chofa finials
-  [[W + 3.4, D + 3.4, 3.8, FY + H + 0.2], [W * 0.72, D * 0.86, 3.2, FY + H + 2.4]].forEach(([rw, rd, rh, ry]) => {
+  beam(W + 0.6, 0, D / 2 + 0.2);
+  camBlock.push(add(new THREE.BoxGeometry(W + 0.4, 0.25, D + 0.6), MAT.woodDark, 0, FY + H + 0.12, 0.1, g));
+  // two-tier roof
+  [[W + 3.4, D + 3.4, H * 0.68, FY + H + 0.2], [W * 0.72, D * 0.86, H * 0.57, FY + H + H * 0.43]].forEach(([rw, rd, rh, ry]) => {
     const r = gable(rw, rd, rh, MAT.roof); r.position.y = ry; r.castShadow = true; g.add(r); camBlock.push(r);
     [-1, 1].forEach((sg) => {
       const e = gable(rw + 0.3, 0.25, rh + 0.15, MAT.roofEdge); e.position.set(0, ry - 0.05, sg * rd / 2); g.add(e);
@@ -326,104 +309,233 @@ const boards = [];
     const bt = new THREE.BoxGeometry(0.25, 0.25, rd + 0.3);
     [-1, 1].forEach((sg) => { const b = add(bt, MAT.roofGreen, sg * rw / 2, ry + 0.05, 0, g, false); b.rotation.z = sg * 0.1; });
   });
-  // altar: stepped red-and-gold stand with the Dhamma wheel
+  // warm light inside
+  const lamp = new THREE.PointLight(0xffd2a0, walls ? 14 : 6, Math.max(W, D) + 2, 2); lamp.position.set(0, FY + H - 0.3, walls ? -D / 4 : 0); g.add(lamp);
+  return { g, toWorld, block, post, W, D, H, FY, signAt: [...toWorld(0, D / 2 + 2.4), FY + H + H * 0.62] };
+}
+
+/* ---------------- wall boards (canvas textures so the Thai text stays sharp) ---------------- */
+const seg = typeof Intl !== "undefined" && Intl.Segmenter ? new Intl.Segmenter(L, { granularity: "word" }) : null;
+function wrapText(gx, text, maxW) {
+  const parts = seg ? [...seg.segment(text)].map((p) => p.segment) : text.split(/(\s+)/);
+  const lines = []; let cur = "";
+  for (const p of parts) { if (gx.measureText(cur + p).width > maxW && cur) { lines.push(cur.trim()); cur = p; } else cur += p; }
+  if (cur.trim()) lines.push(cur.trim()); return lines;
+}
+// a framed board: small heading, a round icon, a title and an optional footnote
+function boardTexture({ head = "", icon = "", title = "", foot = "", wide = false }) {
+  const Wd = wide ? 768 : 512, Hd = 640;
+  const c = document.createElement("canvas"); c.width = Wd; c.height = Hd;
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  const draw = () => {
+    const gx = c.getContext("2d");
+    gx.fillStyle = "#7a1c14"; gx.fillRect(0, 0, Wd, Hd);
+    gx.fillStyle = "#e8b84a"; gx.fillRect(14, 14, Wd - 28, Hd - 28);
+    gx.fillStyle = "#fdf3dc"; gx.fillRect(30, 30, Wd - 60, Hd - 60);
+    gx.strokeStyle = "#c9963a"; gx.lineWidth = 3; gx.strokeRect(46, 46, Wd - 92, Hd - 92);
+    gx.textAlign = "center"; gx.textBaseline = "middle";
+    if (head) { gx.fillStyle = "#a5560f"; gx.font = "44px Itim, sans-serif"; gx.fillText(head, Wd / 2, 118); }
+    if (icon) { gx.beginPath(); gx.arc(Wd / 2, 228, 64, 0, Math.PI * 2); gx.fillStyle = "#f2cc62"; gx.fill(); gx.font = "70px sans-serif"; gx.fillStyle = "#3a2a1d"; gx.fillText(icon, Wd / 2, 232); }
+    gx.font = "52px Itim, sans-serif"; gx.fillStyle = "#3a2a1d";
+    wrapText(gx, title, Wd - 132).slice(0, 3).forEach((ln, i) => gx.fillText(ln, Wd / 2, 360 + i * 66));
+    if (foot) { gx.font = "28px Mali, sans-serif"; gx.fillStyle = "#6e5c4c"; wrapText(gx, foot, Wd - 132).slice(0, 2).forEach((ln, i) => gx.fillText(ln, Wd / 2, 552 + i * 36)); }
+    t.needsUpdate = true;
+  };
+  draw(); signDraws.push(draw); return t;
+}
+// hang a board on a sala wall: side = "back" | "left" | "right", at offset u along that wall
+function wallBoard(h, side, u, tex, w = 1.7, ht = 2.12, y = 2.6) {
+  // unlit, so the text reads the same in bright sun and in shade
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, ht), new THREE.MeshBasicMaterial({ map: tex, color: 0xe2e2e2 }));
+  let lx, lz;
+  if (side === "back") { lx = u; lz = -h.D / 2 + 0.22; }
+  else { const sg = side === "left" ? -1 : 1; lx = sg * (h.W / 2 - 0.22); lz = u; m.rotation.y = -sg * Math.PI / 2; }
+  m.position.set(lx, h.FY + y, lz); h.g.add(m);
+  // where to stand to read it
+  const [sx, sz] = side === "back" ? h.toWorld(lx, lz + 1.4) : h.toWorld(lx * 0.8, lz);
+  return { x: sx, z: sz };
+}
+const cushGeo = new THREE.CylinderGeometry(0.42, 0.46, 0.2, 24), rimGeo = new THREE.TorusGeometry(0.44, 0.035, 8, 32);
+const cushMat = S(0x9b2a1d, { roughness: 0.95 });
+function cushion(h, lx, lz) { add(cushGeo, cushMat, lx, h.FY + 0.1, lz, h.g); const r = add(rimGeo, MAT.gold, lx, h.FY + 0.19, lz, h.g, false); r.rotation.x = Math.PI / 2; }
+// candles with soft flames (they glow; no sound); every flame sways a little unless calm motion is on
+const flameMat = new THREE.MeshStandardMaterial({ color: 0xffd27a, emissive: 0xffa53a, emissiveIntensity: 3 });
+const waxMat = S(0xfff6e4, { roughness: 0.7 });
+const flames = [];
+function candle(parent, lx, y, lz, tall = 0.45) {
+  add(new THREE.CylinderGeometry(0.06, 0.06, tall, 10), waxMat, lx, y + tall / 2, lz, parent, false);
+  const f = add(new THREE.SphereGeometry(0.06, 10, 8), flameMat, lx, y + tall + 0.08, lz, parent, false); f.scale.y = 1.8; flames.push(f);
+}
+function hangLanterns(h, spots) { props("lantern", 1.3, spots.map(([lx, lz]) => [lx, lz, 0, h.FY + h.H - 1.35]), { shadow: false, parent: h.g }); }
+
+/* ---------------- the halls ---------------- */
+const signs = [];
+const halls = {};
+const salas = {};
+const boards = [];
+salas.learn = sala({ x: -14, z: -38, W: 13, D: 11 });
+salas.library = sala({ x: -30, z: -24, rot: Math.PI / 5, W: 13, D: 10 });
+salas.media = sala({ x: 13, z: -38, rot: -0.12, W: 13, D: 10 });
+salas.access = sala({ x: 30, z: -24, rot: -Math.PI / 5, W: 13, D: 10 });
+salas.care = sala({ x: 34, z: 6, rot: -Math.PI / 2.4, W: 10, D: 8, H: 5 });
+salas.rest = sala({ x: -28, z: 14, rot: Math.atan2(28, -14), W: 8, D: 6, H: 4, walls: false });
+Object.entries(salas).forEach(([id, h]) => { halls[id] = h.g; });
+
+PLACES.forEach((p) => {
+  if (p.id === "yard" || p.id === "exit") return;
+  const h = salas[p.id];
+  const [sx, sz, sy] = h ? h.signAt : [...({ garden: [0, -48], journey: [15, 49] }[p.id] || p.pos), 5];
+  signs.push(sign(L === "en" ? p.en : p.th, p.sub[L === "en" ? 1 : 0], p.icon, sx, sy, sz, 5.2));
+});
+sign(tx("ลานกลาง", "Central Courtyard"), tx("อยากไปไหนวันนี้?", "Where would you like to go today?"), "🌳", 0, 21, 0, 8);
+
+/* ---- Learning Hall: eight story boards (U01–U08, approved titles) open the matching lesson.
+        At the front of the hall stands a Dhamma wheel, not a statue. ---- */
+{
+  const h = salas.learn, { g, FY, D } = h;
   add(new THREE.BoxGeometry(4.4, 1, 1.8), MAT.lacquer, 0, FY + 0.5, -D / 2 + 1.2, g);
   add(new THREE.BoxGeometry(4.5, 0.1, 1.9), MAT.gold, 0, FY + 1.02, -D / 2 + 1.2, g, false);
   add(new THREE.BoxGeometry(2.6, 0.8, 1.1), MAT.lacquer, 0, FY + 1.45, -D / 2 + 0.9, g);
   add(new THREE.BoxGeometry(2.7, 0.08, 1.2), MAT.gold, 0, FY + 1.87, -D / 2 + 0.9, g, false);
-  blockers.push({ x: CX, z: CZ - D / 2 + 1.2, c: 1, s: 0, hx: 2.4, hz: 1.1 });
-  {
-    const wheel = new THREE.Group(); wheel.position.set(0, FY + 3.25, -D / 2 + 0.85); g.add(wheel);
-    wheel.add(new THREE.Mesh(new THREE.TorusGeometry(1.05, 0.08, 12, 48), MAT.gold));
-    wheel.add(new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.06, 10, 24), MAT.gold));
-    for (let i = 0; i < 8; i++) { const sp = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.8, 6), MAT.gold); const a = i * Math.PI / 4; sp.position.set(Math.cos(a) * 0.66, Math.sin(a) * 0.66, 0); sp.rotation.z = a - Math.PI / 2; wheel.add(sp); }
-    for (let i = 0; i < 8; i++) { const k = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), MAT.gold); const a = i * Math.PI / 4 + Math.PI / 8; k.position.set(Math.cos(a) * 1.18, Math.sin(a) * 1.18, 0); wheel.add(k); }
-    add(new THREE.CylinderGeometry(0.08, 0.12, 1.1, 8), MAT.gold, 0, FY + 2.15, -D / 2 + 0.85, g, false);
-    wheel.traverse((o) => { o.castShadow = true; });
-    // a red cloth hanging behind
-    add(new THREE.BoxGeometry(3.2, 3.6, 0.05), S(0x9b2a1d, { roughness: 0.9 }), 0, FY + 3.4, -D / 2 + 0.24, g, false);
-    add(new THREE.BoxGeometry(3.3, 0.12, 0.07), MAT.gold, 0, FY + 5.2, -D / 2 + 0.25, g, false);
-  }
-  // candles with soft flames (they glow; no sound, no flicker in calm motion)
-  const flameMat = new THREE.MeshStandardMaterial({ color: 0xffd27a, emissive: 0xffa53a, emissiveIntensity: 3 });
-  const waxMat = S(0xfff6e4, { roughness: 0.7 });
-  const flames = [];
-  [-1.6, -1.1, 1.1, 1.6].forEach((x) => {
-    add(new THREE.CylinderGeometry(0.06, 0.06, 0.45, 10), waxMat, x, FY + 1.27, -D / 2 + 1.9, g, false);
-    const f = add(new THREE.SphereGeometry(0.06, 10, 8), flameMat, x, FY + 1.58, -D / 2 + 1.9, g, false); f.scale.y = 1.8; flames.push(f);
-  });
-  g.userData.flames = flames;
+  h.block(0, -D / 2 + 1.2, 2.4, 1.1);
+  const wheel = new THREE.Group(); wheel.position.set(0, FY + 3.25, -D / 2 + 0.85); g.add(wheel);
+  wheel.add(new THREE.Mesh(new THREE.TorusGeometry(1.05, 0.08, 12, 48), MAT.gold));
+  wheel.add(new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.06, 10, 24), MAT.gold));
+  for (let i = 0; i < 8; i++) { const sp = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.8, 6), MAT.gold); const a = i * Math.PI / 4; sp.position.set(Math.cos(a) * 0.66, Math.sin(a) * 0.66, 0); sp.rotation.z = a - Math.PI / 2; wheel.add(sp); }
+  for (let i = 0; i < 8; i++) { const k = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), MAT.gold); const a = i * Math.PI / 4 + Math.PI / 8; k.position.set(Math.cos(a) * 1.18, Math.sin(a) * 1.18, 0); wheel.add(k); }
+  add(new THREE.CylinderGeometry(0.08, 0.12, 1.1, 8), MAT.gold, 0, FY + 2.15, -D / 2 + 0.85, g, false);
+  wheel.traverse((o) => { o.castShadow = true; });
+  add(new THREE.BoxGeometry(3.2, 3.6, 0.05), S(0x9b2a1d, { roughness: 0.9 }), 0, FY + 3.4, -D / 2 + 0.24, g, false);
+  add(new THREE.BoxGeometry(3.3, 0.12, 0.07), MAT.gold, 0, FY + 5.2, -D / 2 + 0.25, g, false);
+  [-1.6, -1.1, 1.1, 1.6].forEach((x) => candle(g, x, FY + 1.05, -D / 2 + 1.9));
   const altarLight = new THREE.PointLight(0xffb066, 18, 9, 2); altarLight.position.set(0, FY + 2.6, -D / 2 + 2.6); g.add(altarLight);
-  const hallLight = new THREE.PointLight(0xffd2a0, 22, 14, 2); hallLight.position.set(0, FY + H - 1, 1); g.add(hallLight);
-  // story boards: canvas textures so the Thai text stays sharp
-  const seg = typeof Intl !== "undefined" && Intl.Segmenter ? new Intl.Segmenter(L, { granularity: "word" }) : null;
-  const wrap = (gx, text, maxW) => {
-    const parts = seg ? [...seg.segment(text)].map((s) => s.segment) : text.split(/(\s+)/);
-    const lines = []; let cur = "";
-    for (const p of parts) { if (gx.measureText(cur + p).width > maxW && cur) { lines.push(cur.trim()); cur = p; } else cur += p; }
-    if (cur.trim()) lines.push(cur.trim()); return lines;
-  };
-  const boardTex = (n, title) => {
-    const c = document.createElement("canvas"); c.width = 512; c.height = 640;
-    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
-    const draw = () => {
-      const gx = c.getContext("2d");
-      gx.fillStyle = "#7a1c14"; gx.fillRect(0, 0, 512, 640);
-      gx.fillStyle = "#e8b84a"; gx.fillRect(14, 14, 484, 612);
-      gx.fillStyle = "#fdf3dc"; gx.fillRect(30, 30, 452, 580);
-      gx.strokeStyle = "#c9963a"; gx.lineWidth = 3; gx.strokeRect(46, 46, 420, 548);
-      gx.fillStyle = "#a5560f"; gx.font = "44px Itim, sans-serif"; gx.textAlign = "center"; gx.textBaseline = "middle";
-      gx.fillText(tx("เรื่องที่ ", "Story ") + n, 256, 118);
-      gx.beginPath(); gx.arc(256, 228, 64, 0, Math.PI * 2); gx.fillStyle = "#f2cc62"; gx.fill();
-      gx.font = "70px sans-serif"; gx.fillStyle = "#3a2a1d"; gx.fillText("👣", 256, 232);
-      gx.font = "52px Itim, sans-serif"; gx.fillStyle = "#3a2a1d";
-      wrap(gx, title, 380).slice(0, 3).forEach((ln, i) => gx.fillText(ln, 256, 360 + i * 66));
-      gx.font = "28px Mali, sans-serif"; gx.fillStyle = "#6e5c4c"; gx.fillText(tx("เดินมาใกล้ ๆ แล้วกด E", "Walk close and press E"), 256, 560);
-      t.needsUpdate = true;
-    };
-    draw(); signDraws.push(draw); return t;
-  };
-  const spots = [[-1, 2.6], [-1, -0.1], [-1, -2.8], [-3.9, "b"], [3.9, "b"], [1, -2.8], [1, -0.1], [1, 2.6]];
-  spots.forEach((sp, i) => {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 2.12), new THREE.MeshStandardMaterial({ map: boardTex(i + 1, L === "en" ? JOURNEY[i][1] : JOURNEY[i][0]), roughness: 0.8 }));
-    let lx, lz;
-    if (sp[1] === "b") { lx = sp[0]; lz = -D / 2 + 0.22; }
-    else { lx = sp[0] * (W / 2 - 0.22); lz = sp[1]; m.rotation.y = -sp[0] * Math.PI / 2; }
-    m.position.set(lx, FY + 2.6, lz); g.add(m);
-    boards.push({ x: CX + lx * 0.8, z: CZ + (sp[1] === "b" ? lz + 1.4 : lz), i });
+  const spots = [["left", 2.6], ["left", -0.1], ["left", -2.8], ["back", -3.9], ["back", 3.9], ["right", -2.8], ["right", -0.1], ["right", 2.6]];
+  spots.forEach(([side, u], i) => {
+    const tex = boardTexture({ head: tx("เรื่องที่ ", "Story ") + (i + 1), icon: "👣", title: L === "en" ? JOURNEY[i][1] : JOURNEY[i][0], foot: tx("เดินมาใกล้ ๆ แล้วกด E", "Walk close and press E") });
+    boards.push({ ...wallBoard(h, side, u, tex), i });
   });
-  // cushions in rows facing the altar, a reading table and hanging lanterns
-  const cushions = [];
-  for (let r = 0; r < 3; r++) for (let c = -2; c <= 2; c++) if (c !== 0) cushions.push([CX + c * 1.5, CZ - 1.2 + r * 1.6, Math.PI, FY]);
-  const cushGeo = new THREE.CylinderGeometry(0.42, 0.46, 0.2, 24), rimGeo = new THREE.TorusGeometry(0.44, 0.035, 8, 32);
-  const cushMat = S(0x9b2a1d, { roughness: 0.95 });
-  cushions.forEach(([x, z]) => { add(cushGeo, cushMat, x, FY + 0.1, z); const r = add(rimGeo, MAT.gold, x, FY + 0.19, z, scene, false); r.rotation.x = Math.PI / 2; });
-  props("candles", 0.9, [[CX - 1.6, CZ - D / 2 + 0.95, 0, FY + 1.9], [CX + 1.6, CZ - D / 2 + 0.95, 0, FY + 1.9]]);
-  props("lotus", 0.7, [[CX, CZ - D / 2 + 2.05, 0, FY + 1.05]]);
-  props("table", 0.8, [[CX - 4.6, CZ + 3.4, Math.PI / 2, FY]]);
-  props("lantern", 1.3, [[CX - 3.5, CZ + 1, 0, FY + H - 1.35], [CX + 3.5, CZ + 1, 0, FY + H - 1.35], [CX, CZ + 3.2, 0, FY + H - 1.35]], { shadow: false });
+  for (let r = 0; r < 3; r++) for (let c = -2; c <= 2; c++) if (c !== 0) cushion(h, c * 1.5, -1.2 + r * 1.6);
+  props("candles", 0.9, [[-1.6, -D / 2 + 0.95, 0, FY + 1.9], [1.6, -D / 2 + 0.95, 0, FY + 1.9]], { parent: g });
+  props("lotus", 0.7, [[0, -D / 2 + 2.05, 0, FY + 1.05]], { parent: g });
+  props("table", 0.8, [[-4.6, 3.4, Math.PI / 2, FY]], { parent: g });
+  hangLanterns(h, [[-3.5, 1], [3.5, 1], [0, 3.2]]);
 }
 
-// the Sambodhaya wheel hangs on the Media Hall as explanatory media (image used unchanged)
-new THREE.TextureLoader().load("img/sambodhaya-wheel.png", (t) => {
-  t.colorSpace = THREE.SRGBColorSpace;
-  const board = new THREE.Mesh(new THREE.PlaneGeometry(5.2, 4.75), new THREE.MeshBasicMaterial({ map: t }));
-  const frame = new THREE.Mesh(new THREE.BoxGeometry(5.6, 5.15, 0.2), MAT.woodDark);
-  const gp = new THREE.Group(); gp.add(frame); board.position.z = 0.11; gp.add(board);
-  gp.position.set(7.5, 3.4, -32.6); gp.rotation.y = -0.12; scene.add(gp);
-});
+/* ---- Evidence Library: shelves of palm-leaf manuscripts, reading tables ---- */
+{
+  const h = salas.library, { g, FY, W, D } = h;
+  // the shelf model is built facing +x: a quarter turn makes it face into the room
+  const Q = -Math.PI / 2;
+  props("bookshelf", 2.7, [[-4, -D / 2 + 0.75, Q, FY], [4, -D / 2 + 0.75, Q, FY], [-W / 2 + 0.75, -1.5, Q + Math.PI / 2, FY], [W / 2 - 0.75, -1.5, Q - Math.PI / 2, FY], [-W / 2 + 0.75, 1.8, Q + Math.PI / 2, FY], [W / 2 - 0.75, 1.8, Q - Math.PI / 2, FY]], { parent: g });
+  h.block(-4, -D / 2 + 0.75, 1.3, 0.6); h.block(4, -D / 2 + 0.75, 1.3, 0.6);
+  h.block(-W / 2 + 0.75, 0.15, 0.6, 2.9); h.block(W / 2 - 0.75, 0.15, 0.6, 2.9);
+  wallBoard(h, "back", 0, boardTexture({ head: tx("หอหลักฐาน", "Evidence Library"), icon: "📚", title: tx("ดูต้นทาง หลักฐาน และสถานะการตรวจ", "Sources, evidence and checking status"), foot: tx("📜 ต้นทาง · 📝 คำแปล · 💡 คำอธิบาย · 🕯️ ยังรอตรวจ", "📜 source · 📝 translation · 💡 explanation · 🕯️ under review"), wide: true }), 3, 2.5, 2.7);
+  props("table", 0.8, [[-1.8, 1, 0, FY], [1.8, 1, 0, FY]], { parent: g });
+  [[-1.8, 2.2], [1.8, 2.2], [-1.8, -0.2], [1.8, -0.2]].forEach(([lx, lz]) => cushion(h, lx, lz));
+  h.post(-1.8, 1, 0.8); h.post(1.8, 1, 0.8);
+  hangLanterns(h, [[-3, 0], [3, 0]]);
+}
 
-/* ---------------- rest area: benches by the pond ---------------- */
-[[-24, 18, 0.3], [-30, 10, -0.4], [-34, 15, 1.2]].forEach(([x, z, r]) => {
-  const b = new THREE.Group(); b.position.set(x, 0, z); b.rotation.y = r; scene.add(b);
-  add(new THREE.BoxGeometry(3.4, 0.3, 1.1), MAT.wood, 0, 1, 0, b);
-  [-1.3, 1.3].forEach((bx) => add(new THREE.BoxGeometry(0.3, 1, 0.9), MAT.woodDark, bx, 0.5, 0, b));
-  colliders.push({ x, z, r: 1.6 });
-});
+/* ---- Media Hall: the Sambodhaya wheel (image used unchanged) on the back wall, benches to sit and look ---- */
+{
+  const h = salas.media, { g, FY, D } = h;
+  new THREE.TextureLoader().load("img/sambodhaya-wheel.png", (t) => {
+    t.colorSpace = THREE.SRGBColorSpace;
+    const board = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 4.2), new THREE.MeshBasicMaterial({ map: t, toneMapped: false }));
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(5, 4.6, 0.15), MAT.gold);
+    const gp = new THREE.Group(); gp.add(frame); board.position.z = 0.08; gp.add(board);
+    gp.position.set(0, FY + 2.95, -D / 2 + 0.3); g.add(gp);
+  });
+  wallBoard(h, "left", -1, boardTexture({ icon: "📖", title: tx("อ่าน", "Read") }), 1.5, 1.9);
+  wallBoard(h, "left", 2, boardTexture({ icon: "🎧", title: tx("ฟัง", "Listen") }), 1.5, 1.9);
+  wallBoard(h, "right", -1, boardTexture({ icon: "🎬", title: tx("ดู", "Watch") }), 1.5, 1.9);
+  wallBoard(h, "right", 2, boardTexture({ icon: "🕯️", title: tx("ยังรอตรวจ", "Under review"), foot: tx("ภาพวงล้อเป็นสื่ออธิบายของวัด", "The wheel is the temple's explanatory media") }), 1.5, 1.9);
+  props("bench", 1.1, [[-1.9, 0, Math.PI, FY], [1.9, 0, Math.PI, FY], [-1.9, 2.4, Math.PI, FY], [1.9, 2.4, Math.PI, FY]], { parent: g });
+  [[-1.9, 0], [1.9, 0], [-1.9, 2.4], [1.9, 2.4]].forEach(([lx, lz]) => h.block(lx, lz, 1.1, 0.4));
+  hangLanterns(h, [[-3, 1], [3, 1]]);
+}
+
+/* ---- Universal Hall: languages and access, with the hall's shrine ----
+   Seating follows temple custom: visitors and students sit on the floor; teachers and monks sit on a
+   raised platform along the back wall; the Buddha image sits on a stepped altar on that platform,
+   always the highest of all. The platform is not walkable, as lay visitors don't step onto it. */
+{
+  const h = salas.access, { g, FY, W, D } = h;
+  const PH = 0.6, PD = 2.8, pz = -D / 2 + 0.2 + PD / 2;     // teachers' platform: height, depth, centre
+  const top = FY + PH;
+  add(new THREE.BoxGeometry(W - 0.8, PH, PD), MAT.lacquer, 0, FY + PH / 2, pz, g);
+  add(new THREE.BoxGeometry(W - 0.7, 0.08, PD + 0.1), MAT.floor, 0, top + 0.02, pz, g, false);
+  add(new THREE.BoxGeometry(W - 0.75, 0.1, 0.06), MAT.gold, 0, FY + PH - 0.12, pz + PD / 2 + 0.01, g, false);
+  add(new THREE.BoxGeometry(W - 0.75, 0.1, 0.06), MAT.gold, 0, FY + 0.12, pz + PD / 2 + 0.01, g, false);
+  h.block(0, pz, (W - 0.8) / 2, PD / 2);
+  // teachers' seats: a square cushion with a triangle backrest, two each side of the altar
+  const tri = new THREE.Shape(); tri.moveTo(-0.45, 0); tri.lineTo(0, 0.75); tri.lineTo(0.45, 0); tri.lineTo(-0.45, 0);
+  const triGeo = new THREE.ExtrudeGeometry(tri, { depth: 0.22, bevelEnabled: false }); triGeo.translate(0, 0, -0.11);
+  const seatGeo = new THREE.BoxGeometry(0.95, 0.14, 0.95), seatMat = S(0xb8862e, { roughness: 0.9 }), backMat = S(0x9b2a1d, { roughness: 0.9 });
+  [-4.6, -3.2, 3.2, 4.6].forEach((lx) => {
+    add(seatGeo, seatMat, lx, top + 0.1, pz + 0.35, g);
+    add(triGeo, backMat, lx, top + 0.03, pz - 0.35, g);
+  });
+  // the stepped altar (to mu bucha) in the middle of the platform
+  const az = -D / 2 + 1.1;
+  const tiers = [[3, 0.55, 1.5], [2.1, 0.55, 1.1], [1.3, 0.5, 0.8]];
+  let y = top;
+  tiers.forEach(([tw, th, td], i) => {
+    add(new THREE.BoxGeometry(tw, th, td), MAT.lacquer, 0, y + th / 2, az - i * 0.12, g);
+    add(new THREE.BoxGeometry(tw + 0.08, 0.06, td + 0.08), MAT.gold, 0, y + th, az - i * 0.12, g, false);
+    y += th;
+  });
+  const statueY = y + 0.03;                                 // the Buddha image sits here, above everyone
+  // a gold arch (suum) behind the image and a red cloth on the wall
+  const arch = add(new THREE.TorusGeometry(1.05, 0.07, 10, 40, Math.PI), MAT.gold, 0, statueY + 1.05, az - 0.5, g, false);
+  arch.scale.y = 1.25;
+  add(new THREE.BoxGeometry(3.6, 4.4, 0.05), S(0x9b2a1d, { roughness: 0.9 }), 0, top + 2.3, -D / 2 + 0.24, g, false);
+  add(new THREE.BoxGeometry(3.7, 0.12, 0.07), MAT.gold, 0, top + 4.5, -D / 2 + 0.25, g, false);
+  // the model is built facing +x; a quarter turn makes the image face the entrance
+  props("buddha", 1.9, [[0, az - 0.12 * 2, -Math.PI / 2, statueY]], { parent: g, fallback: () => {
+    // if the image can't load, a lotus throne stays rather than nothing
+    add(new THREE.CylinderGeometry(0.55, 0.45, 0.35, 24), MAT.gold, 0, statueY + 0.18, az - 0.24, g);
+  } });
+  // ornaments: candles, offering trays and flower vases on the lower steps, incense bowl at the front
+  [-1.25, 1.25].forEach((lx) => candle(g, lx, top + 0.58, az + 0.5, 0.5));
+  [-0.85, 0.85].forEach((lx) => candle(g, lx, top + 1.13, az + 0.2, 0.4));
+  props("phanphum", 0.75, [[-1.15, az + 0.15, 0, top + 0.58], [1.15, az + 0.15, 0, top + 0.58]], { parent: g });
+  props("vase", 0.7, [[-0.75, az - 0.1, 0, top + 1.13], [0.75, az - 0.1, 0, top + 1.13]], { parent: g });
+  props("lotus", 0.45, [[0, az + 0.55, 0, top + 0.58]], { parent: g });
+  const shrineLight = new THREE.PointLight(0xffc27a, 10, 7, 2); shrineLight.position.set(0, top + 2.4, az + 1.6); g.add(shrineLight);
+  // the hall's own board moves to the side wall
+  wallBoard(h, "left", 0.6, boardTexture({ head: tx("ศาลาสากล", "Universal Hall"), icon: "🌍", title: "ภาษาไทย · English", foot: tx("เลือกภาษา ขนาดตัวอักษร และการเคลื่อนไหวได้ในหน้าเว็บของศาลานี้", "Choose language and motion settings on this hall's web page"), wide: true }), 2.8, 2.33, 2.6);
+  props("potplant", 1.6, [[-W / 2 + 1, D / 2 - 1, 2, FY], [W / 2 - 1, D / 2 - 1, 3, FY]], { parent: g });
+  [[-W / 2 + 1, D / 2 - 1], [W / 2 - 1, D / 2 - 1]].forEach(([lx, lz]) => h.post(lx, lz, 0.6));
+  // students and visitors sit on the floor, facing the platform
+  for (let r = 0; r < 2; r++) for (let c = -2; c <= 2; c++) cushion(h, c * 1.5, 0.7 + r * 1.6);
+  hangLanterns(h, [[-3, 1.8], [3, 1.8]]);
+}
+
+/* ---- Caretaker's hall: a small kuti where the temple dog sleeps ---- */
+{
+  const h = salas.care, { g, FY, W, D } = h;
+  wallBoard(h, "back", 0, boardTexture({ head: tx("ผู้ดูแลวัดและหมาวัด", "Caretaker & temple dog"), icon: "🤝", title: tx("มีคำถาม หรืออยากให้ช่วย", "Questions, or need a hand"), wide: true }), 2.8, 2.3, 2.4);
+  props("table", 0.8, [[-2.2, -1.2, 0, FY]], { parent: g }); h.post(-2.2, -1.2, 0.8);
+  props("bench", 1.1, [[-2.2, 0.4, Math.PI, FY]], { parent: g });
+  // the dog's bed: a round cushion by the wall
+  add(new THREE.CylinderGeometry(0.8, 0.85, 0.22, 28), S(0x4f9a5d, { roughness: 0.95 }), 2.6, FY + 0.11, -2, g);
+  add(new THREE.TorusGeometry(0.8, 0.14, 10, 32), S(0x3f7f4a, { roughness: 0.95 }), 2.6, FY + 0.25, -2, g).rotation.x = Math.PI / 2;
+  props("potplant", 1.5, [[W / 2 - 0.9, D / 2 - 0.9, 0, FY], [-W / 2 + 0.9, D / 2 - 0.9, 1, FY]], { parent: g });
+}
+
+/* ---- Rest Area: an open pavilion; its benches look out over the pond ---- */
+{
+  const h = salas.rest, { FY } = h;
+  props("bench", 1.1, [[-1.5, -0.6, Math.PI, FY], [1.5, -0.6, Math.PI, FY]], { parent: h.g, fallback: () => [-1.5, 1.5].forEach((lx) => add(new THREE.BoxGeometry(2.4, 0.5, 0.8), MAT.wood, lx, FY + 0.25, -0.6, h.g)) });
+  h.block(0, -0.6, 2.8, 0.45);
+}
 
 /* ---------------- practice garden: four observation stones and a waterfall wall ---------------- */
 {
-  add(new THREE.BoxGeometry(22, 9, 3), MAT.stoneDark, 0, 4.5, -60);
+  add(new THREE.BoxGeometry(22, 9, 3), MAT.rock, 0, 4.5, -60);
+  props("boulder", 7, [[-7.5, -59, 0.4], [7.5, -59.5, 2.5], [-3.6, -58.6, 1.2, 4.5], [3.8, -58.8, 4, 4.8]]);
+  props("bamboo", 7, [[-13, -50, 0], [-15, -55, 1], [13, -50, 2], [15, -55, 3], [-11, -57, 4], [11, -57, 5]]);
   const fall = add(new THREE.BoxGeometry(5, 8, 0.4), MAT.water, 0, 4.4, -58.3, scene, false);
   fall.material = fall.material.clone(); fall.material.opacity = 0.75;
   add(new THREE.CylinderGeometry(5, 5, 0.4, 24), MAT.water, 0, 0.2, -55.5, scene, false);
@@ -432,18 +544,19 @@ new THREE.TextureLoader().load("img/sambodhaya-wheel.png", (t) => {
   const four = [["🧍", "กาย", "Body"], ["💗", "ความรู้สึก", "Feelings"], ["🧠", "จิต", "Mind"], ["☸", "ธรรม", "Dhamma"]];
   four.forEach(([ic, th, en], i) => {
     const x = -9 + i * 6, z = -47;
-    add(new THREE.CylinderGeometry(1.4, 1.6, 0.6, 10), MAT.stone, x, 0.3, z);
+    add(new THREE.CylinderGeometry(1.4, 1.6, 0.4, 24), MAT.rock, x, 0.2, z, scene, false);
+    props("stone", 0.9, [[x, z, i * 1.7, 0.2]]);
     sign(L === "en" ? en : th, "", ic, x, 2.6, z, 3.2);
     colliders.push({ x, z, r: 1.5 });
   });
-  [[-14, -52], [14, -52], [16, -44]].forEach(([x, z]) => { add(new THREE.CylinderGeometry(0.5, 0.7, 3, 6), MAT.trunk, x, 1.5, z); add(new THREE.IcosahedronGeometry(2.6, 0), MAT.leafLight, x, 4.4, z); colliders.push({ x, z, r: 1 }); });
+  [[-13, -50], [-15, -55], [13, -50], [15, -55], [-11, -57], [11, -57]].forEach(([x, z]) => colliders.push({ x, z, r: 1.2 }));
 }
 
 /* ---------------- my journey: eight stepping stones ---------------- */
 const journeyStones = [];
 JOURNEY.forEach(([th, en], i) => {
   const x = 17 + i * 3.1, z = 45 - Math.sin(i * 0.55) * 6;
-  add(new THREE.CylinderGeometry(1.5, 1.6, 0.35, 12), MAT.stone, x, 0.18, z, scene, false);
+  add(new THREE.CylinderGeometry(1.5, 1.6, 0.35, 28), MAT.rock, x, 0.18, z, scene, false);
   sign(`${i + 1}`, L === "en" ? en : th, "👣", x, 2.2, z, 3.4);
   journeyStones.push({ x, z, i });
 });
@@ -471,17 +584,46 @@ for (let i = 0; i < 40; i++) {
   if (!HIGH && i % 2) continue; // fewer trees on weaker phones
   edgeTrees.push([x, z, i * 1.3, 0, i]);
 }
-props("frangipani", 8, edgeTrees.map(([x, z, r]) => [x, z, r]), { fallback: () => edgeTrees.forEach(([x, z, , , i]) => {
-  add(new THREE.CylinderGeometry(0.5, 0.8, 4, 6), MAT.trunk, x, 2, z);
-  add(new THREE.IcosahedronGeometry(3 + (i % 3), 0), i % 2 ? MAT.leaf : MAT.leafLight, x, 6, z);
-}) });
+// a mix of Thai trees: frangipani, sugar palms and banana clumps
+const kinds = [["frangipani", 8], ["palm", 13], ["frangipani", 7.5], ["banana", 5]];
+kinds.forEach(([name, h], k) => {
+  const mine = edgeTrees.filter(([, , , , i]) => i % 4 === k);
+  props(name, h, mine.map(([x, z, r]) => [x, z, r]), { fallback: () => mine.forEach(([x, z, , , i]) => {
+    add(new THREE.CylinderGeometry(0.5, 0.8, 4, 6), MAT.trunk, x, 2, z);
+    add(new THREE.IcosahedronGeometry(3 + (i % 3), 0), i % 2 ? MAT.leaf : MAT.leafLight, x, 6, z);
+  }) });
+});
+
+/* ---------------- the temple wall (kampaeng kaew): white, with lotus-bud posts ---------------- */
+{
+  const R = 76, segs = 72, wallMat = P("beige_wall_001", 3, 1, { color: 0xfffaf2 });
+  const segLen = 2 * Math.PI * R / segs;
+  const list = [];
+  for (let i = 0; i < segs; i++) { const a = (i + 0.5) / segs * Math.PI * 2; const x = Math.cos(a) * R, z = Math.sin(a) * R; if (z > 60 && Math.abs(x) < 12) continue; list.push([x, z, a]); }
+  const body = new THREE.InstancedMesh(new THREE.BoxGeometry(segLen + 0.05, 1.8, 0.6), wallMat, list.length);
+  const cap = new THREE.InstancedMesh(new THREE.BoxGeometry(segLen + 0.1, 0.25, 0.9), MAT.lacquer, list.length);
+  const postB = new THREE.InstancedMesh(new THREE.BoxGeometry(0.9, 2.4, 0.9), wallMat, list.length);
+  const bud = new THREE.InstancedMesh(new THREE.SphereGeometry(0.45, 12, 8), MAT.gold, list.length);
+  const o = new THREE.Object3D();
+  list.forEach(([x, z, a], i) => {
+    o.position.set(x, 0.9, z); o.rotation.set(0, -a + Math.PI / 2, 0); o.scale.set(1, 1, 1); o.updateMatrix(); body.setMatrixAt(i, o.matrix);
+    o.position.y = 1.9; o.updateMatrix(); cap.setMatrixAt(i, o.matrix);
+    const pa = a + Math.PI / segs; o.position.set(Math.cos(pa) * R, 1.2, Math.sin(pa) * R); o.updateMatrix(); postB.setMatrixAt(i, o.matrix);
+    o.position.y = 2.65; o.scale.set(1, 1.4, 1); o.updateMatrix(); bud.setMatrixAt(i, o.matrix);
+  });
+  [body, cap, postB, bud].forEach((m) => { m.castShadow = true; m.receiveShadow = true; scene.add(m); });
+}
 
 /* ---------------- small things that make it feel lived in ---------------- */
 props("bell", 4.6, [[-22, 25, 0.9]]); colliders.push({ x: -22, z: 25, r: 1.6 });
 const jars = [[-33, 7], [-19, 21], [-11, 39], [11, 39], [22, 19], [-36, -8]];
-props("jar", 1.1, jars.map(([x, z], i) => [x, z, i])); jars.forEach(([x, z]) => colliders.push({ x, z, r: 0.7 }));
+props("jar", 1.1, jars.map(([x, z], i) => [x, z, i]), { extra: true }); jars.forEach(([x, z]) => colliders.push({ x, z, r: 0.7 }));
+const bushes = [[-9, 18], [9, 18], [-19, -5], [19, -5], [-24, -36], [24, -36], [-40, 0], [40, -4], [22, 52], [36, 40], [-8, -52], [8, -52]];
+props("bougainvillea", 2.4, bushes.map(([x, z], i) => [x, z, i * 2]), { extra: true }); bushes.forEach(([x, z]) => colliders.push({ x, z, r: 1.3 }));
+const pots = [[-3.2, 34], [3.2, 34], [-10, 9.5], [10, 9.5]];
+props("potplant", 1.6, pots.map(([x, z], i) => [x, z, i]), { extra: true }); pots.forEach(([x, z]) => colliders.push({ x, z, r: 0.6 }));
 const blooms = [[-5, -15.5], [5, -15.5], [-15.5, 3], [15.5, 3]];
-props("lotus", 1, blooms.map(([x, z], i) => [x, z, i])); blooms.forEach(([x, z]) => colliders.push({ x, z, r: 0.8 }));
+props("lotus", 1, blooms.map(([x, z], i) => [x, z, i]), { extra: true }); blooms.forEach(([x, z]) => colliders.push({ x, z, r: 0.8 }));
 
 /* ---------------- avatars ---------------- */
 const AV_DEFAULT = { kind: "blocky", skin: "#e8b48a", shirt: "#e98a2b", pants: "#5e4a3a", hair: "#2b1d14", hairStyle: "short", face: "smile" };
@@ -664,6 +806,7 @@ function pickAt(x, y) {
   const v = new THREE.Vector2((x / innerWidth) * 2 - 1, -(y / innerHeight) * 2 + 1);
   ray.setFromCamera(v, camera);
   if (dog.obj.visible && ray.intersectObject(dog.obj, true).length) { openPlaces(true); return; }
+  if (groundAt(player.x, player.z) > 0) return; // inside a hall, clicks just turn the view
   for (const id of Object.keys(halls)) { if (ray.intersectObject(halls[id], true).length) { openPlace(PLACES.find((p) => p.id === id)); return; } }
 }
 
@@ -911,7 +1054,7 @@ function tick() {
   camera.lookAt(head);
 
   // candle flames sway a little (not in calm motion)
-  if (!settings.calmMotion) { const t = performance.now() / 1000; halls.learn.userData.flames.forEach((f, i) => { f.scale.y = 1.8 + Math.sin(t * 7 + i * 1.7) * 0.18; }); }
+  if (!settings.calmMotion) { const t = performance.now() / 1000; flames.forEach((f, i) => { f.scale.y = 1.8 + Math.sin(t * 7 + i * 1.7) * 0.18; }); }
   if (dog.model && !settings.calmMotion) dog.model.position.y = dog.moving ? Math.abs(Math.sin(performance.now() / 110)) * 0.08 : 0;
 
   if (composer) composer.render(); else renderer.render(scene, camera);
@@ -923,7 +1066,7 @@ document.fonts.load("64px Itim").then(() => document.fonts.load("36px Mali")).ca
   signDraws.forEach((d) => d());
 });
 camYaw = 0; camera.position.set(0, 8, 56);
-if (/[?&]debug\b/.test(location.search)) window.__w = { player, dog, boards, setCam: (y, p) => { camYaw = y; if (p != null) camPitch = p; } };
+if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, scene, salas, player, dog, boards, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
 Promise.race([Promise.all(propJobs), new Promise((r) => setTimeout(r, 7000))]).then(() => {
   $("loading").hidden = true;
   canvas.focus();
