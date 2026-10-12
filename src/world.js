@@ -2017,6 +2017,10 @@ function collide(nx, nz) {
 const $ = (id) => document.getElementById(id);
 let near = null;
 function placeName(p) { return L === "en" ? p.en : p.th; }
+let promptRest = null, promptAway = false;
+// on touch screens the prompt sits just under the top buttons, however many rows they wrap to
+const placePrompt = () => { const hud = document.querySelector(".hud-top"); if (hud) document.documentElement.style.setProperty("--prompt-top", Math.round(hud.getBoundingClientRect().bottom + 8) + "px"); };
+addEventListener("resize", placePrompt); placePrompt();
 function showPrompt(p) {
   const el = $("prompt");
   if (!p) { el.hidden = true; return; }
@@ -2397,6 +2401,11 @@ function frame(dt) {
   for (const m of almsMonks) { const d = Math.hypot(player.x - (m.x + Math.sin(m.yaw) * ALMS_STAND), player.z - (m.z + Math.cos(m.yaw) * ALMS_STAND)); if (d < 1.5 && d < bestD) { best = { ...ALMS_PLACE, monk: m }; bestD = d; } }
   for (const s of boards) { const d = Math.hypot(player.x - s.x, player.z - s.z); if (d < 1.9 && d < bestD) { best = { ...PLACES.find((p) => p.id === "learn"), stone: s.i, board: true }; bestD = d; } }
   if ((best && best.id) !== (near && near.id) || (best && best.stone) !== (near && near.stone) || (best && best.monk) !== (near && near.monk)) { near = best; showPrompt(near); }
+  // while he is doing something the prompt steps aside, and stays aside until he has walked on a little
+  const busy = alms.t >= 0 || kraap.t >= 0 || shoes.t >= 0 || wai.t >= 0 || sit.on;
+  if (busy) promptRest = { x: player.x, z: player.z };
+  else if (promptRest && Math.hypot(player.x - promptRest.x, player.z - promptRest.z) > 0.6) promptRest = null;
+  if (!!promptRest !== promptAway) { promptAway = !!promptRest; $("prompt").classList.toggle("away", promptAway); }
 
   // camera follows
   const cx = player.x + Math.sin(camYaw) * Math.cos(camPitch) * camDist;
