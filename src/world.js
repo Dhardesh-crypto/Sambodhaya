@@ -449,17 +449,35 @@ sign(tx("ลานกลาง", "Central Courtyard"), tx("อยากไปไ
    always the highest of all. The platform is not walkable, as lay visitors don't step onto it.
    Returns the local z of the platform's front edge. */
 const buddhaImages = [];
+// folded monks' robes (the same brown as the monks wear), stacked
+const robeMat = S(0x8a4f22, { roughness: 0.9 }), robeEdge = S(0x6e3d18, { roughness: 0.9 });
+function robeStack(parent, x, y, z, n = 1) {
+  for (let i = 0; i < n; i++) { add(new THREE.BoxGeometry(0.42, 0.1, 0.32), i % 2 ? robeEdge : robeMat, x + (i % 2) * 0.01, y + 0.05 + i * 0.1, z, parent); }
+}
+// the Kathina robe on a gold pedestal tray (พาน); its origin is the bottom of the foot
+function kathinTray() {
+  const g = new THREE.Group();
+  add(new THREE.CylinderGeometry(0.12, 0.16, 0.06, 20), MAT.gold, 0, 0.03, 0, g);
+  add(new THREE.CylinderGeometry(0.06, 0.1, 0.12, 16), MAT.gold, 0, 0.12, 0, g);
+  add(new THREE.CylinderGeometry(0.27, 0.2, 0.05, 28), MAT.gold, 0, 0.2, 0, g);
+  robeStack(g, 0, 0.22, 0, 1); add(new THREE.BoxGeometry(0.38, 0.09, 0.28), robeMat, 0, 0.36, 0.01, g);
+  add(new THREE.BoxGeometry(0.06, 0.2, 0.33), MAT.gold, 0, 0.32, 0, g, false); // a gold band tied round the folded robe
+  g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  return g;
+}
 // monks (Higgsfield, from artwork in the boy's style): brown temple robes, right shoulder bare, seated cross-legged
 const MONK_H = 1.75, MONK_TURN = -Math.PI / 2;                         // seated height, to the boy's scale (he stands ~2.75, sits ~1.6); quarter turns if a model faces sideways
 const monkFigures = []; let monkTime = 0;                                     // each breathes slowly (still when calm motion is on)
 function seatMonk(name, g, x, y, z) {
+  const lean = new THREE.Group(); lean.position.set(x, y, z); g.add(lean); // leans toward the hall to receive an offering
   propJobs.push(loadProp(name).then((src) => {
     if (!src) return;                                       // no fallback: an empty seat is better than a block figure
     const copy = src.clone();
     copy.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; if (o.material) o.material.envMapIntensity = 1; } });
-    const m = fitTo(copy, MONK_H); m.position.set(x, y, z); m.rotation.y = MONK_TURN; g.add(m);
+    const m = fitTo(copy, MONK_H); m.rotation.y = MONK_TURN; lean.add(m);
     monkFigures.push({ o: m, ph: monkFigures.length * 2.1 });
   }));
+  return lean;
 }
 function shrine(h, monks = []) {
   const { g, FY, W, D } = h;
@@ -478,7 +496,10 @@ function shrine(h, monks = []) {
     add(seatGeo, seatMat, lx, top + 0.1, pz + 0.3, g);
     add(triGeo, backMat, lx, top + 0.03, pz - 0.6, g);
   });
-  monks.forEach(([name, lx]) => seatMonk(name, g, lx, top + 0.17, pz + 0.3));
+  monks.forEach(([name, lx]) => {
+    const lean = seatMonk(name, g, lx, top + 0.17, pz + 0.3);
+    if (name === "monk-elder") h.senior = { lean, lx, lz: pz + 0.3, top: top + 0.06, edge: pz + PD / 2 }; // the senior monk: he receives offerings
+  });
   // the stepped altar (to mu bucha) in the middle of the platform
   const az = -D / 2 + 1.1;
   const tiers = [[3, 0.55, 1.5], [2.1, 0.55, 1.1], [1.3, 0.5, 0.8]];
@@ -564,6 +585,22 @@ function shrine(h, monks = []) {
 {
   const h = salas.access, { g, FY, W, D } = h;
   shrine(h, [["monk-elder", -2.6], ["monk", 2.6], ["monk-young", 4.6]]);
+  // Kathina (กฐิน): the offering gifts (บริวารกฐิน) set out on a low table before the platform, to the senior
+  // monk's left: folded robes, an alms bowl, a folded umbrella, a lamp and a pillow
+  if (h.senior) {
+    const tx0 = -4.9, tz0 = h.senior.edge + 0.55;
+    props("table", 0.55, [[tx0, tz0, 0, FY]], { parent: g });
+    const T = FY + 0.55;
+    robeStack(g, tx0 - 0.45, T, tz0, 3);
+    add(new THREE.SphereGeometry(0.2, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), S(0x1a1a1e, { roughness: 0.35, metalness: 0.2 }), tx0 + 0.1, T + 0.2, tz0, g).rotation.x = Math.PI; // the bowl
+    add(new THREE.CylinderGeometry(0.19, 0.19, 0.04, 20), S(0x1a1a1e, { roughness: 0.35 }), tx0 + 0.1, T + 0.02, tz0, g, false);
+    const umb = new THREE.Group(); umb.position.set(tx0 + 0.55, T, tz0 - 0.1); umb.rotation.z = 0.5; g.add(umb); // the folded umbrella (กลด), lying
+    add(new THREE.ConeGeometry(0.09, 0.75, 10), S(0xe8dcc0, { roughness: 0.8 }), 0, 0.4, 0, umb);
+    add(new THREE.CylinderGeometry(0.015, 0.015, 0.9, 6), MAT.wood, 0, 0.45, 0, umb, false);
+    candle(g, tx0 + 0.3, T, tz0 + 0.2, 0.25);
+    add(new THREE.BoxGeometry(0.4, 0.12, 0.28), S(0xd9c48a, { roughness: 0.95 }), tx0 - 0.4, T + 0.06 + 0.33, tz0, g); // a pillow on the robes
+    h.post(tx0, tz0, 0.75);
+  }
   // the hall's own board moves to the side wall
   wallBoard(h, "left", 0.6, boardTexture({ head: tx("ศาลาสากล", "Universal Hall"), icon: "🌍", title: "ภาษาไทย · English", foot: tx("เลือกภาษา ขนาดตัวอักษร และการเคลื่อนไหวได้ในหน้าเว็บของศาลานี้", "Choose language and motion settings on this hall's web page"), wide: true }), 2.8, 2.33, 2.6);
   props("potplant", 1.6, [[-W / 2 + 1, D / 2 - 1, 2, FY], [W / 2 - 1, D / 2 - 1, 3, FY]], { parent: g });
@@ -1159,7 +1196,7 @@ const toggleSit = () => (sit.on ? standUp() : startSit());
 // them, coming back up into the high wai each time. Then he lowers his hands and stands. No animation for
 // this exists, so it is posed on his skeleton: the knee, hip and forehead heights come from his measured
 // body, and the bow is solved so the forehead really reaches the floor.
-const kraap = { t: -1, spot: null, faceYaw: null, floorY: 0, touch: null };
+const kraap = { t: -1, spot: null, faceYaw: null, floorY: 0, touch: null, keys: null, dur: 0, kathin: null };
 // keyframes: [time, kneel, chest wai, high wai, palms on the floor, bow]
 const KRAAP_KEYS = (() => {
   const k = [[0, 0, 0, 0, 0, 0], [0.6, 0, 0, 0, 0, 0], [2.0, 1, 1, 0, 0, 0], [2.7, 1, 0, 1, 0, 0], [3.0, 1, 0, 1, 0, 0]];
@@ -1176,10 +1213,65 @@ const KRAAP_KEYS = (() => {
 })();
 const KRAAP_DUR = KRAAP_KEYS[KRAAP_KEYS.length - 1][0];
 function kraapState(t) {
-  const K = KRAAP_KEYS; let i = 0; while (i < K.length - 2 && t > K[i + 1][0]) i++;
+  const K = kraap.keys || KRAAP_KEYS; let i = 0; while (i < K.length - 2 && t > K[i + 1][0]) i++;
   const a = K[i], b = K[i + 1], u = smooth(a[0], b[0], t);
-  const v = (j) => a[j] + (b[j] - a[j]) * u;
-  return { kneel: v(1), chest: v(2), high: v(3), floor: v(4), bow: v(5) };
+  const v = (j) => (a[j] || 0) + ((b[j] || 0) - (a[j] || 0)) * u;
+  return { kneel: v(1), chest: v(2), high: v(3), floor: v(4), bow: v(5), tray: v(6), lift: v(7), place: v(8), back: v(9) };
+}
+
+/* ---------------- Kathina (ทอดกฐิน): offering the robe to the Sangha ---------------- */
+// In the Universal Hall the boy brings the Kathina robe on a gold tray to the senior monk, who receives it
+// for the community of monks. He kneels close to the platform holding the tray, raises it to his forehead,
+// sets it on the edge of the platform before the monk (who leans in and draws it to himself), brings his hands
+// to a wai at the chest and moves back on his knees. Then he pays respect to the monk exactly as to the Buddha:
+// the high wai and three bows, forehead and palms to the floor (the kraap above). No chant text is shown.
+// keyframes as the kraap's, plus: [.., holding the tray, raised to the forehead, set on the platform, moved back]
+const KATHIN_NEAR = 0.6, KATHIN_RELEASE = 4.65, KATHIN_BACK = 4.7; // kneel this far from the platform edge to reach it
+const KATHIN_KEYS = (() => {
+  const k = [
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0.6, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [2.2, 1, 0, 0, 0, 0, 1, 0, 0, 0],            // kneeling with the tray in both hands
+    [3.0, 1, 0, 0, 0, 0, 1, 1, 0, 0], [3.5, 1, 0, 0, 0, 0, 1, 1, 0, 0],   // raised to the forehead
+    [4.5, 1, 0, 0, 0, 0, 1, 0, 1, 0], [4.8, 1, 0, 0, 0, 0, 1, 0, 1, 0],   // set on the platform before the monk
+    [5.5, 1, 1, 0, 0, 0, 0, 0, 0, 0],            // hands to a wai at the chest
+    [6.7, 1, 1, 0, 0, 0, 0, 0, 0, 1],            // back on his knees, room to bow
+  ];
+  // then the kraap from its kneeling chest wai: the high wai, three bows, and up
+  KRAAP_KEYS.filter((q) => q[0] > 2.0).forEach((q) => k.push([q[0] + KATHIN_BACK, ...q.slice(1), 0, 0, 0, 1]));
+  return k;
+})();
+const KATHIN_PLACE = { id: "kathin", icon: "🟫", th: "ถวายผ้ากฐิน", en: "Offer the Kathina robe", sub: ["ถวายพระสงฆ์ผ่านพระเถระ แล้วกราบ 3 ครั้ง", "To the Sangha, through the senior monk; then bow three times"] };
+function kathinSpots(h) { // where he kneels to offer, and where he bows (as far from the platform as before the Buddha)
+  const s = h.senior, [nx, nz] = h.toWorld(s.lx, s.edge + KATHIN_NEAR), [fx, fz] = h.toWorld(s.lx, s.edge + 1.75);
+  return { near: { x: nx, z: nz }, far: { x: fx, z: fz } };
+}
+function startKathin(h) {
+  if (kraap.t >= 0 || alms.t >= 0 || !h || !h.senior) return;
+  if (sit.on) { sit.on = false; sit.rise = 0; sit.faceYaw = null; }
+  wai.t = -1;
+  const sp = kathinSpots(h), s = h.senior;
+  const [mx, mz] = h.toWorld(s.lx, s.lz);
+  if (h.kathinTray && h.kathinTray.parent) h.kathinTray.parent.remove(h.kathinTray); // one robe at a time before the monk
+  const tray = kathinTray(); tray.visible = false; scene.add(tray); h.kathinTray = tray;
+  kraap.kathin = { h, near: sp.near, far: sp.far, tray, released: false, monk: s };
+  kraap.spot = sp.near; kraap.faceYaw = Math.atan2(mx - sp.near.x, mz - sp.near.z);
+  kraap.floorY = groundAt(sp.near.x, sp.near.z);
+  kraap.keys = KATHIN_KEYS; kraap.dur = KATHIN_KEYS[KATHIN_KEYS.length - 1][0];
+  kraap.t = 0;
+  if (player.mixer) playClip("idle", 0.4);
+}
+const TRAY_GRIP = 0.21, TRAY_HALF = 0.27; // where his hands hold the tray: height above its foot, half its width
+// after he lets go: the senior monk leans in and draws the tray to himself
+function kathinStep() {
+  const k = kraap.kathin; if (!k) return;
+  const s = k.monk, t = kraap.t;
+  if (!k.released && t >= KATHIN_RELEASE) { k.released = true; k.h.g.attach(k.tray); k.from = k.tray.position.clone(); }
+  if (k.released) {
+    const u = smooth(KATHIN_RELEASE + 0.3, KATHIN_RELEASE + 1.8, t);
+    k.tray.position.lerpVectors(k.from, new THREE.Vector3(s.lx, s.top, s.lz + 0.55), u); // to just before his knees
+    k.tray.rotation.set(0, 0, 0);
+    s.lean.rotation.x = 0.08 * smooth(KATHIN_RELEASE, KATHIN_RELEASE + 0.7, t) * (1 - smooth(KATHIN_RELEASE + 1.6, KATHIN_RELEASE + 2.4, t));
+  }
 }
 function startKraap() {
   if (kraap.t >= 0) return;
@@ -1191,6 +1283,7 @@ function startKraap() {
   }
   if (sit.on) { sit.on = false; sit.rise = 0; sit.faceYaw = null; }
   wai.t = -1;
+  kraap.keys = null; kraap.kathin = null;
   kraap.spot = here.face.spot; kraap.faceYaw = Math.atan2(here.face.x - here.face.spot.x, here.face.z - here.face.spot.z);
   kraap.floorY = groundAt(here.face.spot.x, here.face.spot.z);
   kraap.t = 0;
@@ -1605,8 +1698,28 @@ function poseKraap(model, B, st) {
   applyBow(B, axis, (1 - PELVIS_SHARE) * touch.theta * st.bow, st.bow, st.high);
   model.updateMatrixWorld(true);
   // 4) the hands: a wai at the chest, the high wai, or palms flat on the floor either side of the forehead
-  const wsum = st.chest + st.high + st.floor; if (wsum < 0.001) return;
+  const wsum = st.chest + st.high + st.floor + st.tray; if (wsum < 0.001) return;
   const shape = handShape(model); if (!shape) return;
+  // Kathina: the tray held in both hands at its rim, raised to the forehead or set on the platform edge
+  let trayT = null;
+  if (st.tray > 0.001 && kraap.kathin) {
+    const k = kraap.kathin, s = k.monk;
+    const chestP = B.Spine02.getWorldPosition(new THREE.Vector3()).addScaledVector(fwd, 0.45 * scale).addScaledVector(up, -0.25 * scale);
+    const browP = B.Head.getWorldPosition(new THREE.Vector3()).addScaledVector(up, 0.12 * scale).addScaledVector(fwd, (0.3 + TRAY_HALF) * scale);
+    const placeP = k.h.g.localToWorld(new THREE.Vector3(s.lx, s.top + TRAY_GRIP, s.edge - 0.2)); // just onto the platform's edge
+    const grip = chestP.lerp(browP, st.lift).lerp(placeP, st.place);
+    if (!k.released) { k.tray.position.copy(grip).addScaledVector(up, -TRAY_GRIP); k.tray.rotation.set(0, player.yaw, 0); k.tray.visible = st.tray > 0.3; }
+    const F = fwd.clone().addScaledVector(up, -0.3 + 0.5 * st.lift).normalize();
+    trayT = {};
+    [["Left", 1], ["Right", -1]].forEach(([sd, sg]) => {
+      const hs = shape[sd], inward = side.clone().multiplyScalar(-sg);
+      const P = inward.clone().addScaledVector(F, -inward.dot(F)).normalize(), Q = basisQuat(hs.finger, hs.palm, F, P);
+      let reach = -Infinity, along = 0; for (const pt of hs.points) { _v1.copy(pt).applyQuaternion(Q); reach = Math.max(reach, _v1.dot(inward)); along += _v1.dot(F); }
+      along /= hs.points.length;
+      trayT[sd] = { target: grip.clone().addScaledVector(inward, -(TRAY_HALF * scale + reach * scale)).addScaledVector(F, -along * scale), Q,
+        pole: new THREE.Vector3().addScaledVector(up, -1).addScaledVector(side, sg * 0.6).addScaledVector(fwd, -0.2) };
+    });
+  }
   const chest = st.chest > 0.001 ? waiHands(model, B, CHEST_TIP, side, up, fwd, 0) : null;
   const high = st.high > 0.001 ? waiHands(model, B, WAI_LEVELS.buddha.tip, side, up, fwd, 0) : null;
   // palms pressed together while in a wai: the plane follows whichever wai is the main one
@@ -1628,6 +1741,7 @@ function poseKraap(model, B, st) {
     if (chest) addIn(st.chest, chest[s].target, chest[s].Q, chest.pole(sg));
     if (high) addIn(st.high, high[s].target, high[s].Q, high.pole(sg));
     addIn(st.floor, floorT, Qf, floorPole);
+    if (trayT) addIn(st.tray, trayT[s].target, trayT[s].Q, trayT[s].pole);
     armTo(B, s, target, Q, pole, Math.min(1, wsum));
   });
 }
@@ -1908,7 +2022,7 @@ function showPrompt(p) {
   if (!p) { el.hidden = true; return; }
   $("prompt-name").textContent = p.icon + " " + placeName(p);
   $("prompt-sub").textContent = p.stone != null ? (p.board ? tx("ป้ายเรื่องที่ ", "Story board ") : tx("เรื่องที่ ", "Story ")) + (p.stone + 1) : p.sub[L === "en" ? 1 : 0];
-  $("prompt-go").textContent = p.id === "bell" ? tx("ตี", "Strike") : p.id === "donate" ? tx("เปิด", "Open") : p.id === "alms" ? tx("ใส่บาตร", "Offer") : tx("เข้า", "Visit");
+  $("prompt-go").textContent = p.id === "bell" ? tx("ตี", "Strike") : p.id === "donate" ? tx("เปิด", "Open") : p.id === "alms" ? tx("ใส่บาตร", "Offer") : p.id === "kathin" ? tx("ถวาย", "Offer") : tx("เข้า", "Visit");
   el.hidden = false;
 }
 $("prompt-go").addEventListener("click", () => near && openPlace(near));
@@ -1962,6 +2076,7 @@ function openPlace(p) {
   if (p.id === "bell") { ringBell(); return; }
   if (p.id === "donate") { openDonate(); return; }
   if (p.id === "alms") { startAlms(p.monk); return; }
+  if (p.id === "kathin") { startKathin(p.hall); return; }
   if (p.stone != null) {
     const n = p.stone + 1;
     openDialog(`👣 ${n} · ${esc(L === "en" ? JOURNEY[p.stone][1] : JOURNEY[p.stone][0])}`,
@@ -2131,7 +2246,13 @@ function frame(dt) {
   }
   if (kraap.t >= 0) { // paying tribute: stay put (it ends by itself); glide to the spot and face the image first
     fx = fz = 0;
-    kraap.t += dt; if (kraap.t > KRAAP_DUR) { kraap.t = -1; kraap.touch = null; }
+    kraap.t += dt; if (kraap.t > (kraap.keys ? kraap.dur : KRAAP_DUR)) { kraap.t = -1; kraap.touch = null; kraap.keys = null; if (kraap.kathin) kraap.kathin.monk.lean.rotation.x = 0; }
+    if (kraap.kathin && kraap.keys && kraap.t >= 0) { // Kathina: kneel close to offer, then move back on the knees to bow
+      const k = kraap.kathin, b = kraapState(kraap.t).back;
+      kraap.spot = { x: k.near.x + (k.far.x - k.near.x) * b, z: k.near.z + (k.far.z - k.near.z) * b };
+      if (kraap.t >= 0.8) { player.x = kraap.spot.x; player.z = kraap.spot.z; }
+      kathinStep();
+    }
     if (kraap.spot && kraap.t >= 0 && kraap.t < 0.8) { player.x += (kraap.spot.x - player.x) * Math.min(1, dt * 8); player.z += (kraap.spot.z - player.z) * Math.min(1, dt * 8); }
     if (kraap.faceYaw != null) { let dy = kraap.faceYaw - player.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); player.yaw += dy * Math.min(1, dt * 8); }
   }
@@ -2272,6 +2393,7 @@ function frame(dt) {
   for (const s of journeyStones) { const d = Math.hypot(player.x - s.x, player.z - s.z); if (d < 2.6 && d < bestD) { best = { ...PLACES.find((p) => p.id === "journey"), stone: s.i }; bestD = d; } }
   if (Math.hypot(player.x - BELL[0], player.z - BELL[1]) < 3.6 && 3 < bestD) { best = BELL_PLACE; bestD = 3; }
   { const d = Math.hypot(player.x - DONATE.x, player.z - (DONATE.z + 0.6)); if (d < 2.4 && d < bestD) { best = DONATE_PLACE; bestD = d; } } // only when standing at the box
+  { const h = salas.access; if (h && h.senior && kraap.t < 0) { const sp = kathinSpots(h), d = Math.hypot(player.x - sp.near.x, player.z - sp.near.z); if (d < 1.3 && d < bestD) { best = { ...KATHIN_PLACE, hall: h }; bestD = d; } } }
   for (const m of almsMonks) { const d = Math.hypot(player.x - (m.x + Math.sin(m.yaw) * ALMS_STAND), player.z - (m.z + Math.cos(m.yaw) * ALMS_STAND)); if (d < 1.5 && d < bestD) { best = { ...ALMS_PLACE, monk: m }; bestD = d; } }
   for (const s of boards) { const d = Math.hypot(player.x - s.x, player.z - s.z); if (d < 1.9 && d < bestD) { best = { ...PLACES.find((p) => p.id === "learn"), stone: s.i, board: true }; bestD = d; } }
   if ((best && best.id) !== (near && near.id) || (best && best.stone) !== (near && near.stone) || (best && best.monk) !== (near && near.monk)) { near = best; showPrompt(near); }
@@ -2309,7 +2431,7 @@ document.fonts.load("64px Itim").then(() => document.fonts.load("36px Mali")).ca
 });
 camYaw = 0; camera.position.set(0, 8, 105);
 restoreSpot(); // back from a page of the site: stand where you were
-if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
+if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startKathin, kathinSpots, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
 Promise.race([Promise.all(propJobs), new Promise((r) => setTimeout(r, 7000))]).then(() => {
   $("loading").hidden = true;
   canvas.focus();
