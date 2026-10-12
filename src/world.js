@@ -1745,11 +1745,12 @@ function poseWaiCore(model, B, hands, bow) {
 /* ---------------- shoes off at the hall steps ---------------- */
 // As at every Thai temple, shoes stay outside: stepping up into a hall, the boy stops on the step, slips
 // out of his sneakers one foot at a time and goes in in his socks; the pair waits at the step, toes turned
-// out. Leaving, he steps back into them. (Only the Sambodhaya boy: the built characters have no shoes.)
+// out, with his school backpack beside it (sitting and bowing with a bag on is not done either). Leaving,
+// he steps back into them and takes his bag. (Only the Sambodhaya boy: the built characters have neither.)
 const boyKits = { shod: null, socks: null };
 const shoes = { on: true, t: -1, mode: null, pair: null };
 const SHOES_DUR = 1.5, SHOES_SWAP = 0.62;
-let shoePairSrc = null; loadProp("shoes").then((m) => { shoePairSrc = m; });
+let shoePairSrc = null, bagSrc = null; loadProp("shoes").then((m) => { shoePairSrc = m; }); loadProp("backpack").then((m) => { bagSrc = m; });
 const isBoy = () => boyKits.shod && boyKits.socks && (player.model === boyKits.shod.holder || player.model === boyKits.socks.holder);
 function wearKit(kit) {
   const k = boyKits[kit]; if (!k || player.model === k.holder) return;
@@ -1767,6 +1768,8 @@ function placePair(x, z, yaw) {
   // his sneakers at this scale: about 0.42 long
   if (shoePairSrc) { const c = fitTo(shoePairSrc.clone(), 0.2); c.rotation.y = SHOES_TURN; c.traverse((o) => { if (o.isMesh) o.castShadow = true; }); g.add(c); }
   else [-0.1, 0.1].forEach((dx) => { add(new THREE.BoxGeometry(0.15, 0.12, 0.34), S(0x1d1d22), dx, 0.07, 0, g); add(new THREE.BoxGeometry(0.16, 0.04, 0.35), S(0xf2f2f2), dx, 0.02, 0, g, false); });
+  // his backpack stands beside the shoes (about 0.75 tall at his scale)
+  if (bagSrc) { const b = fitTo(bagSrc.clone(), 0.75); b.rotation.y = BAG_TURN; b.position.x = -0.55; b.traverse((o) => { if (o.isMesh) o.castShadow = true; }); g.add(b); }
   shoes.pair = g;
 }
 function removePair() { if (shoes.pair) { scene.remove(shoes.pair); shoes.pair = null; } }
@@ -1805,6 +1808,7 @@ function poseShoes(model, B, t) {
     turnBone(B[s + "Leg"], _q2.setFromAxisAngle(side, -SHOE_KNEE * w));    // shin back: the heel comes up out of the shoe
   });
 }
+const BAG_TURN = -Math.PI / 2; // turns the backpack model's front pocket out, the way the shoes point
 const SHOE_THIGH = 0.35, SHOE_KNEE = 1.3, SHOES_TURN = -Math.PI / 2; // the pair model lies toes-sideways; this points the toes along the group's +z
 
 /* ---------------- input ---------------- */
