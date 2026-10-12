@@ -251,7 +251,9 @@ lanternSpots.forEach(([x, z]) => colliders.push({ x, z, r: 0.7 }));
 props("lamppost", 4.2, lanternSpots.map(([x, z]) => [x, z, Math.atan2(-x, -z)]), { fallback: () => lanternSpots.forEach(([x, z]) => lantern(x, z)) });
 
 /* ---------------- ponds with lotus ---------------- */
+const ponds = [];
 const pond = (x, z, r) => {
+  ponds.push({ x, z, r });
   add(new THREE.CylinderGeometry(r + 0.7, r + 0.9, 0.55, 40), MAT.rock, x, 0.22, z, scene, false);
   add(new THREE.CylinderGeometry(r, r, 0.3, 40), MAT.water, x, 0.4, z, scene, false);
   for (let i = 0; i < 9; i++) {
@@ -910,6 +912,73 @@ const pots = [[-3.2, 34], [3.2, 34], [-5.2, 15.8], [5.2, 15.8]];
 props("potplant", 1.6, pots.map(([x, z], i) => [x, z, i]), { extra: true }); pots.forEach(([x, z]) => colliders.push({ x, z, r: 0.6 }));
 const blooms = [[-9.5, 12], [9.5, 12]];
 props("lotus", 1, blooms.map(([x, z], i) => [x, z, i]), { extra: true }); blooms.forEach(([x, z]) => colliders.push({ x, z, r: 0.8 }));
+
+/* ---------------- the garden: Thai temple planting and rock formations ---------------- */
+const gardenSpots = []; // (for ?debug checks)
+// A Thai temple's grounds are full of green: shade trees, flowering trees, clipped shrubs, potted bonsai and
+// rockeries. Everything here is placed by rule rather than by hand: each candidate spot is checked against the
+// paths, the halls and their steps, the ponds, the plaza, the Practice Garden, the My Journey stones, the alms row
+// and everything already standing, so nothing lands where people walk. Decorative only: skipped in light mode.
+{
+  const taken = [];
+  const segDist = (x, z, p) => { const dx = p.x2 - p.x1, dz = p.z2 - p.z1, L2 = dx * dx + dz * dz || 1; const u = Math.max(0, Math.min(1, ((x - p.x1) * dx + (z - p.z1) * dz) / L2)); return Math.hypot(x - p.x1 - u * dx, z - p.z1 - u * dz); };
+  const clear = (x, z, r, pathGap = 0.8) => {
+    const d = Math.hypot(x, z);
+    if (d < 16 + r + 1 || d > 72.5 - r) return false;                                   // the plaza; inside the wall
+    if (x > -18 && x < 18 && z < -42 && z > -64) return false;                          // the Practice Garden
+    if (Math.abs(x) < 6 + r && z > 13) return false;                                    // the entrance road and the alms row
+    for (const p of paths) if (segDist(x, z, p) < p.w / 2 + r + pathGap) return false;
+    for (const f of floors) { const lx = (x - f.x) * f.c - (z - f.z) * f.s, lz = (x - f.x) * f.s + (z - f.z) * f.c; if (Math.abs(lx) < f.hx + r + 1.2 && Math.abs(lz) < f.hz + r + 1.2) return false; }
+    for (const b of blockers) { const lx = (x - b.x) * b.c - (z - b.z) * b.s, lz = (x - b.x) * b.s + (z - b.z) * b.c; if (Math.abs(lx) < b.hx + r + 0.6 && Math.abs(lz) < b.hz + r + 0.6) return false; }
+    for (const c of colliders) if (Math.hypot(x - c.x, z - c.z) < c.r + r + 0.6) return false;
+    for (const q of ponds) if (Math.hypot(x - q.x, z - q.z) < q.r + r + 1.4) return false;
+    for (const st of journeyStones) if (Math.hypot(x - st.x, z - st.z) < 2.6 + r) return false;
+    for (const t of taken) if (Math.hypot(x - t.x, z - t.z) < t.r + r + 0.4) return false;
+    return true;
+  };
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;     // the same garden every time
+  const put = (name, h, x, z, r, block = r * 0.6) => { taken.push({ x, z, r }); if (block) colliders.push({ x, z, r: block }); return [x, z, rnd() * Math.PI * 2]; };
+  // scatter n of a kind in a ring of the grounds, as far as clear spots allow
+  const scatter = (name, h, n, r, r0, r1, block, pathGap = 0.8) => {
+    const list = [];
+    for (let tries = 0; tries < n * 60 && list.length < n; tries++) {
+      const a = rnd() * Math.PI * 2, d = r0 + rnd() * (r1 - r0), x = Math.cos(a) * d, z = Math.sin(a) * d;
+      if (clear(x, z, r, pathGap)) list.push(put(name, h, x, z, r, block));
+    }
+    if (list.length) props(name, h, list, { extra: true });
+  };
+  if (HIGH) {
+    // trees stand well back from the paths, so the camera behind him doesn't swing into their leaves
+    scatter("raintree", 11, 9, 4.2, 42, 62, 0.8, 4.5);       // big shade trees between the halls and the outer trees
+    scatter("goldenshower", 8, 14, 2.8, 20, 58, 0.6, 4.5);   // ราชพฤกษ์, hanging yellow blossom
+    // rockeries (เขามอ) beside the ponds, the way temples set them at the water's edge
+    const rocky = [];
+    ponds.forEach((q, i) => { for (let k = 0; k < 12; k++) { const a = i * 1.7 + k * 0.52, d = q.r + 2.2 + 1.5; const x = q.x + Math.cos(a) * d, z = q.z + Math.sin(a) * d; if (clear(x, z, 2.2)) { rocky.push(put("rockery", 3.4, x, z, 2.2, 1.6)); break; } } });
+    if (rocky.length) props("rockery", 3.4, rocky, { extra: true });
+    scatter("rockery", 3.4, 3, 2.2, 22, 50, 1.6);
+    scatter("rocks", 1.7, 10, 1.8, 18, 66, 1.2);       // limestone groups with ferns
+    // shrubs: red ixora (เข็ม) and heliconia, along the paths a step back from each edge, round the plaza and in
+    // beds along both sides of every hall
+    const ixora = [], helic = [];
+    const shrub = (x, z, big) => { const r = big ? 1.2 : 1.1; if (clear(x, z, r, 0.6)) (big ? helic : ixora).push(put(big ? "heliconia" : "ixora", 1, x, z, r, r * 0.7)); };
+    paths.forEach((p) => {
+      const L = Math.hypot(p.x2 - p.x1, p.z2 - p.z1), nx = -(p.z2 - p.z1) / L, nz = (p.x2 - p.x1) / L;
+      for (let u = 3; u < L - 2; u += 4.5) [-1, 1].forEach((sg, k) => {
+        const big = ((Math.round(u / 4.5) + k) % 3) === 0, off = p.w / 2 + (big ? 1.2 : 1.1) + 0.9;
+        shrub(p.x1 + (p.x2 - p.x1) * u / L + nx * off * sg, p.z1 + (p.z2 - p.z1) * u / L + nz * off * sg, big);
+      });
+    });
+    for (let i = 0; i < 48; i++) { const a = i / 48 * Math.PI * 2; shrub(Math.cos(a) * 19.2, Math.sin(a) * 19.2, i % 4 === 0); } // the plaza's border
+    Object.values(salas).forEach((h) => [-1, 1].forEach((sg) => { for (let lz = -h.D / 2; lz <= h.D / 2 + 0.1; lz += 2.6) { const [x, z] = h.toWorld(sg * (h.W / 2 + 3.4), lz); shrub(x, z, Math.round(lz) % 2 === 0); } }));
+    if (ixora.length) props("ixora", 2.0, ixora, { extra: true });
+    if (helic.length) props("heliconia", 3.0, helic, { extra: true });
+  }
+  // a pair of bonsai in glazed pots (ไม้ดัด) either side of every hall's steps
+  const bonsai = [];
+  Object.values(salas).forEach((h) => { [-1, 1].forEach((sg) => { const [x, z] = h.toWorld(sg * (Math.min(5, h.W - 2) / 2 + 1.0), h.D / 2 + 1.5); bonsai.push([x, z, sg]); colliders.push({ x, z, r: 0.55 }); }); });
+  props("bonsai", 1.4, bonsai, { extra: true });
+  taken.forEach((t) => { gardenSpots.push(t); });
+}
 
 /* ---------------- sound: off until the visitor turns it on (charter: no autoplay) ---------------- */
 const sound = createSound({ high: HIGH });
@@ -2449,7 +2518,7 @@ document.fonts.load("64px Itim").then(() => document.fonts.load("36px Mali")).ca
 });
 camYaw = 0; camera.position.set(0, 8, 105);
 restoreSpot(); // back from a page of the site: stand where you were
-if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startKathin, kathinSpots, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
+if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, gardenSpots, paths, floors, ponds, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startKathin, kathinSpots, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
 Promise.race([Promise.all(propJobs), new Promise((r) => setTimeout(r, 7000))]).then(() => {
   $("loading").hidden = true;
   canvas.focus();
