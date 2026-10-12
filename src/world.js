@@ -114,11 +114,16 @@ const colliders = []; // circles {x, z, r}
 const blockers = [];  // rotated boxes {x, z, c, s, hx, hz}
 const floors = [];    // raised floors you can walk onto, as rotated boxes {x, z, c, s, hx, hz, y}
 const camBlock = [];  // meshes the camera must not look through (walls, ceilings)
+const inFloor = (f, x, z) => { const lx = (x - f.x) * f.c - (z - f.z) * f.s, lz = (x - f.x) * f.s + (z - f.z) * f.c; return Math.abs(lx) < f.hx && Math.abs(lz) < f.hz ? lz : null; };
 const groundAt = (x, z) => {
   let y = 0;
-  for (const f of floors) { const lx = (x - f.x) * f.c - (z - f.z) * f.s, lz = (x - f.x) * f.s + (z - f.z) * f.c; if (Math.abs(lx) < f.hx && Math.abs(lz) < f.hz) y = Math.max(y, f.y); }
+  for (const f of floors) {
+    const lz = inFloor(f, x, z); if (lz == null) continue;
+    y = Math.max(y, f.arch ? f.y * (1 - (lz / f.hz) ** 2) : f.y); // arched floors (the bridge) rise to their middle
+  }
   return y;
 };
+const insideHall = (x, z) => floors.some((f) => f.hall && inFloor(f, x, z) != null);
 
 /* ---------------- 3D props made for this temple (assets/models/*.glb) ---------------- */
 // Each prop loads once and is cloned; if a file can't load, the simple shapes stay instead.
@@ -180,7 +185,30 @@ function props(name, h, list, { fallback, shadow = true, parent = scene, extra =
 }
 
 /* ---------------- ground, plaza and paths ---------------- */
-add(new THREE.CylinderGeometry(120, 120, 1, 48), MAT.grass, 0, -0.5, 0, scene, false);
+// the ground: the temple island, a moat around it, and the land beyond
+const MOAT = { r1: 79, r2: 86, bed: -1.5, water: -0.45 };
+{
+  // inner island; its texture coordinates are scaled to match the outer land
+  const island = new THREE.CylinderGeometry(MOAT.r1, MOAT.r1, 2, 128);
+  const uv = island.attributes.uv, k = MOAT.r1 / 120;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, 0.5 + (uv.getX(i) - 0.5) * k, 0.5 + (uv.getY(i) - 0.5) * k);
+  add(island, MAT.grass, 0, -1, 0, scene, false);
+  const outer = new THREE.Mesh(new THREE.RingGeometry(MOAT.r2, 120, 128, 1), MAT.grass);
+  outer.rotation.x = -Math.PI / 2; outer.receiveShadow = true; scene.add(outer);
+  // the moat: stone banks, a dark bed and still water
+  const bankH = -MOAT.bed;
+  [MOAT.r1, MOAT.r2].forEach((r) => { const b = add(new THREE.CylinderGeometry(r, r, bankH, 128, 1, true), P("mossy_rock", 40, 0.6), 0, MOAT.bed / 2, 0, scene, false); b.material.side = THREE.DoubleSide; });
+  const bed = new THREE.Mesh(new THREE.RingGeometry(MOAT.r1, MOAT.r2, 128, 1), S(0x3d4a35, { roughness: 1 }));
+  bed.rotation.x = -Math.PI / 2; bed.position.y = MOAT.bed; scene.add(bed);
+  const water = new THREE.Mesh(new THREE.RingGeometry(MOAT.r1, MOAT.r2, 128, 1), MAT.water);
+  water.rotation.x = -Math.PI / 2; water.position.y = MOAT.water; scene.add(water);
+  // a few lotus pads drifting in the moat
+  for (let i = 0; i < 70; i++) {
+    const a = i * 2.39996, r = MOAT.r1 + 1 + ((i * 37) % 50) / 10;
+    if (Math.sin(a) > 0.97) continue; // keep the water under the bridge clear
+    add(new THREE.CylinderGeometry(0.6, 0.6, 0.04, 10), MAT.pad, Math.cos(a) * r, MOAT.water + 0.03, Math.sin(a) * r, scene, false);
+  }
+}
 add(new THREE.CylinderGeometry(16, 16, 0.2, 64), P("brick_pavement_02", 11, 11, { color: new THREE.Color(1.75, 1.5, 1.2) }), 0, 0.05, 0, scene, false);
 const paths = []; // for footsteps: stone on paths, grass elsewhere
 const path = (x1, z1, x2, z2, w = 5) => {
@@ -189,7 +217,7 @@ const path = (x1, z1, x2, z2, w = 5) => {
   const m = add(new THREE.BoxGeometry(w, 0.15, len), P("brick_pavement_02", Math.round(w / 3), Math.round(len / 3), { color: new THREE.Color(1.75, 1.5, 1.2) }), (x1 + x2) / 2, 0.06, (z1 + z2) / 2, scene, false);
   m.rotation.y = Math.atan2(dx, dz);
 };
-path(0, 16, 0, 46, 7); path(0, -14, 0, -44); // entrance and Practice Garden; the hall paths are drawn from the halls themselves
+path(0, 16, 0, 77.6, 7); path(0, 88.4, 0, 98, 7); path(0, -14, 0, -44); // entrance and Practice Garden; the hall paths are drawn from the halls themselves
 
 /* ---------------- the great tree at the centre ---------------- */
 {
@@ -208,7 +236,7 @@ path(0, 16, 0, 46, 7); path(0, -14, 0, -44); // entrance and Practice Garden; th
 }
 
 /* ---------------- lanterns ---------------- */
-const lanternSpots = [[-5, 20], [5, 20], [-5, 30], [5, 30], [-17, 0], [17, 0], [-4.5, -30], [4.5, -30]];
+const lanternSpots = [[-5, 20], [5, 20], [-5, 30], [5, 30], [-5, 50], [5, 50], [-5, 63], [5, 63], [-5, 95], [5, 95], [-17, 0], [17, 0], [-4.5, -30], [4.5, -30]];
 const lantern = (x, z) => {
   add(new THREE.BoxGeometry(0.5, 2.4, 0.5), MAT.woodDark, x, 1.2, z);
   add(new THREE.BoxGeometry(1, 1, 1), MAT.glow, x, 2.9, z);
@@ -230,7 +258,6 @@ const pond = (x, z, r) => {
   colliders.push({ x, z, r: r + 0.6 });
 };
 pond(-14, 30, 6); pond(14, 30, 6); pond(-36, 22, 5); pond(36, 24, 4);
-props("bridge", 3, [[-14, 30, 0, 0.1]], { extra: true }); // a little footbridge across the left entrance pond (for looking at)
 
 /* ---------------- text signs (Thai-ready canvas textures) ---------------- */
 const signDraws = [];
@@ -273,7 +300,7 @@ function sala({ x, z, rot = 0, W = 13, D = 10, H = 5.6, walls = true }) {
   add(new THREE.BoxGeometry(W + 1.6, FY - 0.02, D + 1.6), MAT.stoneDark, 0, (FY - 0.02) / 2, 0, g, false);
   add(new THREE.BoxGeometry(W + 0.4, 0.06, D + 0.4), MAT.floor, 0, FY, 0, g, false);
   add(new THREE.BoxGeometry(Math.min(5, W - 2), 0.18, 1), MAT.stoneDark, 0, 0.09, D / 2 + 1.2, g, false);
-  floors.push({ x, z, c, s, hx: W / 2 + 0.8, hz: D / 2 + 0.8, y: FY + 0.03 });
+  floors.push({ x, z, c, s, hx: W / 2 + 0.8, hz: D / 2 + 0.8, y: FY + 0.03, hall: true });
   const colGeo = new THREE.CylinderGeometry(0.28, 0.32, H, 16), capGeo = new THREE.CylinderGeometry(0.42, 0.3, 0.45, 16), footGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.25, 16);
   const column = (lx, lz, solid) => {
     add(colGeo, MAT.lacquer, lx, FY + H / 2, lz, g);
@@ -604,7 +631,7 @@ kinds.forEach(([name, h], k) => {
   const R = 76, segs = 72, wallMat = P("beige_wall_001", 3, 1, { color: 0xfffaf2 });
   const segLen = 2 * Math.PI * R / segs;
   const list = [];
-  for (let i = 0; i < segs; i++) { const a = (i + 0.5) / segs * Math.PI * 2; const x = Math.cos(a) * R, z = Math.sin(a) * R; if (z > 60 && Math.abs(x) < 12) continue; list.push([x, z, a]); }
+  for (let i = 0; i < segs; i++) { const a = (i + 0.5) / segs * Math.PI * 2; const x = Math.cos(a) * R, z = Math.sin(a) * R; if (z > 60 && Math.abs(x) < 4) continue; list.push([x, z, a]); }
   const body = new THREE.InstancedMesh(new THREE.BoxGeometry(segLen + 0.05, 1.8, 0.6), wallMat, list.length);
   const cap = new THREE.InstancedMesh(new THREE.BoxGeometry(segLen + 0.1, 0.25, 0.9), MAT.lacquer, list.length);
   const postB = new THREE.InstancedMesh(new THREE.BoxGeometry(0.9, 2.4, 0.9), wallMat, list.length);
@@ -617,6 +644,55 @@ kinds.forEach(([name, h], k) => {
     o.position.y = 2.65; o.scale.set(1, 1.4, 1); o.updateMatrix(); bud.setMatrixAt(i, o.matrix);
   });
   [body, cap, postB, bud].forEach((m) => { m.castShadow = true; m.receiveShadow = true; scene.add(m); });
+
+  // the gateway in the wall, where the bridge arrives
+  const GZ = Math.sqrt(R * R - 25);
+  [-1, 1].forEach((sg) => {
+    add(new THREE.BoxGeometry(1.4, 6.2, 1.4), wallMat, sg * 4.6, 3.1, GZ);
+    add(new THREE.BoxGeometry(1.6, 0.25, 1.6), MAT.gold, sg * 4.6, 0.9, GZ, scene, false);
+    add(new THREE.BoxGeometry(1.6, 0.3, 1.6), MAT.gold, sg * 4.6, 6.0, GZ, scene, false);
+    add(new THREE.BoxGeometry(1.5, 1.8, 0.6), wallMat, sg * 6, 0.9, GZ - 0.1);           // short wall to meet the ring
+    add(new THREE.BoxGeometry(1.6, 0.25, 0.9), MAT.lacquer, sg * 6, 1.9, GZ - 0.1, scene, false);
+  });
+  add(new THREE.BoxGeometry(10.6, 0.8, 1.6), MAT.lacquer, 0, 6.5, GZ);
+  add(new THREE.BoxGeometry(10.7, 0.12, 1.7), MAT.gold, 0, 6.1, GZ, scene, false);
+  const gr = gable(11.4, 3, 2.8, MAT.roof); gr.position.set(0, 6.9, GZ); gr.castShadow = true; scene.add(gr);
+  [-1, 1].forEach((sg) => {
+    const e = gable(11.7, 0.25, 2.95, MAT.roofEdge); e.position.set(0, 6.85, GZ + sg * 1.5); scene.add(e);
+    const pnl = gable(6.2, 0.12, 1.55, MAT.gold); pnl.position.set(0, 7.1, GZ + sg * 1.6); scene.add(pnl);
+    const f = add(new THREE.ConeGeometry(0.22, 1.6, 6), MAT.gold, 0, 10.3, GZ + sg * 1.5); f.rotation.x = sg * 0.55;
+  });
+  sign(tx("วัดสัมโพธายะ", "Sambodhaya Temple"), tx("ยินดีต้อนรับ เดินช้า ๆ ได้", "Welcome. Take your time."), "☸", 0, 12.4, GZ, 6);
+}
+
+/* ---------------- the bridge over the moat ---------------- */
+// a gently arched stone bridge with white balustrades and gold lotus-bud posts; you walk over its arch
+{
+  const ZC = (MOAT.r1 + MOAT.r2) / 2, H = (MOAT.r2 - MOAT.r1) / 2 + 2, RISE = 1.1, BW = 6;
+  const topY = (u) => RISE * (1 - (u / H) ** 2);
+  const sh = new THREE.Shape(); const N = 24;
+  for (let i = 0; i <= N; i++) { const u = -H + (2 * H * i) / N; i ? sh.lineTo(u, topY(u)) : sh.moveTo(u, topY(u)); }
+  for (let i = N; i >= 0; i--) { const u = -H + (2 * H * i) / N; sh.lineTo(u, topY(u) - 0.7); }
+  const deckGeo = new THREE.ExtrudeGeometry(sh, { depth: BW, bevelEnabled: false });
+  deckGeo.rotateY(Math.PI / 2); deckGeo.translate(-BW / 2, 0, 0);
+  add(deckGeo, P("brick_pavement_02", 0.35, 0.35, { color: new THREE.Color(1.75, 1.5, 1.2) }), 0, 0.02, ZC);
+  floors.push({ x: 0, z: ZC, c: 1, s: 0, hx: BW / 2, hz: H, y: RISE + 0.02, arch: true });
+  paths.push({ x1: 0, z1: ZC - H, x2: 0, z2: ZC + H, w: BW }); // footsteps sound like stone here
+  const white = S(0xfbf6ec, { roughness: 0.8 });
+  [-1, 1].forEach((sg) => {
+    const x = sg * (BW / 2 - 0.2);
+    for (let i = 0; i <= 8; i++) {
+      const u = -H + 0.4 + (2 * H - 0.8) * i / 8, end = i === 0 || i === 8;
+      const h = end ? 1.5 : 0.95;
+      add(new THREE.BoxGeometry(0.28, h, 0.28), white, x, topY(u) + h / 2, ZC - u);
+      if (end) { const b = add(new THREE.SphereGeometry(0.24, 12, 8), MAT.gold, x, topY(u) + h + 0.2, ZC - u); b.scale.y = 1.4; }
+      else add(new THREE.BoxGeometry(0.34, 0.08, 0.34), MAT.gold, x, topY(u) + h, ZC - u, scene, false);
+    }
+    [0.85, 0.4].forEach((yy, k) => {
+      const pts = []; for (let i = 0; i <= 20; i++) { const u = -H + 0.4 + (2 * H - 0.8) * i / 20; pts.push(new THREE.Vector3(x, topY(u) + yy, ZC - u)); }
+      add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, k ? 0.05 : 0.08, 8), k ? white : MAT.lacquer, 0, 0, 0, scene, true);
+    });
+  });
 }
 
 /* ---------------- small things that make it feel lived in ---------------- */
@@ -702,7 +778,7 @@ function blockyAvatar(cfg, faceImg) {
   return root;
 }
 
-const player = { obj: new THREE.Group(), x: 0, z: 44, y: 0, vy: 0, yaw: Math.PI, model: null, mixer: null, clips: {}, current: null, vrm: null };
+const player = { obj: new THREE.Group(), x: 0, z: 93, y: 0, vy: 0, yaw: Math.PI, model: null, mixer: null, clips: {}, current: null, vrm: null };
 scene.add(player.obj);
 function setModel(obj, mixerClips) {
   if (player.model) player.obj.remove(player.model);
@@ -750,7 +826,7 @@ function loadModelFile(file, done) {
 }
 
 /* ---------------- the temple dog (scripted guide, not an AI) ---------------- */
-const dog = { obj: new THREE.Group(), x: 3, z: 40, y: 0, yaw: Math.PI };
+const dog = { obj: new THREE.Group(), x: 3, z: 90, y: 0, yaw: Math.PI };
 {
   const fur = M(0xd9a35a), light = M(0xf3d29c), dark = M(0x3a2414), collar = M(0x3f8f5a);
   const b = (geo, m, x, y, z) => { const mm = new THREE.Mesh(geo, m); mm.position.set(x, y, z); mm.castShadow = true; dog.obj.add(mm); return mm; };
@@ -831,7 +907,7 @@ function pickAt(x, y) {
   const v = new THREE.Vector2((x / innerWidth) * 2 - 1, -(y / innerHeight) * 2 + 1);
   ray.setFromCamera(v, camera);
   if (dog.obj.visible && ray.intersectObject(dog.obj, true).length) { openPlaces(true); return; }
-  if (groundAt(player.x, player.z) > 0) return; // inside a hall, clicks just turn the view
+  if (insideHall(player.x, player.z)) return; // inside a hall, clicks just turn the view
   for (const id of Object.keys(halls)) { if (ray.intersectObject(halls[id], true).length) { openPlace(PLACES.find((p) => p.id === id)); return; } }
 }
 
@@ -849,7 +925,14 @@ function collide(nx, nz) {
       nx = b.x + ax * b.c + az * b.s; nz = b.z - ax * b.s + az * b.c;
     }
   }
-  const d = Math.hypot(nx, nz); if (d > 70) { nx *= 70 / d; nz *= 70 / d; }
+  // where you can walk: inside the temple wall, through the gateway and over the bridge to the landing
+  const d = Math.hypot(nx, nz);
+  if (d > 73.5) {
+    if (nz > 0 && Math.abs(nx) < 4.6) {
+      const half = nz < MOAT.r2 + 2.4 ? 2.3 : 4.2; // through the gateway and between the bridge rails; wider on the landing
+      nx = Math.max(-half, Math.min(half, nx)); nz = Math.min(nz, 97);
+    } else { nx *= 73.5 / d; nz *= 73.5 / d; }
+  }
   return [nx, nz];
 }
 
@@ -1051,7 +1134,7 @@ function tick() {
   const moving = mag > 0.05;
   const stepsBefore = Math.floor(walkPhase / Math.PI);
   walkPhase += dt * (moving ? speed * 1.6 : 0);
-  if (moving && Math.floor(walkPhase / Math.PI) !== stepsBefore && player.y <= gy + 0.05) sound.step(gy > 0 ? "wood" : onPath(player.x, player.z) ? "stone" : "grass");
+  if (moving && Math.floor(walkPhase / Math.PI) !== stepsBefore && player.y <= gy + 0.05) sound.step(insideHall(player.x, player.z) ? "wood" : onPath(player.x, player.z) ? "stone" : "grass");
   const limbs = player.model && player.model.userData.limbs;
   if (limbs) {
     const sw = moving ? Math.sin(walkPhase) * 0.7 : 0;
@@ -1108,7 +1191,7 @@ function tick() {
   if (dog.model && !settings.calmMotion) dog.model.position.y = dog.moving ? Math.abs(Math.sin(performance.now() / 110)) * 0.08 : 0;
 
   camera.getWorldDirection(camFwd);
-  sound.update(camera.position, camFwd, groundAt(player.x, player.z) > 0 && Math.hypot(camera.position.x - player.x, camera.position.z - player.z) < 14, dt);
+  sound.update(camera.position, camFwd, insideHall(player.x, player.z) && Math.hypot(camera.position.x - player.x, camera.position.z - player.z) < 14, dt);
 
   if (composer) composer.render(); else renderer.render(scene, camera);
   requestAnimationFrame(tick);
@@ -1118,7 +1201,7 @@ document.fonts.load("64px Itim").then(() => document.fonts.load("36px Mali")).ca
   // redraw sign textures once the Thai fonts are ready
   signDraws.forEach((d) => d());
 });
-camYaw = 0; camera.position.set(0, 8, 56);
+camYaw = 0; camera.position.set(0, 8, 105);
 if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, scene, salas, sound, player, dog, boards, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
 Promise.race([Promise.all(propJobs), new Promise((r) => setTimeout(r, 7000))]).then(() => {
   $("loading").hidden = true;
