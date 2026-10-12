@@ -442,6 +442,7 @@ sign(tx("ลานกลาง", "Central Courtyard"), tx("อยากไปไ
    raised platform along the back wall; the Buddha image sits on a stepped altar on that platform,
    always the highest of all. The platform is not walkable, as lay visitors don't step onto it.
    Returns the local z of the platform's front edge. */
+const buddhaImages = [];
 function shrine(h) {
   const { g, FY, W, D } = h;
   const PH = 0.6, PD = 2.8, pz = -D / 2 + 0.2 + PD / 2;     // teachers' platform: height, depth, centre
@@ -474,6 +475,7 @@ function shrine(h) {
   arch.scale.y = 1.25;
   add(new THREE.BoxGeometry(3.6, 4.4, 0.05), S(0x9b2a1d, { roughness: 0.9 }), 0, top + 2.3, -D / 2 + 0.24, g, false);
   add(new THREE.BoxGeometry(3.7, 0.12, 0.07), MAT.gold, 0, top + 4.5, -D / 2 + 0.25, g, false);
+  { const [bx, bz] = h.toWorld(0, az - 0.24); buddhaImages.push({ x: bx, z: bz, hall: h }); } // the wai turns toward it
   // the model is built facing +x; a quarter turn makes the image face the entrance
   props("buddha", 1.9, [[0, az - 0.12 * 2, -Math.PI / 2, statueY]], { parent: g, fallback: () => {
     // if the image can't load, a lotus throne stays rather than nothing
@@ -1034,13 +1036,38 @@ function animateDog(mat) {
 // arms are placed with a two-bone reach solver so the palms meet in front of the chest with the
 // fingertips toward the chin, then the upper body and head bow, hold, and rise again. It sits on top
 // of whatever he is doing (usually standing at ease); walking away ends it gently.
-const wai = { t: -1, dur: 2.9, plane: { normal: new THREE.Vector3(), point: new THREE.Vector3(), on: 0 } };
+// The three heights of the Thai wai. Fingertip height and the face point are in the boy's head space
+// (measured from his head mesh: chin about -0.07, nose tip 0.12, eyebrows 0.23, hairline 0.30, face front 0.26).
+//   buddha: to the Buddha and to monks - thumbs between the eyebrows, fingertips at the hairline, deeper bow
+//   elder:  to parents, teachers and elders - thumbs at the nose tip, fingertips between the eyebrows
+//   peer:   to friends and equals - thumbs at the chin, fingertips at the nose
+const WAI_LEVELS = {
+  buddha: { tip: 0.32, dur: 3.8, bow: [0.08, 0.08, 0.08, 0.15, 0.13] },
+  elder:  { tip: 0.23, dur: 3.2, bow: [0.06, 0.06, 0.06, 0.14, 0.12] },
+  peer:   { tip: 0.12, dur: 2.9, bow: [0.05, 0.05, 0.05, 0.12, 0.10] },
+};
+const wai = { t: -1, dur: 2.9, level: "peer", faceYaw: null, plane: { normal: new THREE.Vector3(), point: new THREE.Vector3(), on: 0 } };
 const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
-function startWai() { if (wai.t < 0 || wai.t > wai.dur - 0.6) wai.t = 0; }
+// which wai fits where he stands: in a shrine hall, to the Buddha image (and he turns to face it);
+// in the caretaker's kuti, to an elder; elsewhere, the everyday wai
+function waiLevelHere() {
+  for (const b of buddhaImages) {
+    if (insideHall(player.x, player.z) && Math.hypot(player.x - b.x, player.z - b.z) < Math.max(b.hall.W, b.hall.D)) return { level: "buddha", face: b };
+  }
+  const c = salas.care; if (c && insideHall(player.x, player.z) && Math.hypot(player.x - c.g.position.x, player.z - c.g.position.z) < Math.max(c.W, c.D) / 2 + 1) return { level: "elder" };
+  return { level: "peer" };
+}
+function startWai() {
+  if (wai.t >= 0 && wai.t < wai.dur - 0.6) return;
+  const here = waiLevelHere();
+  wai.level = here.level; wai.dur = WAI_LEVELS[here.level].dur;
+  wai.faceYaw = here.face ? Math.atan2(here.face.x - player.x, here.face.z - player.z) : null;
+  wai.t = 0;
+}
 function waiWeights() {
-  const t = wai.t; if (t < 0) return [0, 0];
-  const hands = smooth(0, 0.55, t) * (1 - smooth(wai.dur - 0.55, wai.dur, t));
-  const bow = smooth(0.5, 1.1, t) * (1 - smooth(1.9, 2.45, t));
+  const t = wai.t, d = wai.dur; if (t < 0) return [0, 0];
+  const hands = smooth(0, 0.55, t) * (1 - smooth(d - 0.55, d, t));
+  const bow = smooth(0.5, 1.1, t) * (1 - smooth(d - 1.0, d - 0.45, t));
   return [hands, bow];
 }
 const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _q1 = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _m = new THREE.Matrix4();
@@ -1091,7 +1118,8 @@ function handShape(model) {
       const bodyPos = hipsI >= 0 ? new THREE.Vector3().setFromMatrixPosition(sk.skeleton.boneInverses[hipsI].clone().invert()) : new THREE.Vector3();
       if (palm.clone().transformDirection(rest).dot(bodyPos.sub(handPos).setY(0)) < 0) palm.negate();
       const len = Math.max(...pts.map((q) => q.y));
-      result[side] = { points: pts, tips: pts.filter((q) => q.y > 0.9 * len), finger: new THREE.Vector3(0, 1, 0), palm, bone: bi };
+      const tips = pts.filter((q) => q.y > 0.9 * len);
+      result[side] = { points: pts, tips, tipY: tips.reduce((a, q) => a + q.y, 0) / tips.length, finger: new THREE.Vector3(0, 1, 0), palm, bone: bi };
     }
   }
   model.userData.waiHands = result;
@@ -1185,7 +1213,8 @@ function poseWai(model, hands, bow) {
   const fwd = new THREE.Vector3().crossVectors(side, up).normalize();                                   // the way he faces
   // 1) the bow: spread over the spine, a little more in the neck and head
   const axis = new THREE.Vector3().crossVectors(up, fwd).normalize();
-  [["Spine02", 0.05], ["Spine01", 0.05], ["Spine", 0.05], ["neck", 0.12], ["Head", 0.1]].forEach(([n, a]) => { if (B[n]) turnBone(B[n], _q2.setFromAxisAngle(axis, a * bow)); });
+  const L = WAI_LEVELS[wai.level] || WAI_LEVELS.peer;
+  ["Spine02", "Spine01", "Spine", "neck", "Head"].forEach((n, i) => { if (B[n]) turnBone(B[n], _q2.setFromAxisAngle(axis, L.bow[i] * bow)); });
   if (hands <= 0.001) { waiMark(B); return; }
   // 2) the hands: a lotus bud. Each hand stands upright with its palm side (where its fingers curl)
   // turned toward the other hand, tops leaning in a little; the wrists are placed from the real
@@ -1195,7 +1224,11 @@ function poseWai(model, hands, bow) {
   const bodyUp = new THREE.Vector3(0, 1, 0).applyQuaternion(spineQ), bodyFwd = new THREE.Vector3(0, 0, 1).applyQuaternion(spineQ);
   const neck = B.neck.getWorldPosition(new THREE.Vector3());
   const scale = model.getWorldScale(new THREE.Vector3()).y; // world units per model unit (1 for the boy's holder)
-  const mid = neck.clone().addScaledVector(bodyFwd, 0.3 * scale).addScaledVector(bodyUp, -0.17 * scale); // between the wrists; fingertips reach the chin
+  // the fingertips go to the level's point on his face (just in front of it), following the head as it bows
+  const headScale = B.Head.getWorldScale(new THREE.Vector3()).y || 1;
+  const tipAt = new THREE.Vector3(0, L.tip, 0.36).multiplyScalar(1 / headScale).applyMatrix4(B.Head.matrixWorld);
+  const tipLen = (shape.Left.tipY + shape.Right.tipY) / 2;
+  const mid = tipAt.addScaledVector(up.clone().addScaledVector(fwd, 0.15).normalize(), -tipLen * scale); // between the wrists
   wai.plane.normal.copy(side).negate(); wai.plane.point.copy(mid); wai.plane.on = hands; // where the hands meet (the left hand's inward direction)
   const fingersUp = up.clone().addScaledVector(fwd, 0.15).normalize();
   [["Left", 1], ["Right", -1]].forEach(([s, sg]) => {
@@ -1552,7 +1585,8 @@ function tick() {
 
   // the wai rides on top of the current animation; walking away lets it finish quickly
   if (wai.t >= 0) {
-    if (moving && wai.t < wai.dur - 0.55) wai.t = Math.max(wai.t, wai.dur - 0.55);
+    if (moving && wai.t < wai.dur - 0.55) { wai.t = Math.max(wai.t, wai.dur - 0.55); wai.faceYaw = null; }
+    if (wai.faceYaw != null) { let dy = wai.faceYaw - player.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); player.yaw += dy * Math.min(1, dt * 6); player.obj.rotation.y = player.yaw; }
     wai.t += dt; if (wai.t > wai.dur) wai.t = -1;
     const [hands, bow] = waiWeights();
     if (player.mixer) { poseWai(player.model, hands, bow); player.model.updateMatrixWorld(true); updatePress(player.model); } // at the end (weights 0) this hands the bones back
@@ -1620,7 +1654,7 @@ document.fonts.load("64px Itim").then(() => document.fonts.load("36px Mali")).ca
   signDraws.forEach((d) => d());
 });
 camYaw = 0; camera.position.set(0, 8, 105);
-if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, boards, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
+if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, WAI_LEVELS, boards, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
 Promise.race([Promise.all(propJobs), new Promise((r) => setTimeout(r, 7000))]).then(() => {
   $("loading").hidden = true;
   canvas.focus();
