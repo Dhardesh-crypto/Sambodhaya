@@ -1028,6 +1028,102 @@ function animateDog(mat) {
   };
 }
 
+/* ---------------- the wai: palms together, a small bow ---------------- */
+// No ready-made animation exists for a Thai wai, so it is posed on the boy's own skeleton: the
+// arms are placed with a two-bone reach solver so the palms meet in front of the chest with the
+// fingertips toward the chin, then the upper body and head bow, hold, and rise again. It sits on top
+// of whatever he is doing (usually standing at ease); walking away ends it gently.
+const wai = { t: -1, dur: 2.9, palm: { Left: [0, 0, -1], Right: [0, 0, -1] } }; // the palm faces along the hand bone's -z
+const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+function startWai() { if (wai.t < 0 || wai.t > wai.dur - 0.6) wai.t = 0; }
+function waiWeights() {
+  const t = wai.t; if (t < 0) return [0, 0];
+  const hands = smooth(0, 0.55, t) * (1 - smooth(wai.dur - 0.55, wai.dur, t));
+  const bow = smooth(0.5, 1.1, t) * (1 - smooth(1.9, 2.45, t));
+  return [hands, bow];
+}
+const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _q1 = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _m = new THREE.Matrix4();
+// turn a bone (in world space) by q, keeping it attached to its parent
+const _tw = new THREE.Quaternion(), _tp = new THREE.Quaternion(); // private: callers pass _q1/_q2 as q
+function turnBone(bone, q) {
+  bone.getWorldQuaternion(_tw); _tw.premultiply(q);
+  bone.parent.getWorldQuaternion(_tp); bone.quaternion.copy(_tp.invert().multiply(_tw));
+  bone.updateMatrixWorld(true);
+}
+// point a bone so that its child (at childPos, world) moves to the target (world)
+function aimBone(bone, childPos, target) {
+  bone.getWorldPosition(_v1);
+  _v2.copy(childPos).sub(_v1).normalize(); _v3.copy(target).sub(_v1).normalize();
+  turnBone(bone, _q1.setFromUnitVectors(_v2, _v3));
+}
+const waiBones = {};
+const WAI_BONES = ["Spine02", "Spine01", "Spine", "neck", "Head", "LeftArm", "LeftForeArm", "LeftHand", "RightArm", "RightForeArm", "RightHand"];
+// Some bones (the spine) have no animation track, so nothing resets them each frame: start every
+// frame from each bone's own pose, and hand it back when the wai ends.
+function waiBegin(B) {
+  WAI_BONES.forEach((n) => {
+    const b = B[n]; if (!b) return;
+    if (!b.userData.waiSet || !b.quaternion.equals(b.userData.waiSet)) b.userData.waiBase = b.quaternion.clone(); // the animation set it this frame
+    else b.quaternion.copy(b.userData.waiBase);                                                                 // still our pose from last frame
+  });
+}
+function waiEnd(B) {
+  WAI_BONES.forEach((n) => { const b = B[n]; if (!b) return; if (b.userData.waiSet && b.quaternion.equals(b.userData.waiSet)) b.quaternion.copy(b.userData.waiBase); b.userData.waiSet = null; });
+}
+function waiMark(B) { WAI_BONES.forEach((n) => { const b = B[n]; if (b) b.userData.waiSet = b.quaternion.clone(); }); }
+// a modest bow, mostly of the head, as in an everyday wai
+function poseWai(model, hands, bow) {
+  if (!waiBones.model || waiBones.model !== model) {
+    Object.keys(waiBones).forEach((k) => delete waiBones[k]); waiBones.model = model;
+    model.traverse((o) => { if (o.isBone) waiBones[o.name] = o; });
+  }
+  const B = waiBones;
+  if (!B.Spine || !B.LeftArm || !B.RightArm || !B.Head) return;
+  if (hands <= 0 && bow <= 0) { waiEnd(B); return; }
+  waiBegin(B);
+  model.updateMatrixWorld(true);
+  const up = new THREE.Vector3(0, 1, 0);
+  const side = B.LeftArm.getWorldPosition(new THREE.Vector3()).sub(B.RightArm.getWorldPosition(new THREE.Vector3())).setY(0).normalize(); // toward his left
+  const fwd = new THREE.Vector3().crossVectors(side, up).normalize();                                   // the way he faces
+  // 1) the bow: spread over the spine, a little more in the neck and head
+  const axis = new THREE.Vector3().crossVectors(up, fwd).normalize();
+  [["Spine02", 0.05], ["Spine01", 0.05], ["Spine", 0.05], ["neck", 0.12], ["Head", 0.1]].forEach(([n, a]) => { if (B[n]) turnBone(B[n], _q2.setFromAxisAngle(axis, a * bow)); });
+  if (hands <= 0.001) { waiMark(B); return; }
+  // 2) the hands: palms together in front of the chest, wrists below the chin
+  const spineQ = B.Spine.getWorldQuaternion(new THREE.Quaternion());
+  const bodyUp = new THREE.Vector3(0, 1, 0).applyQuaternion(spineQ), bodyFwd = new THREE.Vector3(0, 0, 1).applyQuaternion(spineQ);
+  const neck = B.neck.getWorldPosition(new THREE.Vector3());
+  const scale = model.getWorldScale(new THREE.Vector3()).y; // world units per model unit (1 for the boy's holder)
+  const centre = neck.clone().addScaledVector(bodyFwd, 0.3 * scale).addScaledVector(bodyUp, -0.2 * scale);
+  [["Left", 1], ["Right", -1]].forEach(([s, sg]) => {
+    const arm = B[s + "Arm"], fore = B[s + "ForeArm"], hand = B[s + "Hand"]; if (!arm || !fore || !hand) return;
+    const animQ = [arm.quaternion.clone(), fore.quaternion.clone(), hand.quaternion.clone()];
+    const target = centre.clone().addScaledVector(side, sg * 0.035 * scale);
+    // two-bone reach: elbow placed by the law of cosines, pointing down and a little outward
+    const A = arm.getWorldPosition(new THREE.Vector3()), E0 = fore.getWorldPosition(new THREE.Vector3()), W0 = hand.getWorldPosition(new THREE.Vector3());
+    const a = A.distanceTo(E0), b = E0.distanceTo(W0);
+    const toT = target.clone().sub(A); const d = Math.min(toT.length(), a + b - 1e-3); toT.normalize();
+    const x = (a * a - b * b + d * d) / (2 * d), h = Math.sqrt(Math.max(0, a * a - x * x));
+    const pole = new THREE.Vector3().addScaledVector(bodyUp, -1).addScaledVector(side, sg * 0.5).addScaledVector(bodyFwd, -0.15);
+    pole.addScaledVector(toT, -pole.dot(toT)).normalize();
+    const elbow = A.clone().addScaledVector(toT, x).addScaledVector(pole, h);
+    aimBone(arm, E0, elbow);
+    aimBone(fore, hand.getWorldPosition(new THREE.Vector3()), target);
+    // fingers point up (tilted slightly forward), palm turned toward the other hand
+    hand.getWorldQuaternion(_q1);
+    const fingers = new THREE.Vector3(0, 1, 0).applyQuaternion(_q1), want = up.clone().addScaledVector(fwd, 0.18).normalize(); // fingertips up toward the chin
+    turnBone(hand, _q2.setFromUnitVectors(fingers, want));
+    hand.getWorldQuaternion(_q1);
+    const palm = new THREE.Vector3(...wai.palm[s]).applyQuaternion(_q1), inward = side.clone().multiplyScalar(-sg);
+    palm.addScaledVector(want, -palm.dot(want)).normalize(); inward.addScaledVector(want, -inward.dot(want)).normalize();
+    turnBone(hand, _q2.setFromUnitVectors(palm, inward));
+    // blend from what the animation was doing to the wai
+    [arm, fore, hand].forEach((bn, i) => { const solved = bn.quaternion.clone(); bn.quaternion.copy(animQ[i]).slerp(solved, hands); });
+    arm.updateMatrixWorld(true);
+  });
+  waiMark(B);
+}
+
 /* ---------------- input ---------------- */
 const keys = {};
 let camYaw = Math.PI, camPitch = 0.32, camDist = 11;
@@ -1037,6 +1133,7 @@ addEventListener("keydown", (e) => {
   keys[e.code] = true;
   if (e.code === "KeyE" || e.code === "Enter") { if (near) openPlace(near); }
   if (e.code === "KeyG") openPlaces(true);
+  if (e.code === "KeyQ") startWai();
   if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) e.preventDefault();
 });
 addEventListener("keyup", (e) => { keys[e.code] = false; });
@@ -1074,6 +1171,7 @@ if (stick) {
   stick.addEventListener("pointerup", end); stick.addEventListener("pointercancel", end);
   document.getElementById("t-jump").addEventListener("click", () => { if (player.y <= groundAt(player.x, player.z) + 0.01) player.vy = 9; });
   document.getElementById("t-act").addEventListener("click", () => { if (near) openPlace(near); else openPlaces(true); });
+  document.getElementById("t-wai").addEventListener("click", startWai);
 }
 
 // click on the dog or a hall
@@ -1178,7 +1276,7 @@ $("dlg").addEventListener("click", (e) => {
 });
 $("btn-places").addEventListener("click", () => openPlaces(false));
 $("btn-help").addEventListener("click", () => openDialog(tx("❔ วิธีเดินในวัด", "❔ How to walk around"),
-  `<p>${tx("⌨️ W A S D หรือปุ่มลูกศร = เดิน • Shift = วิ่ง • Space = กระโดด • E = เข้าศาลาที่อยู่ใกล้ • G = เรียกหมาวัด", "⌨️ W A S D or arrow keys = walk • Shift = run • Space = jump • E = visit the nearby hall • G = call the temple dog")}</p>
+  `<p>${tx("⌨️ W A S D หรือปุ่มลูกศร = เดิน • Shift = วิ่ง • Space = กระโดด • E = เข้าศาลาที่อยู่ใกล้ • G = เรียกหมาวัด • Q = ไหว้ 🙏", "⌨️ W A S D or arrow keys = walk • Shift = run • Space = jump • E = visit the nearby hall • G = call the temple dog • Q = wai 🙏")}</p>
    <p>${tx("🖱️ ลากเมาส์ = หมุนมุมมอง • ล้อเมาส์ = ซูม • คลิกหมาวัดหรือศาลา = เปิด", "🖱️ Drag = turn the view • Wheel = zoom • Click the dog or a hall = open it")}</p>
    <p>${tx("📱 จอยซ้ายล่าง = เดิน • ลากจอ = หมุนมุมมอง • ปุ่ม E = เข้า", "📱 Bottom-left stick = walk • Drag the screen = turn the view • E button = visit")}</p>
    <p>${tx("🔈 ปุ่มเสียง = เปิดเสียงนก ลม น้ำตก และกระดิ่งชายคา (ปิดอยู่จนกว่าจะกด) • 🔔 เดินไปที่ระฆังแล้วกด E เพื่อตีระฆัง", "🔈 Sound button = birds, breeze, the waterfall and the roof bells (off until you press it) • 🔔 Walk to the bell and press E to strike it")}</p>
@@ -1190,6 +1288,7 @@ qBtn.firstChild.textContent = HIGH ? "✨ " : "⚡ ";
 qBtn.title = tx("สลับภาพสวย / ภาพเบา (สำหรับเครื่องที่ช้า)", "Switch detailed / light graphics (for slower devices)");
 qBtn.addEventListener("click", () => { write("world-quality", HIGH ? "light" : "high"); location.reload(); });
 // sound button: off every time the page opens; the site-wide "turn off all sound" setting is respected
+$("btn-wai").addEventListener("click", () => { startWai(); canvas.focus(); });
 const soundBtn = $("btn-sound");
 const syncSound = () => { soundBtn.setAttribute("aria-pressed", sound.on); soundBtn.classList.toggle("on", sound.on); soundBtn.firstChild.textContent = sound.on ? "🔊 " : "🔈 "; };
 function askSound() {
@@ -1345,6 +1444,19 @@ function tick() {
     player.vrm.update(dt);
   }
 
+  // the wai rides on top of the current animation; walking away lets it finish quickly
+  if (wai.t >= 0) {
+    if (moving && wai.t < wai.dur - 0.55) wai.t = Math.max(wai.t, wai.dur - 0.55);
+    wai.t += dt; if (wai.t > wai.dur) wai.t = -1;
+    const [hands, bow] = waiWeights();
+    if (player.mixer) poseWai(player.model, hands, bow); // at the end (weights 0) this hands the bones back
+    else if (limbs) { // the block avatar: arms forward and together, a small bow
+      limbs.armL.rotation.x = -1.35 * hands; limbs.armR.rotation.x = -1.35 * hands;
+      limbs.armL.rotation.z = 0.42 * hands; limbs.armR.rotation.z = -0.42 * hands; // armL sits at -x: bring both hands to the middle
+      player.model.rotation.x = 0.3 * bow;
+    }
+  } else if (limbs && player.model.rotation.x) { player.model.rotation.x = 0; limbs.armL.rotation.z = 0; limbs.armR.rotation.z = 0; }
+
   // the dog follows a little behind
   if (dog.obj.visible) {
     // stay ahead-left of the player as seen from the camera, so it never blocks the view
@@ -1402,7 +1514,7 @@ document.fonts.load("64px Itim").then(() => document.fonts.load("36px Mali")).ca
   signDraws.forEach((d) => d());
 });
 camYaw = 0; camera.position.set(0, 8, 105);
-if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, scene, salas, sound, player, dog, dogAnim, boards, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
+if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, boards, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
 Promise.race([Promise.all(propJobs), new Promise((r) => setTimeout(r, 7000))]).then(() => {
   $("loading").hidden = true;
   canvas.focus();
