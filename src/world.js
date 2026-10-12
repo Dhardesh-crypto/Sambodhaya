@@ -184,8 +184,7 @@ const path = (x1, z1, x2, z2, w = 5) => {
   const m = add(new THREE.BoxGeometry(w, 0.15, len), P("brick_pavement_02", Math.round(w / 3), Math.round(len / 3), { color: new THREE.Color(1.75, 1.5, 1.2) }), (x1 + x2) / 2, 0.06, (z1 + z2) / 2, scene, false);
   m.rotation.y = Math.atan2(dx, dz);
 };
-path(0, 16, 0, 46, 7); path(0, -14, 0, -44); path(-12, -8, -28, -14); path(12, -8, 28, -14);
-path(-8, -13, -12, -24); path(8, -13, 12, -24); path(-12, 8, -24, 13); path(12, 8, 24, 13);
+path(0, 16, 0, 46, 7); path(0, -14, 0, -44); // entrance and Practice Garden; the hall paths are drawn from the halls themselves
 
 /* ---------------- the great tree at the centre ---------------- */
 {
@@ -204,7 +203,7 @@ path(-8, -13, -12, -24); path(8, -13, 12, -24); path(-12, 8, -24, 13); path(12, 
 }
 
 /* ---------------- lanterns ---------------- */
-const lanternSpots = [[-5, 20], [5, 20], [-5, 30], [5, 30], [-17, 0], [17, 0], [-6, -28], [4, -40]];
+const lanternSpots = [[-5, 20], [5, 20], [-5, 30], [5, 30], [-17, 0], [17, 0], [-4.5, -30], [4.5, -30]];
 const lantern = (x, z) => {
   add(new THREE.BoxGeometry(0.5, 2.4, 0.5), MAT.woodDark, x, 1.2, z);
   add(new THREE.BoxGeometry(1, 1, 1), MAT.glow, x, 2.9, z);
@@ -373,13 +372,23 @@ const signs = [];
 const halls = {};
 const salas = {};
 const boards = [];
-salas.learn = sala({ x: -14, z: -38, W: 13, D: 11 });
-salas.library = sala({ x: -30, z: -24, rot: Math.PI / 5, W: 13, D: 10 });
-salas.media = sala({ x: 13, z: -38, rot: -0.12, W: 13, D: 10 });
-salas.access = sala({ x: 30, z: -24, rot: -Math.PI / 5, W: 13, D: 10 });
-salas.care = sala({ x: 34, z: 6, rot: -Math.PI / 2.4, W: 10, D: 8, H: 5 });
-salas.rest = sala({ x: -28, z: 14, rot: Math.atan2(28, -14), W: 8, D: 6, H: 4, walls: false });
-Object.entries(salas).forEach(([id, h]) => { halls[id] = h.g; });
+// Every hall faces the Bodhi tree, and its path runs straight from the plaza to its front steps.
+const facing = (x, z) => Math.atan2(-x, -z);
+const hallAt = (x, z, o) => sala({ x, z, rot: facing(x, z), ...o });
+salas.learn = hallAt(-14, -38, { W: 13, D: 11 });
+salas.library = hallAt(-30, -24, { W: 13, D: 10 });
+salas.media = hallAt(14, -38, { W: 13, D: 10 });
+salas.access = hallAt(30, -24, { W: 13, D: 10 });
+salas.care = hallAt(34, 6, { W: 10, D: 8, H: 5 });
+salas.rest = hallAt(-28, 14, { W: 8, D: 6, H: 4, walls: false });
+Object.entries(salas).forEach(([id, h]) => {
+  halls[id] = h.g;
+  const [sx, sz] = h.toWorld(0, h.D / 2 + 1.7);            // the front step
+  const d = Math.hypot(sx, sz);
+  path(sx / d * 15.2, sz / d * 15.2, sx, sz, 4.2);
+  const p = PLACES.find((q) => q.id === id);                // "press E" spot: just in front of the steps
+  const [px, pz] = h.toWorld(0, h.D / 2 + 2.6); p.pos = [px, pz]; p.r = 6;
+});
 
 PLACES.forEach((p) => {
   if (p.id === "yard" || p.id === "exit") return;
@@ -620,9 +629,9 @@ const jars = [[-33, 7], [-19, 21], [-11, 39], [11, 39], [22, 19], [-36, -8]];
 props("jar", 1.1, jars.map(([x, z], i) => [x, z, i]), { extra: true }); jars.forEach(([x, z]) => colliders.push({ x, z, r: 0.7 }));
 const bushes = [[-9, 18], [9, 18], [-19, -5], [19, -5], [-24, -36], [24, -36], [-40, 0], [40, -4], [22, 52], [36, 40], [-8, -52], [8, -52]];
 props("bougainvillea", 2.4, bushes.map(([x, z], i) => [x, z, i * 2]), { extra: true }); bushes.forEach(([x, z]) => colliders.push({ x, z, r: 1.3 }));
-const pots = [[-3.2, 34], [3.2, 34], [-10, 9.5], [10, 9.5]];
+const pots = [[-3.2, 34], [3.2, 34], [-5.2, 15.8], [5.2, 15.8]];
 props("potplant", 1.6, pots.map(([x, z], i) => [x, z, i]), { extra: true }); pots.forEach(([x, z]) => colliders.push({ x, z, r: 0.6 }));
-const blooms = [[-5, -15.5], [5, -15.5], [-15.5, 3], [15.5, 3]];
+const blooms = [[-9.5, 12], [9.5, 12]];
 props("lotus", 1, blooms.map(([x, z], i) => [x, z, i]), { extra: true }); blooms.forEach(([x, z]) => colliders.push({ x, z, r: 0.8 }));
 
 /* ---------------- avatars ---------------- */
