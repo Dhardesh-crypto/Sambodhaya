@@ -690,6 +690,31 @@ JOURNEY.forEach(([th, en], i) => {
 });
 [-4.5, 4.5].forEach((x) => { const door = add(new THREE.BoxGeometry(3.4, 4.4, 0.3), MAT.wood, x + (x < 0 ? -2.4 : 2.4), 2.2, 34); door.rotation.y = x < 0 ? -1.1 : 1.1; });
 
+/* ---------------- the donation box (for adults) on the front of the "leave any time" post ---------------- */
+// Quiet and optional: walking up to it and pressing E opens a note and a link to the support page.
+const DONATE = { x: 7, z: 36.95 };
+{
+  const g = new THREE.Group(); g.position.set(DONATE.x, 0, DONATE.z); scene.add(g);
+  add(new THREE.BoxGeometry(0.95, 1.15, 0.6), MAT.lacquer, 0, 1.75, 0, g);
+  add(new THREE.BoxGeometry(1.05, 0.1, 0.7), MAT.gold, 0, 2.37, 0, g);      // lid
+  add(new THREE.BoxGeometry(1.05, 0.08, 0.7), MAT.gold, 0, 1.16, 0, g, false); // base trim
+  add(new THREE.BoxGeometry(0.42, 0.03, 0.06), S(0x1a1008, { roughness: 1 }), 0, 2.43, 0.05, g, false); // coin slot
+  add(new THREE.BoxGeometry(0.12, 0.5, 0.12), MAT.gold, 0, 0.92, -0.1, g, false); // bracket to the post
+  const drawFront = (c, w = 256, h = 320) => {
+    c.clearRect(0, 0, w, h); c.fillStyle = "#8e1f17"; c.fillRect(0, 0, w, h);
+    c.strokeStyle = "#e8b84a"; c.lineWidth = 10; c.strokeRect(10, 10, w - 20, h - 20);
+    c.textAlign = "center"; c.textBaseline = "middle"; c.fillStyle = "#f2cc62";
+    c.font = "80px sans-serif"; c.fillText("🪷", w / 2, 92);
+    c.font = "40px Itim, sans-serif"; c.fillText("ตู้รับบริจาค", w / 2, 190);
+    c.font = "26px Mali, sans-serif"; c.fillStyle = "#fff4d6"; c.fillText(tx("สำหรับผู้ใหญ่", "For adults"), w / 2, 246);
+  };
+  const tex = canvasTexture(256, 320, drawFront);
+  signDraws.push(() => { drawFront(tex.image.getContext("2d")); tex.needsUpdate = true; }); // redrawn once the Thai fonts are in
+  const front = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 1.0), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.7 }));
+  front.position.set(0, 1.75, 0.305); g.add(front);
+  colliders.push({ x: DONATE.x, z: DONATE.z, r: 0.6 });
+}
+
 /* ---------------- scattered trees around the edge ---------------- */
 const edgeTrees = [];
 for (let i = 0; i < 40; i++) {
@@ -1357,10 +1382,17 @@ function showPrompt(p) {
   if (!p) { el.hidden = true; return; }
   $("prompt-name").textContent = p.icon + " " + placeName(p);
   $("prompt-sub").textContent = p.stone != null ? (p.board ? tx("ป้ายเรื่องที่ ", "Story board ") : tx("เรื่องที่ ", "Story ")) + (p.stone + 1) : p.sub[L === "en" ? 1 : 0];
-  $("prompt-go").textContent = p.id === "bell" ? tx("ตี", "Strike") : tx("เข้า", "Visit");
+  $("prompt-go").textContent = p.id === "bell" ? tx("ตี", "Strike") : p.id === "donate" ? tx("เปิด", "Open") : tx("เข้า", "Visit");
   el.hidden = false;
 }
 $("prompt-go").addEventListener("click", () => near && openPlace(near));
+const DONATE_PLACE = { id: "donate", icon: "🤲", th: "ตู้รับบริจาค (สำหรับผู้ใหญ่)", en: "Donation box (for adults)", sub: ["สมทบทุนพัฒนาและสร้างวัด", "Support the temple's development"] };
+function openDonate() {
+  openDialog(tx("🤲 ตู้รับบริจาค", "🤲 Donation box"),
+    `<p>${tx("สำหรับผู้ใหญ่ที่อยากร่วมสมทบทุนพัฒนาและสร้างวัดสัมโพธายะ", "For adults who would like to support the development of Sambodhaya temple.")}</p>
+     <p class="note">${tx("ไม่บริจาคก็ได้ วัดเปิดให้ทุกคนเหมือนเดิม และไม่มีใครรู้ว่าใครบริจาคหรือไม่", "Giving is entirely optional. The temple is open to everyone just the same, and no one knows who gives.")}</p>
+     <div class="row"><a class="btn" href="${to2d("support")}">${tx("ไปหน้าสมทบทุน →", "Go to the support page →")}</a><button class="chip" data-close>${tx("เดินต่อ", "Keep walking")}</button></div>`);
+}
 const BELL_PLACE = { id: "bell", icon: "🔔", th: "ระฆังวัด", en: "Temple bell", sub: ["ตีระฆังได้ ฟังเสียงจนเงียบ", "Strike it, and listen until it fades"] };
 function ringBell() {
   if (settings.mute) { askSound(); return; }
@@ -1402,6 +1434,7 @@ function restoreSpot() {
 }
 function openPlace(p) {
   if (p.id === "bell") { ringBell(); return; }
+  if (p.id === "donate") { openDonate(); return; }
   if (p.stone != null) {
     const n = p.stone + 1;
     openDialog(`👣 ${n} · ${esc(L === "en" ? JOURNEY[p.stone][1] : JOURNEY[p.stone][0])}`,
@@ -1421,7 +1454,8 @@ function openPlaces(fromDog) {
     `${fromDog ? `<p>${tx("เลือกได้เลย ผมพาไป ไม่เลือกอะไรก็ได้นะ", "Pick one and I'll take you there. Choosing nothing is fine too.")}</p>` : `<p>${tx("ไม่อยากเดินแบบ 3 มิติ? เลือกที่หมายแล้ววัดพาไปเลย หรือเปิดหน้าเว็บของศาลานั้นได้", "Prefer not to walk in 3D? Pick a place and the temple takes you there, or open that hall's web page.")}</p>`}
      <ul class="places">${items}</ul>
      <p class="quiet">${tx("🐕 ในต้นแบบนี้ หมาวัดเป็นตัวช่วยบอกทางที่เขียนไว้ล่วงหน้า ยังไม่ใช่ AI", "🐕 In this prototype the temple dog gives pre-written directions; it isn't an AI yet.")}</p>
-     <div class="row"><a class="chip" href="index.html" style="text-decoration:none">${tx("ไปหน้าแผนที่วัด (ไม่ใช้ 3 มิติ)", "Go to the temple map (no 3D)")}</a><button class="chip" data-close>${tx("ปิด", "Close")}</button></div>`);
+     <div class="row"><a class="chip" href="index.html" style="text-decoration:none">${tx("ไปหน้าแผนที่วัด (ไม่ใช้ 3 มิติ)", "Go to the temple map (no 3D)")}</a><button class="chip" data-close>${tx("ปิด", "Close")}</button></div>
+     <p class="quiet">🤲 <a href="${to2d("support")}">${tx("สมทบทุนพัฒนาและสร้างวัด (สำหรับผู้ใหญ่)", "Support the temple's development (for adults)")}</a></p>`);
 }
 function teleport(id) {
   const p = PLACES.find((q) => q.id === id); if (!p) return;
@@ -1442,6 +1476,7 @@ $("btn-help").addEventListener("click", () => openDialog(tx("❔ วิธีเ
    <p>${tx("🖱️ ลากเมาส์ = หมุนมุมมอง • ล้อเมาส์ = ซูม • คลิกหมาวัดหรือศาลา = เปิด", "🖱️ Drag = turn the view • Wheel = zoom • Click the dog or a hall = open it")}</p>
    <p>${tx("📱 จอยซ้ายล่าง = เดิน • ลากจอ = หมุนมุมมอง • ปุ่ม E = เข้า", "📱 Bottom-left stick = walk • Drag the screen = turn the view • E button = visit")}</p>
    <p>${tx("🔈 ปุ่มเสียง = เปิดเสียงนก ลม น้ำตก และกระดิ่งชายคา (ปิดอยู่จนกว่าจะกด) • 🔔 เดินไปที่ระฆังแล้วกด E เพื่อตีระฆัง", "🔈 Sound button = birds, breeze, the waterfall and the roof bells (off until you press it) • 🔔 Walk to the bell and press E to strike it")}</p>
+   <p class="quiet">🤲 <a href="${to2d("support")}">${tx("สมทบทุนพัฒนาและสร้างวัด (สำหรับผู้ใหญ่)", "Support the temple's development (for adults)")}</a> • ${tx("หรือที่ตู้รับบริจาคที่เสาประตูขวา", "or at the donation box on the right-hand gate post")}</p>
    <p class="note">${tx("ที่นี่ไม่มีคะแนน ไม่มีของให้เก็บ และไม่มีการแข่งขัน เดินดูตามสบาย และออกได้ทุกเมื่อที่ประตูขวา", "There are no points, nothing to collect and no competition here. Walk around as you like, and leave any time by the right-hand gate.")}</p>
    <div class="row"><button class="chip" data-close>${tx("ปิด", "Close")}</button></div>`));
 const qBtn = $("btn-quality");
@@ -1643,6 +1678,7 @@ function tick() {
   for (const p of PLACES) { const d = Math.hypot(player.x - p.pos[0], player.z - p.pos[1]); if (d < p.r && d < bestD) { best = p; bestD = d; } }
   for (const s of journeyStones) { const d = Math.hypot(player.x - s.x, player.z - s.z); if (d < 2.6 && d < bestD) { best = { ...PLACES.find((p) => p.id === "journey"), stone: s.i }; bestD = d; } }
   if (Math.hypot(player.x - BELL[0], player.z - BELL[1]) < 3.6 && 3 < bestD) { best = BELL_PLACE; bestD = 3; }
+  { const d = Math.hypot(player.x - DONATE.x, player.z - (DONATE.z + 0.6)); if (d < 2.4 && d < bestD) { best = DONATE_PLACE; bestD = d; } } // only when standing at the box
   for (const s of boards) { const d = Math.hypot(player.x - s.x, player.z - s.z); if (d < 1.9 && d < bestD) { best = { ...PLACES.find((p) => p.id === "learn"), stone: s.i, board: true }; bestD = d; } }
   if ((best && best.id) !== (near && near.id) || (best && best.stone) !== (near && near.stone)) { near = best; showPrompt(near); }
 
