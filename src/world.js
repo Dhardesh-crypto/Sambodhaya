@@ -460,6 +460,8 @@ sign(tx("ลานกลาง", "Central Courtyard"), tx("อยากไปไ
    always the highest of all. The platform is not walkable, as lay visitors don't step onto it.
    Returns the local z of the platform's front edge. */
 const buddhaImages = [];
+const altars = []; // the offering tables before the shrines (merit-making, below)
+const gildImage = { mesh: null, leaves: [] }; // the small image for gold leaf, in the Universal Hall
 // folded monks' robes (the same brown as the monks wear), stacked
 const robeMat = S(0x8a4f22, { roughness: 0.9 }), robeEdge = S(0x6e3d18, { roughness: 0.9 });
 function robeStack(parent, x, y, z, n = 1) {
@@ -556,6 +558,26 @@ function shrine(h, monks = [], { gifts = false } = {}) {
   props("lotus", 0.45, [[0, az + 0.55, 0, top + 0.58]], { parent: g });
   const shrineLight = new THREE.PointLight(0xffc27a, 10, 7, 2); shrineLight.position.set(0, top + 2.4, az + 1.6); g.add(shrineLight);
   hallLamps.push({ light: shrineLight, day: 10, night: 16 });
+  // an offering table (โต๊ะบูชา) before the platform, just right of the middle (clear of the kraap) and turned to
+  // face the Buddha image: two candles waiting to be lit, a brass urn of sand for incense and a vase for a lotus
+  {
+    const lx = 1.55, lz = pz + PD / 2 + 0.5, T = FY + 1.15;
+    const ag = new THREE.Group(); ag.position.set(lx, 0, lz); ag.rotation.y = Math.atan2(lx, lz - (az - 0.24)); g.add(ag); // its +z looks away from the image
+    add(new THREE.BoxGeometry(1.0, 1.1, 0.5), MAT.lacquer, 0, FY + 0.55, 0, ag);
+    add(new THREE.BoxGeometry(1.08, 0.06, 0.58), MAT.gold, 0, T - 0.02, 0, ag, false);
+    add(new THREE.CylinderGeometry(0.16, 0.12, 0.14, 20), MAT.gold, 0, T + 0.07, -0.04, ag);                         // the urn
+    add(new THREE.CylinderGeometry(0.15, 0.15, 0.02, 20), S(0xcdb98a, { roughness: 1 }), 0, T + 0.135, -0.04, ag, false); // its sand
+    add(new THREE.CylinderGeometry(0.05, 0.07, 0.2, 12), S(0x2f6f9f, { roughness: 0.4 }), 0.3, T + 0.1, 0.08, ag); // the vase
+    const candles = [-0.36, 0.36].map((dx) => {
+      add(new THREE.CylinderGeometry(0.035, 0.035, 0.26, 10), waxMat, dx, T + 0.13, -0.04, ag, false);
+      const f = add(new THREE.SphereGeometry(0.035, 8, 6), flameMat, dx, T + 0.29, -0.04, ag, false); f.scale.y = 1.8; f.visible = false;
+      return f;
+    });
+    h.post(lx, lz, 0.55);
+    g.updateMatrixWorld(true);
+    const spot = ag.localToWorld(new THREE.Vector3(0, 0, 1.05)), mid = ag.localToWorld(new THREE.Vector3(0, 0, 0));
+    altars.push({ h, g: ag, T, candles, spot: { x: spot.x, z: spot.z }, faceYaw: Math.atan2(mid.x - spot.x, mid.z - spot.z), sticks: [], lit: 0 });
+  }
   return pz + PD / 2;
 }
 
@@ -570,8 +592,8 @@ function shrine(h, monks = [], { gifts = false } = {}) {
     boards.push({ ...wallBoard(h, side, u, tex), i });
   });
   // students and visitors sit on the floor, facing the platform
-  // (the front row's outer pair is left out: before the senior monk there is room to kneel and bow)
-  for (let r = 0; r < 3; r++) for (let c = -2; c <= 2; c++) if (c !== 0 && !(r === 0 && Math.abs(c) === 2)) cushion(h, c * 1.5, -0.9 + r * 1.6);
+  // (no front row: before the platform there is room to offer incense, to give the Kathina robe and to bow)
+  for (let r = 1; r < 3; r++) for (let c = -2; c <= 2; c++) if (c !== 0) cushion(h, c * 1.5, -0.9 + r * 1.6);
   hangLanterns(h, [[-3.5, 1.2], [3.5, 1.2], [0, 3.4]]);
 }
 
@@ -613,6 +635,21 @@ function shrine(h, monks = [], { gifts = false } = {}) {
 {
   const h = salas.access, { g, FY, W, D } = h;
   shrine(h); // the teachers' seats stand ready; the monks sit in the Learning Hall
+  // a small bronze Buddha image on a stand for gold leaf (ปิดทอง), before the platform on the left
+  {
+    const lx = -3.0, lz = -D / 2 + 0.2 + 2.8 + 0.55, T = FY + 0.95;
+    add(new THREE.BoxGeometry(1.0, 0.95, 0.8), MAT.lacquer, lx, FY + 0.475, lz, g);
+    add(new THREE.BoxGeometry(1.08, 0.06, 0.88), MAT.gold, lx, T, lz, g, false);
+    const holder = new THREE.Group(); holder.position.set(lx, T + 0.03, lz); g.add(holder);
+    loadProp("buddha").then((src) => {
+      if (!src) return;
+      const c = fitTo(src.clone(), 1.25); c.rotation.y = -Math.PI / 2;
+      c.traverse((o) => { if (o.isMesh) { o.material = o.material.clone(); o.material.color = new THREE.Color(0x7a5532); o.material.metalness = 0.65; o.material.roughness = 0.45; o.material.map = null; o.castShadow = true; } }); // dark bronze, waiting for gold
+      holder.add(c); gildImage.mesh = c;
+    });
+    const [wx, wz] = h.toWorld(lx, lz + 1.15);
+    Object.assign(gildImage, { h, holder, spot: { x: wx, z: wz }, faceYaw: h.g.rotation.y + Math.PI, chest: new THREE.Vector3(lx, T + 0.62, lz + 0.2) });
+  }
   // the hall's own board moves to the side wall
   wallBoard(h, "left", 0.6, boardTexture({ head: tx("ศาลาสากล", "Universal Hall"), icon: "🌍", title: "ภาษาไทย · English", foot: tx("เลือกภาษา ขนาดตัวอักษร และการเคลื่อนไหวได้ในหน้าเว็บของศาลานี้", "Choose language and motion settings on this hall's web page"), wide: true }), 2.8, 2.33, 2.6);
   props("potplant", 1.6, [[-W / 2 + 1, D / 2 - 1, 2, FY], [W / 2 - 1, D / 2 - 1, 3, FY]], { parent: g });
@@ -1178,6 +1215,209 @@ function fishStep(dt) {
     const beat = f.eating || goal ? 9 : 4;
     f.o.position.copy(f.pos); f.o.rotation.set(f.eating ? -0.25 : 0, f.heading + Math.sin(fishTime * beat * calm + f.ph) * 0.18, 0);
   }
+}
+
+/* ---------------- making merit (ทำบุญ): incense, candles and a lotus; gold leaf; cloth on the Bodhi tree ---------------- */
+// Three standing offerings, posed on the boy's skeleton like the wai:
+// • at an offering table before a shrine he lights the two candles, holds three incense sticks and a lotus bud
+//   between his palms in the high wai and bows, plants the incense in the sand and the lotus in the vase, and makes
+//   a last wai; the candles and incense burn on (smoke rising) for a few minutes;
+// • at the small bronze image he presses a leaf of gold onto it and makes a wai; the gold stays where he pressed;
+// • at the edge of the Bodhi tree's platform he makes a wai holding a folded three-coloured cloth, and a new band
+//   of cloth appears around the trunk, shaped to it.
+const merit = { t: -1, kind: null, spot: null, faceYaw: 0, dur: 0, altar: null, items: null, placed: false, done: false };
+const MERIT = {
+  offer: { dur: 8.0, place: { id: "offer", icon: "🪔", th: "บูชาพระด้วยธูปเทียนดอกไม้", en: "Offer incense, candles and a lotus", sub: ["จุดเทียน จุดธูป ถวายดอกบัว", "Light the candles and incense, offer a lotus"] } },
+  gild: { dur: 5.2, place: { id: "gild", icon: "✨", th: "ปิดทององค์พระ", en: "Apply gold leaf", sub: ["ปิดทองแล้วไหว้", "Press on a leaf of gold, then wai"] } },
+  cloth: { dur: 4.4, place: { id: "cloth", icon: "🎗️", th: "ผูกผ้าสามสีต้นโพธิ์", en: "Tie a cloth on the Bodhi tree", sub: ["ผ้าสามสี แล้วไหว้", "A three-coloured cloth, then wai"] } },
+};
+const incenseMat = S(0x8c2f22, { roughness: 0.9 }), emberMat = new THREE.MeshBasicMaterial({ color: 0xff7a2a }), lotusMat = S(0xf2a3b8, { roughness: 0.7 }), stemMat = S(0x4f8f3f, { roughness: 0.8 });
+function incenseBundle() { // three sticks and a lotus bud, held together
+  const g = new THREE.Group();
+  [-0.025, 0, 0.025].forEach((dx, i) => { add(new THREE.CylinderGeometry(0.008, 0.008, 0.42, 5), incenseMat, dx, 0.21, (i - 1) * 0.01, g, false); const e = add(new THREE.SphereGeometry(0.012, 6, 4), emberMat, dx, 0.42, (i - 1) * 0.01, g, false); e.visible = false; e.userData.ember = true; });
+  add(new THREE.CylinderGeometry(0.008, 0.008, 0.3, 5), stemMat, 0.05, 0.12, 0.02, g, false);
+  const bud = add(new THREE.SphereGeometry(0.05, 10, 8), lotusMat, 0.05, 0.31, 0.02, g, false); bud.scale.y = 1.7; bud.userData.lotus = true;
+  return g;
+}
+const smokes = []; // incense smoke: soft puffs rising and fading
+function puff(x, y, z) { const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: softTex, color: 0xe8e4dc, transparent: true, opacity: 0.35, depthWrite: false })); m.position.set(x, y, z); m.scale.setScalar(0.08); m.userData = { t: 0, dx: (Math.random() - 0.5) * 0.08 }; scene.add(m); smokes.push(m); }
+function meritHere() {
+  for (const a of altars) if (Math.hypot(player.x - a.spot.x, player.z - a.spot.z) < 1.3) return { kind: "offer", spot: a.spot, faceYaw: a.faceYaw, altar: a };
+  if (gildImage.spot && Math.hypot(player.x - gildImage.spot.x, player.z - gildImage.spot.z) < 1.3) return { kind: "gild", spot: gildImage.spot, faceYaw: gildImage.faceYaw };
+  const d = Math.hypot(player.x, player.z);
+  if (d > 7.2 && d < 9.2 && player.y < 0.5) { const a = Math.atan2(player.x, player.z); return { kind: "cloth", spot: { x: Math.sin(a) * 7.9, z: Math.cos(a) * 7.9 }, faceYaw: a + Math.PI }; }
+  return null;
+}
+function startMerit(here) {
+  if (!here || merit.t >= 0 || kraap.t >= 0 || alms.t >= 0 || feed.t >= 0) return;
+  if (sit.on) { sit.on = false; sit.rise = 0; sit.faceYaw = null; }
+  if (broom.held) putBroomBack();
+  wai.t = -1; wai.level = "buddha";
+  Object.assign(merit, here, { t: 0, dur: MERIT[here.kind].dur, items: null, placed: false, done: false });
+  if (here.kind === "offer" || here.kind === "cloth") { merit.items = here.kind === "offer" ? incenseBundle() : clothBundle(); merit.items.visible = false; scene.add(merit.items); }
+  if (player.mixer) playClip("idle", 0.4);
+}
+const clothBundle = () => { const g = new THREE.Group(); [0xf2c230, 0xc8322a, 0x3f9a4f].forEach((c, i) => add(new THREE.BoxGeometry(0.2, 0.05, 0.14), S(c, { roughness: 0.9 }), 0, 0.05 + i * 0.05, 0, g, false)); return g; };
+// envelopes for each offering: reach (to a point), wai (hands together), bow
+function meritState(t) {
+  const k = merit.kind, e = (a, b, c, d) => smooth(a, b, t) * (1 - smooth(c, d, t));
+  if (k === "offer") return { reach: Math.max(e(0.8, 1.2, 1.75, 2.05), e(5.0, 5.5, 6.1, 6.45)), reachTo: t < 3.5 ? (t < 1.5 ? "candleL" : "candleR") : "urn", wai: Math.max(e(2.0, 2.5, 4.7, 5.1), e(6.4, 6.8, 7.4, 7.9)), bow: e(2.9, 3.4, 4.2, 4.6) };
+  if (k === "gild") return { reach: e(0.8, 1.4, 1.9, 2.3), reachTo: "image", wai: e(2.4, 2.9, 4.4, 4.9), bow: e(3.0, 3.4, 4.0, 4.4) };
+  return { reach: 0, wai: e(0.8, 1.3, 3.6, 4.1), bow: e(1.6, 2.1, 3.0, 3.4) };
+}
+function reachPoint(to) {
+  const a = merit.altar;
+  if (to === "candleL" || to === "candleR") { const f = a.candles[to === "candleL" ? 0 : 1]; return f.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 0.05, 0)); }
+  if (to === "urn") return a.g.localToWorld(new THREE.Vector3(0, a.T + 0.3, -0.04));
+  return gildImage.holder.parent.localToWorld(gildImage.chest.clone());
+}
+function poseMerit(model, B) {
+  const st = meritState(merit.t), w = Math.max(st.reach, st.wai);
+  const rest = restPose(model);
+  const up = new THREE.Vector3(0, 1, 0), fwd = new THREE.Vector3(Math.sin(player.yaw), 0, Math.cos(player.yaw)), side = new THREE.Vector3().crossVectors(up, fwd);
+  if (B.Hips && B.LeftUpLeg && B.RightUpLeg && w > 0) { // square to what he faces (the idle stands turned)
+    model.updateMatrixWorld(true);
+    const hipLine = B.LeftUpLeg.getWorldPosition(new THREE.Vector3()).sub(B.RightUpLeg.getWorldPosition(new THREE.Vector3())).setY(0).normalize();
+    turnBone(B.Hips, _q2.slerpQuaternions(_q1.identity(), new THREE.Quaternion().setFromUnitVectors(hipLine, side), w));
+  }
+  if (rest && w > 0) ["Spine", "Spine01", "Spine02", "neck", "Head"].forEach((n) => { if (B[n] && rest[n]) B[n].quaternion.slerp(rest[n], w); });
+  model.updateMatrixWorld(true);
+  if (st.wai > 0.001 || st.bow > 0.001) poseWaiCore(model, B, st.wai, st.bow);
+  if (st.reach > 0.001) {
+    const shape = handShape(model); if (shape) {
+      const hs = shape.Right, Q = basisQuat(hs.finger, hs.palm, fwd.clone().addScaledVector(up, -0.4).normalize(), up.clone().negate().addScaledVector(fwd, 0.4).normalize());
+      const along = hs.points.reduce((a, q) => a + q.clone().applyQuaternion(Q).dot(fwd), 0) / hs.points.length * model.getWorldScale(new THREE.Vector3()).y;
+      const target = reachPoint(st.reachTo).addScaledVector(fwd, -along - 0.05);
+      armTo(B, "Right", target, Q, new THREE.Vector3().addScaledVector(up, -1).addScaledVector(side, -0.6), st.reach);
+    }
+  }
+  // what he holds: between his palms in the wai, in his right hand as he reaches
+  if (merit.items && !merit.placed) {
+    const it = merit.items; it.visible = merit.t > (merit.kind === "offer" ? 2.15 : 0.9);
+    if (st.wai >= st.reach) { it.position.copy(wai.plane.point).addScaledVector(up, -0.06); it.rotation.set(0, player.yaw, 0); }
+    else { it.position.copy(B.RightHand.getWorldPosition(new THREE.Vector3())).addScaledVector(fwd, 0.06); it.rotation.set(0, player.yaw, 0); }
+  }
+}
+function meritStep(dt) {
+  // the smoke and the burning sticks go on whether or not he is making an offering
+  for (let i = smokes.length - 1; i >= 0; i--) { const m = smokes[i], d = m.userData; d.t += dt; m.position.y += dt * 0.35; m.position.x += d.dx * dt; m.scale.setScalar(0.08 + d.t * 0.12); m.material.opacity = 0.3 * Math.max(0, 1 - d.t / 2.6); if (d.t > 2.6) { scene.remove(m); m.material.dispose(); smokes.splice(i, 1); } }
+  for (const a of altars) {
+    if (a.lit > 0) { a.lit -= dt; if (a.lit <= 0) { a.candles.forEach((f) => { f.visible = false; }); a.sticks.forEach((g) => scene.remove(g)); a.sticks = []; } }
+    a.sticks.forEach((g) => { if (Math.random() < dt * 2.2) { const e = g.children.find((c) => c.userData.ember); if (e) { const p = e.getWorldPosition(new THREE.Vector3()); puff(p.x, p.y + 0.02, p.z); } } });
+  }
+  if (merit.t < 0) return;
+  const before = merit.t; merit.t += dt; const t = merit.t;
+  if (t < 0.8) { player.x += (merit.spot.x - player.x) * Math.min(1, dt * 8); player.z += (merit.spot.z - player.z) * Math.min(1, dt * 8); }
+  let dy = merit.faceYaw - player.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); player.yaw += dy * Math.min(1, dt * 8);
+  const at = (x) => before < x && t >= x;
+  if (merit.kind === "offer") {
+    const a = merit.altar;
+    if (at(1.45)) a.candles[0].visible = true;
+    if (at(1.75)) a.candles[1].visible = true;
+    if (at(2.2) && merit.items) merit.items.children.forEach((c) => { if (c.userData.ember) c.visible = true; }); // lit from the candle
+    if (at(5.95) && merit.items) { // planted in the sand, the lotus into the vase
+      merit.placed = true; const g = merit.items; a.g.attach(g);
+      g.position.set((Math.random() - 0.5) * 0.12, a.T + 0.12, -0.04 + (Math.random() - 0.5) * 0.06); g.rotation.set((Math.random() - 0.5) * 0.12, 0, (Math.random() - 0.5) * 0.12);
+      const bud = g.children.find((c) => c.userData.lotus); if (bud) bud.position.set(0.3 - g.position.x, 0.33 - 0.12, 0.08 - g.position.z); // into the vase
+      a.sticks.push(g); if (a.sticks.length > 3) { const old = a.sticks.shift(); old.parent && old.parent.remove(old); }
+      a.lit = 180;
+    }
+  }
+  if (merit.kind === "gild" && at(1.65)) gildLeaf();
+  if (merit.kind === "cloth" && at(2.4)) { tieCloth(); if (merit.items) { merit.items.visible = false; merit.placed = true; } }
+  if (t > merit.dur) { if (merit.items && !merit.placed) scene.remove(merit.items); merit.t = -1; merit.kind = null; merit.items = null; }
+}
+// a leaf of gold where his fingers pressed, lying on the image's surface
+const leafGeo = new THREE.PlaneGeometry(0.1, 0.1), leafMat = new THREE.MeshStandardMaterial({ color: 0xffd36a, metalness: 1, roughness: 0.25, emissive: 0x6a4a10, emissiveIntensity: 0.3, side: THREE.DoubleSide });
+function gildLeaf() {
+  if (!gildImage.mesh) return;
+  const base = new THREE.Vector3((Math.random() - 0.5) * 0.3, (Math.random() - 0.4) * 0.35, 0);
+  for (let k = 0; k < 3; k++) gildOne(base.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.08, (Math.random() - 0.5) * 0.08, 0))); // a few overlapping leaves
+}
+function gildOne(jitter) {
+  const target = reachPoint("image"), from = target.clone().add(new THREE.Vector3(Math.sin(player.yaw), 0, Math.cos(player.yaw)).multiplyScalar(-0.8));
+  const ray = new THREE.Raycaster(from.clone().add(jitter), target.clone().add(jitter).sub(from).normalize(), 0, 2);
+  const hit = ray.intersectObject(gildImage.mesh, true)[0]; if (!hit) return;
+  const leaf = new THREE.Mesh(leafGeo, leafMat); leaf.position.copy(hit.point);
+  const n = hit.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld) : ray.ray.direction.clone().negate();
+  leaf.lookAt(hit.point.clone().add(n)); leaf.position.addScaledVector(n, 0.004); leaf.rotation.z += Math.random();
+  gildImage.holder.attach(leaf); gildImage.leaves.push(leaf);
+  if (gildImage.leaves.length > 120) { const old = gildImage.leaves.shift(); old.parent && old.parent.remove(old); }
+}
+// a three-coloured cloth around the Bodhi tree's trunk, shaped to the trunk at its height
+const bodhiBands = [];
+function tieCloth() {
+  const n = bodhiBands.length % 7, y = 4.3 + n * 0.3;
+  const shown = (o) => { while (o) { if (!o.visible) return false; o = o.parent; } return true; };
+  const meshes = []; scene.traverse((o) => { if (o.isMesh && shown(o)) { const p = o.getWorldPosition(new THREE.Vector3()); if (Math.hypot(p.x, p.z) < 3 && p.y < 12) meshes.push(o); } });
+  const ray = new THREE.Raycaster(), N = 20, pts = [[], [], []];
+  for (let k = 0; k < N; k++) {
+    const a = k / N * Math.PI * 2; ray.set(new THREE.Vector3(Math.cos(a) * 6, y, Math.sin(a) * 6), new THREE.Vector3(-Math.cos(a), 0, -Math.sin(a))); ray.far = 6;
+    const hit = ray.intersectObjects(meshes, true).find((h) => shown(h.object)); const r = (hit ? 6 - hit.distance : 1.4) + 0.05;
+    [0, 1, 2].forEach((j) => pts[j].push(new THREE.Vector3(Math.cos(a) * r, y + (j - 1) * 0.07, Math.sin(a) * r)));
+  }
+  if (bodhiBands[n]) { scene.remove(bodhiBands[n]); }
+  const g = new THREE.Group();
+  [0xf2c230, 0xc8322a, 0x3f9a4f].forEach((c, j) => g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts[j], true), 60, 0.045, 6, true), S(c, { roughness: 0.9 }))));
+  scene.add(g); bodhiBands[n] = g;
+}
+
+/* ---------------- sweeping the courtyard (กวาดลานวัด) ---------------- */
+// A broom leans by the plaza. Picking it up, the boy sweeps as he walks: fallen Bodhi leaves before the broom are
+// brushed away. Now and then a leaf falls from the tree. Putting it back is the same button at the stand.
+const BROOM_AT = { x: -6.4, z: 12.6 };
+const broom = { held: false, obj: new THREE.Group(), phase: 0 };
+const BROOM_PLACE = { id: "broom", icon: "🧹", th: "กวาดลานวัด", en: "Sweep the courtyard", sub: ["หยิบไม้กวาด", "Pick up the broom"] };
+const BROOM_BACK = { id: "broom", icon: "🧹", th: "วางไม้กวาด", en: "Put the broom back", sub: ["วางไว้ที่เดิม", "Lean it back where it was"] };
+{
+  const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 1.9, 8), MAT.wood); handle.position.y = 0.95 + 0.25; handle.castShadow = true;
+  const head = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.55, 10, 1, true), S(0xc9a560, { roughness: 1, side: THREE.DoubleSide })); head.position.y = 0.27; head.castShadow = true;
+  const tie = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.08, 10), S(0xa03a2a)); tie.position.y = 0.52;
+  broom.obj.add(handle, head, tie); scene.add(broom.obj);
+  colliders.push({ x: BROOM_AT.x - 0.3, z: BROOM_AT.z, r: 0.3 });
+}
+function putBroomBack() { broom.held = false; }
+const fallenLeaves = [];
+const bodhiLeafGeo = new THREE.PlaneGeometry(0.22, 0.32), bodhiLeafMats = [0x7aa14a, 0xb7a240, 0x9c7a35].map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.9, side: THREE.DoubleSide }));
+function dropLeaf(fromTree) {
+  const a = Math.random() * Math.PI * 2, r = 7.8 + Math.random() * 7.5;
+  const m = new THREE.Mesh(bodhiLeafGeo, bodhiLeafMats[Math.floor(Math.random() * 3)]);
+  m.userData = { x: Math.cos(a) * r, z: Math.sin(a) * r, fall: fromTree ? 9 + Math.random() * 3 : 0, spin: Math.random() * 6, fade: -1 };
+  m.position.set(m.userData.x, 0.02 + m.userData.fall, m.userData.z); m.rotation.set(-Math.PI / 2, 0, Math.random() * 6);
+  scene.add(m); fallenLeaves.push(m);
+}
+for (let i = 0; i < (HIGH ? 34 : 16); i++) dropLeaf(false);
+let leafClock = 8;
+function broomStep(dt, moving) {
+  // the broom: leaning at its stand, or in his hands, its head swinging over the ground as he sweeps
+  if (!broom.held) { broom.obj.position.set(BROOM_AT.x, 0, BROOM_AT.z); broom.obj.rotation.set(0, 0, -0.22); }
+  else {
+    broom.phase += dt * (moving ? 5 : 1.4);
+    const fwd = new THREE.Vector3(Math.sin(player.yaw), 0, Math.cos(player.yaw)), right = new THREE.Vector3(-fwd.z, 0, fwd.x);
+    const head = new THREE.Vector3(player.x, player.y, player.z).addScaledVector(fwd, 1.05).addScaledVector(right, 0.12 + Math.sin(broom.phase) * 0.35);
+    const top = new THREE.Vector3(player.x, player.y + 1.75, player.z).addScaledVector(fwd, 0.25).addScaledVector(right, 0.25);
+    const dir = top.clone().sub(head).normalize();
+    broom.obj.position.copy(head); broom.obj.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+    broom.grips = [head.clone().addScaledVector(dir, 1.0), head.clone().addScaledVector(dir, 1.45)];
+    // leaves before the broom are brushed away
+    for (const l of fallenLeaves) { const u = l.userData; if (u.fall > 0 || u.fade >= 0) continue; if (Math.hypot(u.x - head.x, u.z - head.z) < 0.75) { u.fade = 0; u.vx = fwd.x * 1.2 + right.x * Math.sin(broom.phase); u.vz = fwd.z * 1.2 + right.z * Math.sin(broom.phase); } }
+  }
+  // falling and swept leaves
+  leafClock -= dt; if (leafClock <= 0) { leafClock = 10 + Math.random() * 14; if (fallenLeaves.length < (HIGH ? 60 : 30)) dropLeaf(true); }
+  for (let i = fallenLeaves.length - 1; i >= 0; i--) {
+    const l = fallenLeaves[i], u = l.userData;
+    if (u.fall > 0) { u.fall = Math.max(0, u.fall - dt * 1.4); u.spin += dt * 3; l.position.set(u.x + Math.sin(u.spin) * 0.4, 0.02 + u.fall, u.z + Math.cos(u.spin * 0.7) * 0.3); l.rotation.set(-Math.PI / 2 + Math.sin(u.spin) * 0.6 * (u.fall > 0 ? 1 : 0), 0, u.spin); if (u.fall === 0) { u.x = l.position.x; u.z = l.position.z; } }
+    else if (u.fade >= 0) { u.fade += dt; u.x += u.vx * dt; u.z += u.vz * dt; l.position.set(u.x, 0.02 + Math.sin(u.fade * 6) * 0.06, u.z); l.scale.setScalar(Math.max(0.01, 1 - u.fade / 1.2)); if (u.fade > 1.2) { scene.remove(l); fallenLeaves.splice(i, 1); } }
+  }
+}
+function poseBroom(model, B) {
+  if (!broom.held || !broom.grips) return;
+  const shape = handShape(model); if (!shape) return;
+  const up = new THREE.Vector3(0, 1, 0), fwd = new THREE.Vector3(Math.sin(player.yaw), 0, Math.cos(player.yaw)), side = new THREE.Vector3().crossVectors(up, fwd);
+  [["Right", broom.grips[0], -1], ["Left", broom.grips[1], 1]].forEach(([s, p, sg]) => {
+    const hs = shape[s], Q = basisQuat(hs.finger, hs.palm, side.clone().multiplyScalar(-sg), fwd.clone().negate());
+    armTo(B, s, p.clone().addScaledVector(side, sg * 0.06), Q, new THREE.Vector3().addScaledVector(up, -1).addScaledVector(side, sg * 0.7), 1);
+  });
 }
 
 /* ---------------- day and night ---------------- */
@@ -1836,7 +2076,7 @@ function updatePress(model) {
   let sk = null; model.traverse((o) => { if (!sk && o.isSkinnedMesh) sk = o; });
   if (!sk || !sk.userData.press) return;
   const u = sk.userData.press;
-  u.uPress.value = wai.t >= 0 || sit.w > 0.01 || kraap.t >= 0 ? Math.min(1, wai.plane.on * 1.5) : 0;
+  u.uPress.value = wai.t >= 0 || sit.w > 0.01 || kraap.t >= 0 || merit.t >= 0 ? Math.min(1, wai.plane.on * 1.5) : 0;
   if (!u.uPress.value) return;
   // the plane in the mesh's own space (where the skinned vertices are)
   _plane.setFromNormalAndCoplanarPoint(wai.plane.normal, wai.plane.point).applyMatrix4(_inv.copy(sk.matrixWorld).invert());
@@ -1901,6 +2141,8 @@ function poseOverlays(model, hands, bow, sitW) {
   if (alms.t >= 0 && alms.m) { waiBegin(B); poseAlms(model, B, almsState(alms.t)); waiMark(B); return; }
   if (shoes.t >= 0) { waiBegin(B); poseShoes(model, B, shoes.t); waiMark(B); return; }
   if (feed.t >= 0) { waiBegin(B); poseFeed(model, B); waiMark(B); return; }
+  if (merit.t >= 0) { waiBegin(B); poseMerit(model, B); waiMark(B); return; }
+  if (broom.held && hands <= 0 && sitW <= 0.001) { waiBegin(B); poseBroom(model, B); waiMark(B); return; }
   if (hands <= 0 && bow <= 0 && sitW <= 0.001) { waiEnd(B); return; }
   waiBegin(B);
   if (sitW > 0.001) poseSit(model, B, sitW);
@@ -2365,7 +2607,7 @@ function showPrompt(p) {
   if (!p) { el.hidden = true; return; }
   $("prompt-name").textContent = p.icon + " " + placeName(p);
   $("prompt-sub").textContent = p.stone != null ? (p.board ? tx("ป้ายเรื่องที่ ", "Story board ") : tx("เรื่องที่ ", "Story ")) + (p.stone + 1) : p.sub[L === "en" ? 1 : 0];
-  $("prompt-go").textContent = p.id === "bell" ? tx("ตี", "Strike") : p.id === "donate" ? tx("เปิด", "Open") : p.id === "alms" ? tx("ใส่บาตร", "Offer") : p.id === "fish" ? tx("ให้อาหาร", "Feed") : p.id === "kathin" ? tx("ถวาย", "Offer") : tx("เข้า", "Visit");
+  $("prompt-go").textContent = p.id === "bell" ? tx("ตี", "Strike") : p.id === "donate" ? tx("เปิด", "Open") : p.id === "alms" ? tx("ใส่บาตร", "Offer") : p.id === "fish" ? tx("ให้อาหาร", "Feed") : p.merit ? tx("ทำบุญ", "Offer") : p.id === "broom" ? (broom.held ? tx("วาง", "Put back") : tx("หยิบ", "Pick up")) : p.id === "kathin" ? tx("ถวาย", "Offer") : tx("เข้า", "Visit");
   el.hidden = false;
 }
 $("prompt-go").addEventListener("click", () => near && openPlace(near));
@@ -2420,6 +2662,8 @@ function openPlace(p) {
   if (p.id === "donate") { openDonate(); return; }
   if (p.id === "alms") { startAlms(p.monk); return; }
   if (p.id === "fish") { startFeed(); return; }
+  if (p.merit) { startMerit(meritHere()); return; }
+  if (p.id === "broom") { broom.held = !broom.held; near = null; return; }
   if (p.id === "kathin") { startKathin(p.hall); return; }
   if (p.stone != null) {
     const n = p.stone + 1;
@@ -2581,7 +2825,8 @@ function tick() {
 // one step of the world: movement, animation, camera and the picture
 function frame(dt) {
   placeLampLights(dt);
-  feedStep(dt); fishStep(dt);
+  feedStep(dt); fishStep(dt); meritStep(dt);
+  if (broom.held && (alms.t >= 0 || kraap.t >= 0 || feed.t >= 0 || shoes.t >= 0 || sit.on || merit.t >= 0)) putBroomBack(); // hands needed elsewhere
   monkTime += dt;
   if (!settings.calmMotion) for (const m of monkFigures) { const b = Math.sin(monkTime * 1.25 + m.ph); m.o.scale.set(1 + b * 0.004, 1 + b * 0.008, 1 + b * 0.004); } // slow breathing
   // movement relative to the camera
@@ -2590,7 +2835,7 @@ function frame(dt) {
     if (keys.KeyW || keys.ArrowUp) fz -= 1; if (keys.KeyS || keys.ArrowDown) fz += 1;
     if (keys.KeyA || keys.ArrowLeft) fx -= 1; if (keys.KeyD || keys.ArrowRight) fx += 1;
     fx += joy.x; fz += joy.y;
-    if ((keys.Space) && !sit.on && sit.rise <= 0 && kraap.t < 0 && alms.t < 0 && shoes.t < 0 && feed.t < 0 && player.y <= groundAt(player.x, player.z) + 0.01) player.vy = 9;
+    if ((keys.Space) && !sit.on && sit.rise <= 0 && kraap.t < 0 && alms.t < 0 && shoes.t < 0 && feed.t < 0 && merit.t < 0 && player.y <= groundAt(player.x, player.z) + 0.01) player.vy = 9;
   }
   if (kraap.t >= 0) { // paying tribute: stay put (it ends by itself); glide to the spot and face the image first
     fx = fz = 0;
@@ -2616,6 +2861,7 @@ function frame(dt) {
       if (!p || Math.hypot(p.x - player.x, p.z - player.z) > 1.0) startShoes("on", { x: player.x, z: player.z });
     }
   }
+  if (merit.t >= 0) fx = fz = 0; // making an offering: in place until it is done
   if (feed.t >= 0) fx = fz = 0; // feeding the fish: at the rail until the last handful is thrown
   if (alms.t >= 0) { // giving alms: stay put (it ends by itself); step up to the monk and face him first
     fx = fz = 0;
@@ -2652,6 +2898,7 @@ function frame(dt) {
 
   // limb swing for blocky avatars, clips for 3D models
   const moving = mag > 0.05;
+  broomStep(dt, moving);
   const stepsBefore = Math.floor(walkPhase / Math.PI);
   const gait = player.gait && player.gait[player.current];
   walkPhase += dt * (moving ? (gait && player.action ? Math.PI * gait.steps * player.action.timeScale : speed * 1.6) : 0); // footsteps follow the animation's own steps
@@ -2666,7 +2913,7 @@ function frame(dt) {
       player.model.position.y = -1.05 * sit.w + (sit.spot ? sit.spot.top * sit.w : 0);
     } else if (player.model.position.y < 0) player.model.position.y = 0;
   } else if (player.mixer) {
-    if (kraap.t >= 0 || alms.t >= 0 || shoes.t >= 0 || feed.t >= 0) playClip("idle", 0.4);
+    if (kraap.t >= 0 || alms.t >= 0 || shoes.t >= 0 || feed.t >= 0 || merit.t >= 0) playClip("idle", 0.4);
     else if (sit.on && player.clips.sit) playClip("sit", 1.2);
     else if (sit.rise > 0) playClip("idle", 1.0);
     else playClip(!moving ? "idle" : player.clips.run && speed > 5 ? "run" : player.clips.walk ? "walk" : "idle");
@@ -2718,11 +2965,11 @@ function frame(dt) {
     const fx2 = -Math.sin(camYaw), fz2 = -Math.cos(camYaw), rx = Math.cos(camYaw), rz = -Math.sin(camYaw);
     let bx = player.x + fx2 * 1.4 - rx * 2.6, bz = player.z + fz2 * 1.4 - rz * 2.6;
     // during the ceremonies (sitting, paying respect, Kathina, giving alms and its wai) the dog sits at his left side, facing the same way
-    const ceremony = sit.on || kraap.t >= 0 || alms.t >= 0 || (wai.t >= 0 && wai.fromAlms) || feed.t >= 0;
+    const ceremony = sit.on || kraap.t >= 0 || alms.t >= 0 || (wai.t >= 0 && wai.fromAlms) || feed.t >= 0 || merit.t >= 0;
     if (ceremony) {
       // beside where he will be for the whole ceremony (the bowing spot, the spot before the monk), so the dog
       // sits down once and stays down while he steps up or moves back on his knees
-      const k = kraap.t >= 0 ? kraap : null, al = !k && (alms.t >= 0 || wai.fromAlms) ? alms : null, fd = feed.t >= 0 ? feed : null;
+      const k = kraap.t >= 0 ? kraap : null, al = !k && (alms.t >= 0 || wai.fromAlms) ? alms : null, fd = feed.t >= 0 ? feed : merit.t >= 0 ? { stand: merit.spot, faceYaw: merit.faceYaw } : null;
       const at = k ? (k.kathin && k.keys ? k.kathin.far : k.spot) : al ? al.spot : fd ? fd.stand : null;
       const ax = at ? at.x : player.x, az = at ? at.z : player.z;
       const ay = k && k.faceYaw != null ? k.faceYaw : al ? al.faceYaw : fd ? fd.faceYaw : player.yaw;
@@ -2753,11 +3000,13 @@ function frame(dt) {
   { const d = Math.hypot(player.x - DONATE.x, player.z - (DONATE.z + 0.6)); if (d < 2.4 && d < bestD) { best = DONATE_PLACE; bestD = d; } } // only when standing at the box
   { const h = salas.learn; if (h && h.senior && kraap.t < 0) { const sp = kathinSpots(h), d = Math.hypot(player.x - sp.near.x, player.z - sp.near.z); if (d < 1.3 && d < bestD) { best = { ...KATHIN_PLACE, hall: h }; bestD = d; } } }
   if (onBridge(player.x, player.z) && feed.t < 0 && 2.5 < bestD) { best = FISH_PLACE; bestD = 2.5; }
+  if (merit.t < 0) { const mh = meritHere(); if (mh) { best = { ...MERIT[mh.kind].place, merit: mh }; bestD = 0.5; } } // standing at it: the offering comes first
+  if (Math.hypot(player.x - BROOM_AT.x, player.z - BROOM_AT.z) < 1.8 && 2.3 < bestD) { best = broom.held ? BROOM_BACK : BROOM_PLACE; bestD = 2.3; }
   for (const m of almsMonks) { const d = Math.hypot(player.x - (m.x + Math.sin(m.yaw) * ALMS_STAND), player.z - (m.z + Math.cos(m.yaw) * ALMS_STAND)); if (d < 1.5 && d < bestD) { best = { ...ALMS_PLACE, monk: m }; bestD = d; } }
   for (const s of boards) { const d = Math.hypot(player.x - s.x, player.z - s.z); if (d < 1.9 && d < bestD) { best = { ...PLACES.find((p) => p.id === "learn"), stone: s.i, board: true }; bestD = d; } }
   if ((best && best.id) !== (near && near.id) || (best && best.stone) !== (near && near.stone) || (best && best.monk) !== (near && near.monk)) { near = best; showPrompt(near); }
   // while he is doing something the prompt steps aside, and stays aside until he has walked on a little
-  const busy = alms.t >= 0 || kraap.t >= 0 || shoes.t >= 0 || wai.t >= 0 || sit.on || feed.t >= 0;
+  const busy = alms.t >= 0 || kraap.t >= 0 || shoes.t >= 0 || wai.t >= 0 || sit.on || feed.t >= 0 || merit.t >= 0;
   if (busy) promptRest = { x: player.x, z: player.z };
   else if (promptRest && Math.hypot(player.x - promptRest.x, player.z - promptRest.z) > 0.6) promptRest = null;
   if (!!promptRest !== promptAway) { promptAway = !!promptRest; $("prompt").classList.toggle("away", promptAway); }
@@ -2795,7 +3044,7 @@ document.fonts.load("64px Itim").then(() => document.fonts.load("36px Mali")).ca
 });
 camYaw = 0; camera.position.set(0, 8, 105);
 restoreSpot(); // back from a page of the site: stand where you were
-if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, gardenSpots, paths, floors, ponds, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startKathin, kathinSpots, feed, startFeed, fishes, food, onBridge, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
+if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, gardenSpots, paths, floors, ponds, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startKathin, kathinSpots, feed, startFeed, fishes, food, onBridge, merit, startMerit, meritHere, broom, fallenLeaves, altars, gildImage, bodhiBands, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
 Promise.race([Promise.all(propJobs), new Promise((r) => setTimeout(r, 7000))]).then(() => {
   $("loading").hidden = true;
   canvas.focus();
