@@ -141,12 +141,17 @@ const WHEEL_IMAGE = {
  * "awaiting details" and the donation form stays disabled. Never put sample or
  * made-up account details here.
  */
+// Details provided by the temple team (Arnon, 12 Oct 2026), from the SCB account certificate.
 const SUPPORT = {
-  recipient: null,      // e.g. { th: "ชื่อผู้รับเงิน / มูลนิธิ", en: "Recipient name" }
+  recipient: { th: "นาย วัฒพงษ์ น้อยเวียง (บัญชีบุคคล สำหรับพัฒนาและสร้างวัด)", en: "Mr. Watthapong Noiwiang (an individual's account, for the temple's development and construction)" },
   promptpayQr: null,    // path to the team's real PromptPay QR image, e.g. "img/promptpay-qr.png"
   promptpayId: null,    // PromptPay phone or tax ID as text, shown with a copy button
-  bank: null,           // e.g. { bank: "ธนาคาร…", name: "ชื่อบัญชี", number: "xxx-x-xxxxx-x" }
-  taxNote: null,        // e.g. { th: "…", en: "…" } about tax receipts, if any
-  retentionDays: null,  // how long slips are kept before deletion, e.g. 365
-  contact: null,        // e.g. "email@example.org" for privacy or deletion requests
+  bank: {
+    bank: { th: "ธนาคารไทยพาณิชย์ (SCB) สาขาชลบุรี · บัญชีออมทรัพย์ (ออนไลน์)", en: "Siam Commercial Bank (SCB), Chonburi branch · savings account (online)" },
+    name: { th: "นาย วัฒพงษ์ น้อยเวียง", en: "Mr. Watthapong Noiwiang (นาย วัฒพงษ์ น้อยเวียง)" },
+    number: "505-413777-8",
+  },
+  taxNote: { th: "ไม่สามารถนำไปลดหย่อนภาษีได้ เนื่องจากเป็นบัญชีบุคคลสำหรับพัฒนาและสร้างวัด จึงออกใบเสร็จเพื่อลดหย่อนภาษีไม่ได้", en: "Not tax-deductible: this is an individual's account for the project's development and construction, so official tax-deductible receipts can't be issued." },
+  retentionDays: 90,    // slips are kept 90 days for accounting and audit verification, then deleted
+  contact: null,        // e.g. "email@example.org" for privacy or deletion requests (not yet provided)
 };

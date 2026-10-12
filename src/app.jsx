@@ -875,10 +875,11 @@ function Support() {
       <div className="step">
         <h2>① {t(UI("โอนเงิน", "Make the transfer"))}</h2>
         {S.recipient ? <p>{t(UI("ผู้รับเงิน", "Recipient"))}: <strong>{t(S.recipient)}</strong></p> : waiting}
+        {(S.promptpayQr || S.promptpayId) && (
         <div className="row" role="tablist">
           <button role="tab" aria-selected={method === "promptpay"} className={"chip" + (method === "promptpay" ? " on" : "")} onClick={() => setMethod("promptpay")}>📱 PromptPay / QR</button>
           <button role="tab" aria-selected={method === "bank"} className={"chip" + (method === "bank" ? " on" : "")} onClick={() => setMethod("bank")}>🏦 {t(UI("โอนผ่านธนาคาร", "Bank transfer"))}</button>
-        </div>
+        </div>)}
         {method === "promptpay" && (S.promptpayQr || S.promptpayId ? (
           <div className="pay">
             {S.promptpayQr && <img className="qr" src={S.promptpayQr} alt={t(UI("คิวอาร์โค้ดพร้อมเพย์ของวัด", "The temple's PromptPay QR code"))} />}
@@ -887,8 +888,8 @@ function Support() {
           </div>) : waiting)}
         {method === "bank" && (S.bank ? (
           <dl className="pay bank">
-            <dt>{t(UI("ธนาคาร", "Bank"))}</dt><dd>{S.bank.bank}</dd>
-            <dt>{t(UI("ชื่อบัญชี", "Account name"))}</dt><dd>{S.bank.name}</dd>
+            <dt>{t(UI("ธนาคาร", "Bank"))}</dt><dd>{t(S.bank.bank)}</dd>
+            <dt>{t(UI("ชื่อบัญชี", "Account name"))}</dt><dd>{t(S.bank.name)}</dd>
             <dt>{t(UI("เลขที่บัญชี", "Account number"))}</dt><dd><strong className="mono">{S.bank.number}</strong> <Copy text={S.bank.number.replace(/\D/g, "")} /></dd>
           </dl>) : waiting)}
       </div>
@@ -907,7 +908,7 @@ function Support() {
         </label>
         {file && !fileOk && <p className="notice" role="alert">{t(UI("ใช้ได้เฉพาะรูปหรือ PDF ขนาดไม่เกิน 8 MB", "Only images or PDFs up to 8 MB"))}</p>}
         {preview && <img className="slip-preview" src={preview} alt={t(UI("ตัวอย่างสลิปที่เลือก", "Preview of the chosen slip"))} />}
-        <p className="quiet">{t(UI("สลิปมีชื่อและเลขบัญชีของคุณ เราใช้เพื่อยืนยันการโอนเท่านั้น", "Your slip shows your name and account number. We use it only to confirm the transfer."))}</p>
+        <p className="quiet">{t(UI("สลิปมีชื่อและเลขบัญชีของคุณ เราใช้เพื่อยืนยันการโอน การทำบัญชีและการตรวจสอบเท่านั้น", "Your slip shows your name and account number. We use it only to confirm the transfer and for accounting and audit checks."))}</p>
         <label className="fb-field" htmlFor="d-note">{t(UI("ข้อความถึงวัด (ไม่ใส่ก็ได้)", "A message to the temple (optional)"))}<textarea id="d-note" rows={2} maxLength={500} value={f.note} onChange={set("note")} /></label>
         <label className="fb-field" htmlFor="d-email">{t(UI("อีเมลสำหรับแจ้งผลการตรวจ (ไม่ใส่ก็ได้)", "Email to hear when it's verified (optional)"))}<input id="d-email" type="email" value={f.email} onChange={set("email")} autoComplete="email" /></label>
         {!f.anonymous && (
@@ -919,9 +920,14 @@ function Support() {
         )}
         <label className="toggle"><input type="checkbox" checked={f.adult} onChange={set("adult")} /> <span>{t(UI("ฉันอายุ 18 ปีขึ้นไป หรือได้รับอนุญาตจากผู้ปกครอง", "I'm 18 or older, or have a parent's or guardian's permission"))} *</span></label>
         <label className="toggle consent"><input type="checkbox" checked={f.consent} onChange={set("consent")} /> <span>
-          {t(UI("ฉันยินยอมให้ผู้ดูแลวัดเก็บข้อมูลและสลิปนี้ เพื่อยืนยันการโอนและขอบคุณเท่านั้น", "I agree that the temple caretakers may keep this information and slip, only to verify the transfer and thank me"))}
-          {" "}({t(UI("เก็บไว้", "kept for"))} {S.retentionDays ? `${S.retentionDays} ${t(UI("วัน", "days"))}` : "…"}{t(UI(" ขอลบได้ที่ ", "; request deletion at "))}{S.contact || "…"}) *</span></label>
-        {!ready && <p className="notice"><Tag kind="unknown" /> {t(UI("ยังส่งไม่ได้: รอข้อมูลบัญชี ผู้รับเงิน ระยะเวลาเก็บข้อมูล และช่องทางติดต่อจริงจากทีม", "Can't be sent yet: awaiting the real account, recipient, retention period and contact from the team."))}</p>}
+          {t(UI("ฉันยินยอมให้ผู้ดูแลวัดเก็บข้อมูลและสลิปนี้ เพื่อยืนยันการโอน การทำบัญชีและการตรวจสอบ และเพื่อขอบคุณเท่านั้น", "I agree that the temple caretakers may keep this information and slip, only to verify the transfer, for accounting and audit checks, and to thank me"))}
+          {" "}({t(UI("เก็บไว้", "kept for"))} {S.retentionDays ? `${S.retentionDays} ${t(UI("วัน แล้วลบทิ้ง", "days, then deleted"))}` : "…"}{t(UI(" ขอลบได้ที่ ", "; request deletion at "))}{S.contact || "…"}) *</span></label>
+        {!ready && <p className="notice"><Tag kind="unknown" /> {t(UI("ยังส่งไม่ได้: รอข้อมูลจริงจากทีม", "Can't be sent yet: awaiting from the team"))}: {[
+          !(S.promptpayQr || S.promptpayId || S.bank) && t(UI("บัญชีรับเงิน", "the account")),
+          !S.recipient && t(UI("ชื่อผู้รับเงิน", "the recipient")),
+          !S.retentionDays && t(UI("ระยะเวลาเก็บข้อมูล", "the retention period")),
+          !S.contact && t(UI("ช่องทางติดต่อสำหรับขอลบข้อมูล", "a contact for deletion requests")),
+        ].filter(Boolean).join(", ")}</p>}
         {state === "error" && <p className="notice" role="alert">{t(UI("ส่งไม่สำเร็จ ลองอีกครั้ง", "Couldn't send. Please try again."))}</p>}
         <div className="row"><button type="submit" className="btn big" disabled={!valid}>{state === "sending" ? t(UI("กำลังส่ง…", "Sending…")) : t(UI("ส่งการแจ้งโอน", "Send transfer notice"))}</button></div>
         <p className="quiet">* {t(UI("จำเป็นต้องกรอก", "required"))}</p>
