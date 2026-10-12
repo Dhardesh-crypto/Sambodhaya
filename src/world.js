@@ -551,7 +551,7 @@ function shrine(h, monks = [], { gifts = false } = {}) {
         along the side walls that open the matching lesson ---- */
 {
   const h = salas.learn;
-  shrine(h, [["monk-elder", -2.6], ["monk-young", 2.6]], { gifts: true }); // the main hall: Kathina is offered here
+  shrine(h, [["monk-elder", -2.6], ["monk", 2.6], ["monk-young", 4.6]], { gifts: true }); // the main hall, where the monks sit: Kathina is offered here
   const spots = [["left", 4.2], ["left", 2.2], ["left", 0.2], ["left", -1.8], ["right", -1.8], ["right", 0.2], ["right", 2.2], ["right", 4.2]];
   spots.forEach(([side, u], i) => {
     const tex = boardTexture({ head: tx("เรื่องที่ ", "Story ") + (i + 1), icon: "👣", title: L === "en" ? JOURNEY[i][1] : JOURNEY[i][0], foot: tx("เดินมาใกล้ ๆ แล้วกด E", "Walk close and press E") });
@@ -600,7 +600,7 @@ function shrine(h, monks = [], { gifts = false } = {}) {
 /* ---- Universal Hall: languages and access, with the hall's shrine ---- */
 {
   const h = salas.access, { g, FY, W, D } = h;
-  shrine(h, [["monk-elder", -2.6], ["monk", 2.6], ["monk-young", 4.6]]);
+  shrine(h); // the teachers' seats stand ready; the monks sit in the Learning Hall
   // the hall's own board moves to the side wall
   wallBoard(h, "left", 0.6, boardTexture({ head: tx("ศาลาสากล", "Universal Hall"), icon: "🌍", title: "ภาษาไทย · English", foot: tx("เลือกภาษา ขนาดตัวอักษร และการเคลื่อนไหวได้ในหน้าเว็บของศาลานี้", "Choose language and motion settings on this hall's web page"), wide: true }), 2.8, 2.33, 2.6);
   props("potplant", 1.6, [[-W / 2 + 1, D / 2 - 1, 2, FY], [W / 2 - 1, D / 2 - 1, 3, FY]], { parent: g });
