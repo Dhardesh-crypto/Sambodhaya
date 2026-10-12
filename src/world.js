@@ -204,7 +204,8 @@ const BRIDGE = { zc: (MOAT.r1 + MOAT.r2) / 2, half: (MOAT.r2 - MOAT.r1) / 2 + 2 
   [MOAT.r1, MOAT.r2].forEach((r) => { const b = add(new THREE.CylinderGeometry(r, r, bankH, 128, 1, true), P("mossy_rock", 40, 0.6), 0, MOAT.bed / 2, 0, scene, false); b.material.side = THREE.DoubleSide; });
   const bed = new THREE.Mesh(new THREE.RingGeometry(MOAT.r1, MOAT.r2, 128, 1), S(0x3d4a35, { roughness: 1 }));
   bed.rotation.x = -Math.PI / 2; bed.position.y = MOAT.bed; scene.add(bed);
-  const water = new THREE.Mesh(new THREE.RingGeometry(MOAT.r1, MOAT.r2, 128, 1), MAT.water);
+  const water = new THREE.Mesh(new THREE.RingGeometry(MOAT.r1, MOAT.r2, 128, 1), MAT.water.clone()); // clearer than the ponds: the fish show beneath it
+  water.material.opacity = 0.58; water.renderOrder = 2;
   water.rotation.x = -Math.PI / 2; water.position.y = MOAT.water; scene.add(water);
   // a few lotus pads drifting in the moat
   for (let i = 0; i < 70; i++) {
@@ -1002,6 +1003,126 @@ const gardenSpots = []; // (for ?debug checks)
   taken.forEach((t) => { gardenSpots.push(t); });
 }
 
+/* ---------------- fish in the moat, fed from the bridge ---------------- */
+// Koi and golden carp swim the moat, each patrolling its own stretch (more of them live near the bridge).
+// Standing on the bridge and pressing E, the boy goes to the rail and tosses three handfuls of fish food:
+// the pellets arc down and ripple where they land, and the fish nearby hurry over, crowd at the surface and
+// nibble, then drift back to their stretch.
+const FISH_LEN = 0.95, FISH_DEPTH = 0.16; // a fish's length (at this scale); how far under the surface they swim
+const fishes = [], ripples = [], pellets = [];
+const feed = { t: -1, side: 1, stand: null, faceYaw: 0, spot: null, until: -1, thrown: 0 };
+const FEED_DUR = 4.6, FEED_TOSSES = [1.0, 2.2, 3.4];
+const FISH_PLACE = { id: "fish", icon: "🐟", th: "ให้อาหารปลา", en: "Feed the fish", sub: ["โปรยอาหารจากสะพาน", "Toss food from the bridge"] };
+{
+  const n = HIGH ? 36 : 16, bridgeA = Math.PI / 2; // the bridge crosses the moat at +z
+  for (let i = 0; i < n; i++) {
+    const home = i < n * 0.4 ? bridgeA + (i / (n * 0.4) - 0.5) * 0.7 : (i / n) * Math.PI * 2 * 3.7; // 40% near the bridge
+    const f = { kind: i % 3 === 2 ? "fish-gold" : "fish-koi", home, a: home + (Math.random() - 0.5) * 0.3, rr: MOAT.r1 + 1.2 + Math.random() * (MOAT.r2 - MOAT.r1 - 2.4),
+      span: 0.12 + Math.random() * 0.18, speed: 0.6 + Math.random() * 0.5, ph: Math.random() * 10, dir: Math.random() < 0.5 ? 1 : -1,
+      o: new THREE.Group(), pos: new THREE.Vector3(), heading: 0, eating: false, goal: null };
+    f.pos.set(Math.cos(f.a) * f.rr, MOAT.water - FISH_DEPTH, Math.sin(f.a) * f.rr);
+    scene.add(f.o); fishes.push(f);
+  }
+  ["fish-koi", "fish-gold"].forEach((kind) => loadProp(kind).then((src) => {
+    if (!src) return;
+    // the model's length is laid along +z (its head forward), scaled to a fish's length
+    const box = new THREE.Box3().setFromObject(src), size = box.getSize(new THREE.Vector3());
+    const along = size.x >= size.z ? "x" : "z", base = src.clone(); base.scale.setScalar(FISH_LEN / Math.max(size.x, size.z));
+    if (along === "x") base.rotation.y = FISH_TURN; else base.rotation.y = FISH_TURN - Math.PI / 2;
+    const holder = new THREE.Group(); holder.add(base);
+    const b2 = new THREE.Box3().setFromObject(holder), c = b2.getCenter(new THREE.Vector3()); base.position.sub(c); // centred on its body
+    fishes.filter((f) => f.kind === kind).forEach((f) => { const m = holder.clone(); m.traverse((o) => { if (o.isMesh) o.castShadow = false; }); f.o.add(m); });
+  }));
+}
+const FISH_TURN = Math.PI / 2; // with the models' own facing, this points their heads where they swim (checked from the side)
+const pelletGeo = new THREE.SphereGeometry(0.045, 6, 4), pelletMat = S(0x8a5a2b, { roughness: 1 });
+const rippleGeo = new THREE.RingGeometry(0.85, 1, 32), rippleMat = new THREE.MeshBasicMaterial({ color: 0xe8f6ff, transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide });
+function addRipple(x, z, size = 0.6) { const m = new THREE.Mesh(rippleGeo, rippleMat.clone()); m.rotation.x = -Math.PI / 2; m.position.set(x, MOAT.water + 0.02, z); m.userData = { t: 0, size }; scene.add(m); ripples.push(m); }
+const onBridge = (x, z) => Math.abs(x) < ROAD / 2 - 0.4 && Math.abs(z - BRIDGE.zc) < BRIDGE.half - 1.2;
+function startFeed() {
+  if (feed.t >= 0 || alms.t >= 0 || kraap.t >= 0 || !onBridge(player.x, player.z)) return;
+  if (sit.on) { sit.on = false; sit.rise = 0; sit.faceYaw = null; }
+  wai.t = -1;
+  const side = player.x >= 0 ? 1 : -1, z = Math.max(BRIDGE.zc - 2.5, Math.min(BRIDGE.zc + 2.5, player.z));
+  feed.side = side; feed.stand = { x: side * (ROAD / 2 - 1.2), z }; feed.faceYaw = side > 0 ? Math.PI / 2 : -Math.PI / 2;
+  feed.spot = new THREE.Vector3(side * (ROAD / 2 + 2.6), MOAT.water, z); feed.t = 0; feed.thrown = 0;
+  if (player.mixer) playClip("idle", 0.4);
+}
+// the throwing arm: back beside the shoulder, then forward and up, the food leaving the hand at the top
+const tossW = (t) => { for (const t0 of FEED_TOSSES) { const u = (t - t0) / 1.0; if (u >= 0 && u <= 1) return { u, w: smooth(0, 0.2, u) * (1 - smooth(0.75, 1, u)) }; } return { u: 0, w: 0 }; };
+function poseFeed(model, B) {
+  const { u, w } = tossW(feed.t); if (w <= 0.001) return;
+  const up = new THREE.Vector3(0, 1, 0), fwd = new THREE.Vector3(Math.sin(player.yaw), 0, Math.cos(player.yaw)), side = new THREE.Vector3().crossVectors(up, fwd);
+  const shoulder = B.RightArm.getWorldPosition(new THREE.Vector3()), scale = model.getWorldScale(new THREE.Vector3()).y;
+  const back = shoulder.clone().addScaledVector(up, 0.05 * scale).addScaledVector(fwd, 0.1 * scale).addScaledVector(side, -0.25 * scale);
+  const out = shoulder.clone().addScaledVector(up, 0.2 * scale).addScaledVector(fwd, 0.75 * scale).addScaledVector(side, 0.05 * scale);
+  const target = back.lerp(out, smooth(0.3, 0.58, u));
+  const shape = handShape(model); if (!shape) return;
+  const hs = shape.Right, Q = basisQuat(hs.finger, hs.palm, fwd.clone().addScaledVector(up, 0.3).normalize(), up.clone().negate().addScaledVector(fwd, 0.3).normalize());
+  armTo(B, "Right", target, Q, new THREE.Vector3().addScaledVector(up, -1).addScaledVector(side, -0.6), w);
+  feed.hand = B.RightHand.getWorldPosition(new THREE.Vector3());
+}
+function feedStep(dt) {
+  if (feed.t >= 0) {
+    feed.t += dt;
+    if (feed.t < 0.8) { player.x += (feed.stand.x - player.x) * Math.min(1, dt * 8); player.z += (feed.stand.z - player.z) * Math.min(1, dt * 8); }
+    let dy = feed.faceYaw - player.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); player.yaw += dy * Math.min(1, dt * 8);
+    // each toss lets go of a handful of pellets, which arc down onto the water
+    const k = FEED_TOSSES.findIndex((t0) => feed.t >= t0 + 0.55 && feed.t - dt < t0 + 0.55);
+    if (k >= 0 && feed.hand) {
+      for (let i = 0; i < 9; i++) {
+        const m = new THREE.Mesh(pelletGeo, pelletMat); m.position.copy(feed.hand); scene.add(m);
+        const aim = feed.spot.clone().add(new THREE.Vector3((Math.random() - 0.5) * 1.6, 0, (Math.random() - 0.5) * 2.2));
+        const T = 0.75 + Math.random() * 0.2, v = aim.sub(m.position).multiplyScalar(1 / T); v.y += 0.5 * 9.8 * T; // land at aim after T seconds
+        pellets.push({ m, v });
+      }
+      feed.until = feed.t + 9; feed.thrown++;
+    }
+    if (feed.t > FEED_DUR) { feed.t = -1; feed.hand = null; feedLeft = 8; }
+  } else if (feedLeft > 0) feedLeft -= dt;
+  // pellets fall; where they meet the water they ripple and become food
+  for (let i = pellets.length - 1; i >= 0; i--) {
+    const q = pellets[i]; q.v.y -= 9.8 * dt; q.m.position.addScaledVector(q.v, dt);
+    if (q.m.position.y <= MOAT.water) { addRipple(q.m.position.x, q.m.position.z, 0.35); food.push({ x: q.m.position.x, z: q.m.position.z, left: 6 + Math.random() * 3 }); scene.remove(q.m); pellets.splice(i, 1); }
+  }
+  for (let i = food.length - 1; i >= 0; i--) { food[i].left -= dt; if (food[i].left <= 0) food.splice(i, 1); }
+  for (let i = ripples.length - 1; i >= 0; i--) { const r = ripples[i], d = r.userData; d.t += dt; const s = d.size * (0.3 + d.t * 1.6); r.scale.set(s, s, s); r.material.opacity = 0.6 * Math.max(0, 1 - d.t / 1.2); if (d.t > 1.2) { scene.remove(r); r.material.dispose(); ripples.splice(i, 1); } }
+}
+let feedLeft = 0; const food = [];
+// the fish: patrol their stretch of the moat; when there is food nearby they hurry over and nibble at the surface
+let fishTime = 0;
+function fishStep(dt) {
+  fishTime += dt; const calm = settings.calmMotion ? 0.5 : 1;
+  for (const f of fishes) {
+    let goal = null;
+    if (food.length) { let best = 26; for (const q of food) { const d = Math.hypot(q.x - f.pos.x, q.z - f.pos.z); if (d < best) { best = d; goal = q; } } }
+    if (goal) {
+      // to the food, quickly, and up to the surface to take it
+      const tx = goal.x + Math.sin(f.ph * 7) * 0.5, tz = goal.z + Math.cos(f.ph * 5) * 0.5;
+      const dx = tx - f.pos.x, dz = tz - f.pos.z, d = Math.hypot(dx, dz) || 1, sp = Math.min(d, 2.6 * dt);
+      f.pos.x += dx / d * sp; f.pos.z += dz / d * sp;
+      const want = Math.atan2(dx, dz); let dh = want - f.heading; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); f.heading += dh * Math.min(1, dt * 5);
+      f.pos.y += ((d < 1.5 ? MOAT.water - 0.03 : MOAT.water - FISH_DEPTH) - f.pos.y) * Math.min(1, dt * 3);
+      f.eating = d < 1.5;
+      const rr = Math.hypot(f.pos.x, f.pos.z); f.rr = Math.max(MOAT.r1 + 0.8, Math.min(MOAT.r2 - 0.8, rr)); f.a = Math.atan2(f.pos.z, f.pos.x); // where it is now
+      if (f.eating && Math.random() < dt * 0.8) addRipple(f.pos.x, f.pos.z, 0.25);
+    } else {
+      // patrolling: along the ring, turning back at the ends of its stretch
+      f.eating = false;
+      f.a += f.dir * f.speed * calm * dt / f.rr;
+      if (Math.abs(Math.atan2(Math.sin(f.a - f.home), Math.cos(f.a - f.home))) > f.span * 3) f.dir = Math.sign(Math.atan2(Math.sin(f.home - f.a), Math.cos(f.home - f.a)));
+      const rr = f.rr + Math.sin(fishTime * 0.3 + f.ph) * 0.8;
+      const nx = Math.cos(f.a) * rr, nz = Math.sin(f.a) * rr;
+      const want = Math.atan2(nx - f.pos.x, nz - f.pos.z); if (Math.hypot(nx - f.pos.x, nz - f.pos.z) > 1e-4) { let dh = want - f.heading; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); f.heading += dh * Math.min(1, dt * 3); }
+      f.pos.x += (nx - f.pos.x) * Math.min(1, dt * 2); f.pos.z += (nz - f.pos.z) * Math.min(1, dt * 2);
+      f.pos.y += ((MOAT.water - FISH_DEPTH) - f.pos.y) * Math.min(1, dt * 1.5);
+    }
+    // the body sways as the tail beats (faster when hurrying or eating)
+    const beat = f.eating || goal ? 9 : 4;
+    f.o.position.copy(f.pos); f.o.rotation.set(f.eating ? -0.25 : 0, f.heading + Math.sin(fishTime * beat * calm + f.ph) * 0.18, 0);
+  }
+}
+
 /* ---------------- day and night ---------------- */
 // Night: a dark blue sky with stars and a moon, soft moonlight instead of the sun, every lamp post lit (a warm
 // glow at its head and a pool of light on the ground), the halls lit from inside and their lanterns glowing.
@@ -1715,6 +1836,7 @@ function poseOverlays(model, hands, bow, sitW) {
   if (kraap.t >= 0 && kraap.spot) { waiBegin(B); poseKraap(model, B, kraapState(kraap.t)); waiMark(B); return; }
   if (alms.t >= 0 && alms.m) { waiBegin(B); poseAlms(model, B, almsState(alms.t)); waiMark(B); return; }
   if (shoes.t >= 0) { waiBegin(B); poseShoes(model, B, shoes.t); waiMark(B); return; }
+  if (feed.t >= 0) { waiBegin(B); poseFeed(model, B); waiMark(B); return; }
   if (hands <= 0 && bow <= 0 && sitW <= 0.001) { waiEnd(B); return; }
   waiBegin(B);
   if (sitW > 0.001) poseSit(model, B, sitW);
@@ -2179,7 +2301,7 @@ function showPrompt(p) {
   if (!p) { el.hidden = true; return; }
   $("prompt-name").textContent = p.icon + " " + placeName(p);
   $("prompt-sub").textContent = p.stone != null ? (p.board ? tx("ป้ายเรื่องที่ ", "Story board ") : tx("เรื่องที่ ", "Story ")) + (p.stone + 1) : p.sub[L === "en" ? 1 : 0];
-  $("prompt-go").textContent = p.id === "bell" ? tx("ตี", "Strike") : p.id === "donate" ? tx("เปิด", "Open") : p.id === "alms" ? tx("ใส่บาตร", "Offer") : p.id === "kathin" ? tx("ถวาย", "Offer") : tx("เข้า", "Visit");
+  $("prompt-go").textContent = p.id === "bell" ? tx("ตี", "Strike") : p.id === "donate" ? tx("เปิด", "Open") : p.id === "alms" ? tx("ใส่บาตร", "Offer") : p.id === "fish" ? tx("ให้อาหาร", "Feed") : p.id === "kathin" ? tx("ถวาย", "Offer") : tx("เข้า", "Visit");
   el.hidden = false;
 }
 $("prompt-go").addEventListener("click", () => near && openPlace(near));
@@ -2233,6 +2355,7 @@ function openPlace(p) {
   if (p.id === "bell") { ringBell(); return; }
   if (p.id === "donate") { openDonate(); return; }
   if (p.id === "alms") { startAlms(p.monk); return; }
+  if (p.id === "fish") { startFeed(); return; }
   if (p.id === "kathin") { startKathin(p.hall); return; }
   if (p.stone != null) {
     const n = p.stone + 1;
@@ -2394,6 +2517,7 @@ function tick() {
 // one step of the world: movement, animation, camera and the picture
 function frame(dt) {
   placeLampLights(dt);
+  feedStep(dt); fishStep(dt);
   monkTime += dt;
   if (!settings.calmMotion) for (const m of monkFigures) { const b = Math.sin(monkTime * 1.25 + m.ph); m.o.scale.set(1 + b * 0.004, 1 + b * 0.008, 1 + b * 0.004); } // slow breathing
   // movement relative to the camera
@@ -2402,7 +2526,7 @@ function frame(dt) {
     if (keys.KeyW || keys.ArrowUp) fz -= 1; if (keys.KeyS || keys.ArrowDown) fz += 1;
     if (keys.KeyA || keys.ArrowLeft) fx -= 1; if (keys.KeyD || keys.ArrowRight) fx += 1;
     fx += joy.x; fz += joy.y;
-    if ((keys.Space) && !sit.on && sit.rise <= 0 && kraap.t < 0 && alms.t < 0 && shoes.t < 0 && player.y <= groundAt(player.x, player.z) + 0.01) player.vy = 9;
+    if ((keys.Space) && !sit.on && sit.rise <= 0 && kraap.t < 0 && alms.t < 0 && shoes.t < 0 && feed.t < 0 && player.y <= groundAt(player.x, player.z) + 0.01) player.vy = 9;
   }
   if (kraap.t >= 0) { // paying tribute: stay put (it ends by itself); glide to the spot and face the image first
     fx = fz = 0;
@@ -2428,6 +2552,7 @@ function frame(dt) {
       if (!p || Math.hypot(p.x - player.x, p.z - player.z) > 1.0) startShoes("on", { x: player.x, z: player.z });
     }
   }
+  if (feed.t >= 0) fx = fz = 0; // feeding the fish: at the rail until the last handful is thrown
   if (alms.t >= 0) { // giving alms: stay put (it ends by itself); step up to the monk and face him first
     fx = fz = 0;
     if (alms.t < 0.8) { player.x += (alms.spot.x - player.x) * Math.min(1, dt * 8); player.z += (alms.spot.z - player.z) * Math.min(1, dt * 8); }
@@ -2477,7 +2602,7 @@ function frame(dt) {
       player.model.position.y = -1.05 * sit.w + (sit.spot ? sit.spot.top * sit.w : 0);
     } else if (player.model.position.y < 0) player.model.position.y = 0;
   } else if (player.mixer) {
-    if (kraap.t >= 0 || alms.t >= 0 || shoes.t >= 0) playClip("idle", 0.4);
+    if (kraap.t >= 0 || alms.t >= 0 || shoes.t >= 0 || feed.t >= 0) playClip("idle", 0.4);
     else if (sit.on && player.clips.sit) playClip("sit", 1.2);
     else if (sit.rise > 0) playClip("idle", 1.0);
     else playClip(!moving ? "idle" : player.clips.run && speed > 5 ? "run" : player.clips.walk ? "walk" : "idle");
@@ -2529,14 +2654,14 @@ function frame(dt) {
     const fx2 = -Math.sin(camYaw), fz2 = -Math.cos(camYaw), rx = Math.cos(camYaw), rz = -Math.sin(camYaw);
     let bx = player.x + fx2 * 1.4 - rx * 2.6, bz = player.z + fz2 * 1.4 - rz * 2.6;
     // during the ceremonies (sitting, paying respect, Kathina, giving alms and its wai) the dog sits at his left side, facing the same way
-    const ceremony = sit.on || kraap.t >= 0 || alms.t >= 0 || (wai.t >= 0 && wai.fromAlms);
+    const ceremony = sit.on || kraap.t >= 0 || alms.t >= 0 || (wai.t >= 0 && wai.fromAlms) || feed.t >= 0;
     if (ceremony) {
       // beside where he will be for the whole ceremony (the bowing spot, the spot before the monk), so the dog
       // sits down once and stays down while he steps up or moves back on his knees
-      const k = kraap.t >= 0 ? kraap : null, al = !k && (alms.t >= 0 || wai.fromAlms) ? alms : null;
-      const at = k ? (k.kathin && k.keys ? k.kathin.far : k.spot) : al ? al.spot : null;
+      const k = kraap.t >= 0 ? kraap : null, al = !k && (alms.t >= 0 || wai.fromAlms) ? alms : null, fd = feed.t >= 0 ? feed : null;
+      const at = k ? (k.kathin && k.keys ? k.kathin.far : k.spot) : al ? al.spot : fd ? fd.stand : null;
       const ax = at ? at.x : player.x, az = at ? at.z : player.z;
-      const ay = k && k.faceYaw != null ? k.faceYaw : al ? al.faceYaw : player.yaw;
+      const ay = k && k.faceYaw != null ? k.faceYaw : al ? al.faceYaw : fd ? fd.faceYaw : player.yaw;
       bx = ax + Math.cos(ay) * 1.5 + Math.sin(ay) * 0.2; bz = az - Math.sin(ay) * 1.5 + Math.cos(ay) * 0.2;
     }
     const ddx = bx - dog.x, ddz = bz - dog.z, dd = Math.hypot(ddx, ddz);
@@ -2563,11 +2688,12 @@ function frame(dt) {
   if (Math.hypot(player.x - BELL[0], player.z - BELL[1]) < 4.4 && 3 < bestD) { best = BELL_PLACE; bestD = 3; } // reachable from the road
   { const d = Math.hypot(player.x - DONATE.x, player.z - (DONATE.z + 0.6)); if (d < 2.4 && d < bestD) { best = DONATE_PLACE; bestD = d; } } // only when standing at the box
   { const h = salas.learn; if (h && h.senior && kraap.t < 0) { const sp = kathinSpots(h), d = Math.hypot(player.x - sp.near.x, player.z - sp.near.z); if (d < 1.3 && d < bestD) { best = { ...KATHIN_PLACE, hall: h }; bestD = d; } } }
+  if (onBridge(player.x, player.z) && feed.t < 0 && 2.5 < bestD) { best = FISH_PLACE; bestD = 2.5; }
   for (const m of almsMonks) { const d = Math.hypot(player.x - (m.x + Math.sin(m.yaw) * ALMS_STAND), player.z - (m.z + Math.cos(m.yaw) * ALMS_STAND)); if (d < 1.5 && d < bestD) { best = { ...ALMS_PLACE, monk: m }; bestD = d; } }
   for (const s of boards) { const d = Math.hypot(player.x - s.x, player.z - s.z); if (d < 1.9 && d < bestD) { best = { ...PLACES.find((p) => p.id === "learn"), stone: s.i, board: true }; bestD = d; } }
   if ((best && best.id) !== (near && near.id) || (best && best.stone) !== (near && near.stone) || (best && best.monk) !== (near && near.monk)) { near = best; showPrompt(near); }
   // while he is doing something the prompt steps aside, and stays aside until he has walked on a little
-  const busy = alms.t >= 0 || kraap.t >= 0 || shoes.t >= 0 || wai.t >= 0 || sit.on;
+  const busy = alms.t >= 0 || kraap.t >= 0 || shoes.t >= 0 || wai.t >= 0 || sit.on || feed.t >= 0;
   if (busy) promptRest = { x: player.x, z: player.z };
   else if (promptRest && Math.hypot(player.x - promptRest.x, player.z - promptRest.z) > 0.6) promptRest = null;
   if (!!promptRest !== promptAway) { promptAway = !!promptRest; $("prompt").classList.toggle("away", promptAway); }
@@ -2605,7 +2731,7 @@ document.fonts.load("64px Itim").then(() => document.fonts.load("36px Mali")).ca
 });
 camYaw = 0; camera.position.set(0, 8, 105);
 restoreSpot(); // back from a page of the site: stand where you were
-if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, gardenSpots, paths, floors, ponds, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startKathin, kathinSpots, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
+if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, gardenSpots, paths, floors, ponds, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startKathin, kathinSpots, feed, startFeed, fishes, food, onBridge, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
 Promise.race([Promise.all(propJobs), new Promise((r) => setTimeout(r, 7000))]).then(() => {
   $("loading").hidden = true;
   canvas.focus();
