@@ -3095,9 +3095,9 @@ $("btn-help").addEventListener("click", () => openDialog(tx("❔ วิธีเ
    <p class="note">${tx("ที่นี่ไม่มีคะแนน ไม่มีของให้เก็บ และไม่มีการแข่งขัน เดินดูตามสบาย และออกได้ทุกเมื่อที่ประตูขวา", "There are no points, nothing to collect and no competition here. Walk around as you like, and leave any time by the right-hand gate.")}</p>
    <div class="row"><button class="chip" data-close>${tx("ปิด", "Close")}</button></div>`));
 const qBtn = $("btn-quality");
-qBtn.querySelector(".label").textContent = HIGH ? tx("ภาพสวย", "Detailed") : tx("ภาพเบา", "Light");
+qBtn.querySelector(".label").textContent = HIGH ? tx("ภาพ: ละเอียด", "Graphics: detailed") : tx("ภาพ: เบา", "Graphics: light");
 qBtn.firstChild.textContent = HIGH ? "✨ " : "⚡ ";
-qBtn.title = tx("สลับภาพสวย / ภาพเบา (สำหรับเครื่องที่ช้า)", "Switch detailed / light graphics (for slower devices)");
+qBtn.title = tx("สลับภาพละเอียด / ภาพเบา (ภาพเบาสำหรับเครื่องที่ช้า ไม่มีสวนและเงา)", "Switch detailed / light graphics (light is for slower devices: no garden, no shadows)");
 qBtn.addEventListener("click", () => { write("world-quality", HIGH ? "light" : "high"); location.reload(); });
 // sound button: off every time the page opens; the site-wide "turn off all sound" setting is respected
 $("btn-wai").addEventListener("click", () => { startWai(); canvas.focus(); });
