@@ -3,6 +3,12 @@
 // 2D site, which stays the single place where the teaching content lives.
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { RGBELoader } from "three/addons/loaders/RGBELoader.js";
+import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { VRMLoaderPlugin, VRMUtils } from "@pixiv/three-vrm";
 
 /* ---------------- settings shared with the 2D site ---------------- */
@@ -19,7 +25,7 @@ document.querySelectorAll("[data-th]").forEach((el) => { el.textContent = el.dat
 const PLACES = [
   { id: "yard", icon: "🌳", th: "ลานกลาง", en: "Central Courtyard", sub: ["อยากไปไหนวันนี้?", "Where would you like to go today?"], href: "index.html#yard", pos: [0, 9], r: 9 },
   { id: "library", icon: "📚", th: "หอหลักฐาน · ห้องสมุด", en: "Evidence Library", sub: ["ดูต้นทาง หลักฐาน และสถานะการตรวจ", "Sources, evidence and checking status"], href: "index.html#library", pos: [-30, -16], r: 8 },
-  { id: "learn", icon: "🧘", th: "ศาลาเรียนรู้", en: "Learning Hall", sub: ["เรียน ฝึก และสังเกตไปทีละก้าว", "Learn, practise and observe, one step at a time"], href: "index.html#learn", pos: [-13, -30], r: 8 },
+  { id: "learn", icon: "🧘", th: "ศาลาเรียนรู้", en: "Learning Hall", sub: ["เรียน ฝึก และสังเกตไปทีละก้าว", "Learn, practise and observe, one step at a time"], href: "index.html#learn", pos: [-14, -29.5], r: 5 },
   { id: "media", icon: "🎬", th: "ศาลาสื่อ", en: "Media Hall", sub: ["อ่าน ฟัง หรือดู", "Read, listen or watch"], href: "index.html#media", pos: [13, -30], r: 8 },
   { id: "access", icon: "🌍", th: "ศาลาสากล", en: "Universal Hall", sub: ["หลายภาษาและการเข้าถึง", "Languages and access"], href: "index.html#access", pos: [30, -16], r: 8 },
   { id: "rest", icon: "🪷", th: "พื้นที่พัก", en: "Rest Area", sub: ["พักใจได้เสมอ", "Rest any time"], href: "index.html#rest", pos: [-28, 14], r: 8 },
@@ -36,35 +42,106 @@ const JOURNEY = [
 ];
 
 /* ---------------- renderer, scene, camera ---------------- */
+// Quality: "high" = sunset sky lighting, soft shadows, glow and detailed models; "light" = for weaker phones.
+// Chosen automatically the first time, then remembered on this device only.
+const weak = matchMedia("(pointer: coarse)").matches && (navigator.deviceMemory || 4) <= 4;
+let quality = read("world-quality", weak ? "light" : "high");
+const HIGH = quality === "high";
+
 const canvas = document.getElementById("view");
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: !HIGH, powerPreference: "high-performance" });
+renderer.setPixelRatio(Math.min(devicePixelRatio, HIGH ? 1.75 : 1.25));
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = HIGH ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0xf6dcb0, 70, 190);
-const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 400);
+scene.fog = new THREE.Fog(0xf3d2a4, 80, 210);
+const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 600);
 
 // warm late-afternoon light, like the entrance artwork
-scene.add(new THREE.HemisphereLight(0xfff2d6, 0x6f8f4a, 1.15));
-const sun = new THREE.DirectionalLight(0xffd9a0, 2.1);
-sun.position.set(-40, 60, 30);
+const hemi = new THREE.HemisphereLight(0xfff2d6, 0x6f8f4a, 0.9);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xffd4a0, 2.6);
+sun.position.set(-40, 55, 34);
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
-Object.assign(sun.shadow.camera, { left: -70, right: 70, top: 70, bottom: -70, near: 1, far: 180 });
+sun.shadow.mapSize.set(HIGH ? 4096 : 1024, HIGH ? 4096 : 1024);
+sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.04;
+Object.assign(sun.shadow.camera, { left: -75, right: 75, top: 75, bottom: -75, near: 1, far: 200 });
 scene.add(sun);
 
+// post-processing (high quality only): a soft glow on lanterns and candles
+let composer = null;
+if (HIGH) {
+  composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  composer.addPass(new UnrealBloomPass(new THREE.Vector2(256, 256), 0.3, 0.45, 1.05));
+  composer.addPass(new OutputPass());
+}
+
+/* ---------------- materials: real textures (CC0, Poly Haven) ---------------- */
+const SKY_TURN = -1.8; // turns the sky so its low sun sits behind the entrance, where the shadows come from
+const texLoader = new THREE.TextureLoader();
+const texCache = {};
+function tex(name, kind, rx, ry) {
+  const key = `${name}_${kind}_${rx}_${ry}`;
+  if (texCache[key]) return texCache[key];
+  const t = texLoader.load(`assets/tex/${name}_${kind}.jpg`);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); t.anisotropy = HIGH ? 8 : 2;
+  if (kind === "diff") t.colorSpace = THREE.SRGBColorSpace;
+  return (texCache[key] = t);
+}
+// a textured material; in light mode only the colour map is used
+function P(name, rx, ry, extra = {}) {
+  const o = { map: tex(name, "diff", rx, ry), roughness: 1, ...extra };
+  if (HIGH) { o.normalMap = tex(name, "nor", rx, ry); const arm = tex(name, "arm", rx, ry); o.roughnessMap = arm; o.aoMap = arm; o.normalScale = new THREE.Vector2(0.8, 0.8); }
+  return new THREE.MeshStandardMaterial(o);
+}
+
 const M = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.85, ...extra });
+const S = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.6, ...extra });
 const MAT = {
-  grass: M(0x8fbf5c), stone: M(0xd9c7a5), stoneDark: M(0xb39f7d), wood: M(0x8a5a33), woodDark: M(0x5e3b20),
-  roof: M(0x5d5752), roofEdge: M(0xc9963a, { metalness: 0.3 }), wall: M(0xf3e6cc), gold: M(0xe8b84a, { metalness: 0.4, roughness: 0.5 }),
+  grass: S(0x86b85a, { roughness: 0.95 }), stone: P("brick_pavement_02", 3, 3, { color: new THREE.Color(1.75, 1.5, 1.2) }), stoneDark: M(0xb39f7d), wood: S(0x8a4a2a), woodDark: S(0x4a2a18),
+  roof: P("clay_roof_tiles_02", 0.4, 0.4, { color: 0xffb08a }), roofEdge: S(0xd9a640, { metalness: 0.6, roughness: 0.35 }), wall: P("beige_wall_001", 2, 1, { color: 0xfff4e2 }), gold: S(0xe8b84a, { metalness: 0.7, roughness: 0.3 }),
+  floor: P("brown_planks_05", 4, 4), lacquer: S(0x8e1f17, { roughness: 0.45 }), roofGreen: S(0x2f6b4a, { roughness: 0.5 }),
   leaf: M(0x5f9e4a), leafLight: M(0x7db85a), trunk: M(0x7a5536), water: new THREE.MeshStandardMaterial({ color: 0x6fb6c9, roughness: 0.2, metalness: 0.1, transparent: true, opacity: 0.9 }),
   lotus: M(0xf28fb0), pad: M(0x4d8f45), glow: M(0xffd27a, { emissive: 0xffb84a, emissiveIntensity: 0.9 }), mountain: M(0x9fb0b8), mountainFar: M(0xbcc8cc),
 };
 const add = (geo, mat, x, y, z, parent = scene, cast = true) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = cast; m.receiveShadow = true; parent.add(m); return m; };
 const colliders = []; // circles {x, z, r}
-const blockers = [];  // axis-aligned boxes {minX, maxX, minZ, maxZ}
+const blockers = [];  // rotated boxes {x, z, c, s, hx, hz}
+const floors = [];    // raised floors you can walk onto {minX, maxX, minZ, maxZ, y}
+const camBlock = [];  // meshes the camera must not look through (walls, ceilings)
+const groundAt = (x, z) => { let y = 0; for (const f of floors) if (x > f.minX && x < f.maxX && z > f.minZ && z < f.maxZ) y = Math.max(y, f.y); return y; };
+
+/* ---------------- 3D props made for this temple (assets/models/*.glb) ---------------- */
+// Each prop loads once and is cloned; if a file can't load, the simple shapes stay instead.
+const propLoader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+const propCache = {};
+function loadProp(name) {
+  if (!propCache[name]) propCache[name] = new Promise((res) => propLoader.load(`assets/models/${name}.glb`, (g) => res(g.scene), undefined, () => res(null)));
+  return propCache[name];
+}
+// scale a model so its height is h and stand it on the ground at its centre
+function fitTo(obj, h) {
+  const box = new THREE.Box3().setFromObject(obj), size = box.getSize(new THREE.Vector3());
+  obj.scale.setScalar(h / (size.y || 1));
+  const b2 = new THREE.Box3().setFromObject(obj), c = b2.getCenter(new THREE.Vector3());
+  obj.position.set(-c.x, -b2.min.y, -c.z);
+  const holder = new THREE.Group(); holder.add(obj); return holder;
+}
+const propJobs = [];
+// place copies of a prop: list of [x, z, rotY, y?]; fallback() runs if the model is missing
+function props(name, h, list, { fallback, shadow = true, parent = scene } = {}) {
+  const job = loadProp(name).then((src) => {
+    if (!src) { if (fallback) fallback(); return; }
+    src.traverse((o) => { if (o.isMesh) { o.castShadow = shadow; o.receiveShadow = true; if (o.material) o.material.envMapIntensity = 1; } });
+    const base = fitTo(src, h);
+    list.forEach(([x, z, r = 0, y = 0]) => { const c = base.clone(); c.position.set(x, y, z); c.rotation.y = r; parent.add(c); });
+  });
+  propJobs.push(job); return job;
+}
 
 /* ---------------- sky & far mountains ---------------- */
 {
@@ -72,7 +149,18 @@ const blockers = [];  // axis-aligned boxes {minX, maxX, minZ, maxZ}
   const c = []; const pos = g.attributes.position; const top = new THREE.Color(0x8cc4e8), mid = new THREE.Color(0xfbe3b8), low = new THREE.Color(0xf6c98a);
   for (let i = 0; i < pos.count; i++) { const y = pos.getY(i) / 300; const col = y > 0.15 ? mid.clone().lerp(top, Math.min(1, (y - 0.15) / 0.6)) : low.clone().lerp(mid, (y + 0.2) / 0.35); c.push(col.r, col.g, col.b); }
   g.setAttribute("color", new THREE.Float32BufferAttribute(c, 3));
-  scene.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false })));
+  const dome = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false }));
+  scene.add(dome);
+  // a real sunset sky (CC0 HDRI) lights every surface; the painted dome stays only if it can't load
+  new RGBELoader().load("assets/tex/belfast_sunset_puresky_1k.hdr", (hdr) => {
+    const pm = new THREE.PMREMGenerator(renderer);
+    scene.environment = pm.fromEquirectangular(hdr).texture;
+    scene.environmentIntensity = 0.75;
+    hdr.mapping = THREE.EquirectangularReflectionMapping;
+    scene.background = hdr; scene.backgroundIntensity = 0.9;
+    scene.backgroundRotation.y = SKY_TURN; scene.environmentRotation.y = SKY_TURN;
+    dome.visible = false; hemi.intensity = 0.45; pm.dispose();
+  });
   for (let i = 0; i < 18; i++) {
     const a = (i / 18) * Math.PI * 2, d = 150 + (i % 3) * 18, h = 30 + ((i * 37) % 25);
     const m = add(new THREE.ConeGeometry(28 + (i % 4) * 6, h, 5), i % 2 ? MAT.mountain : MAT.mountainFar, Math.cos(a) * d, h / 2 - 2, Math.sin(a) * d, scene, false);
@@ -82,10 +170,10 @@ const blockers = [];  // axis-aligned boxes {minX, maxX, minZ, maxZ}
 
 /* ---------------- ground, plaza and paths ---------------- */
 add(new THREE.CylinderGeometry(120, 120, 1, 48), MAT.grass, 0, -0.5, 0, scene, false);
-add(new THREE.CylinderGeometry(16, 16, 0.2, 40), MAT.stone, 0, 0.05, 0, scene, false);
+add(new THREE.CylinderGeometry(16, 16, 0.2, 64), P("brick_pavement_02", 11, 11, { color: new THREE.Color(1.75, 1.5, 1.2) }), 0, 0.05, 0, scene, false);
 const path = (x1, z1, x2, z2, w = 5) => {
   const dx = x2 - x1, dz = z2 - z1, len = Math.hypot(dx, dz);
-  const m = add(new THREE.BoxGeometry(w, 0.15, len), MAT.stone, (x1 + x2) / 2, 0.06, (z1 + z2) / 2, scene, false);
+  const m = add(new THREE.BoxGeometry(w, 0.15, len), P("brick_pavement_02", Math.round(w / 3), Math.round(len / 3), { color: new THREE.Color(1.75, 1.5, 1.2) }), (x1 + x2) / 2, 0.06, (z1 + z2) / 2, scene, false);
   m.rotation.y = Math.atan2(dx, dz);
 };
 path(0, 16, 0, 46, 7); path(0, -14, 0, -44); path(-12, -8, -28, -14); path(12, -8, 28, -14);
@@ -95,21 +183,26 @@ path(-8, -13, -12, -24); path(8, -13, 12, -24); path(-12, 8, -24, 13); path(12, 
 {
   add(new THREE.CylinderGeometry(6.5, 7, 1.2, 24), MAT.stoneDark, 0, 0.6, 0);
   add(new THREE.CylinderGeometry(5.8, 5.8, 0.3, 24), M(0x6f5a3e), 0, 1.25, 0, scene, false);
-  add(new THREE.CylinderGeometry(1.4, 2.2, 10, 8), MAT.trunk, 0, 6, 0);
-  [[-2.5, 7, 0.8, -0.6], [2.4, 8, -0.4, 0.7], [0.5, 9, 2.2, 0.3]].forEach(([x, y, z, r]) => { const b = add(new THREE.CylinderGeometry(0.5, 0.8, 6, 6), MAT.trunk, x, y, z); b.rotation.z = r; b.rotation.x = z * 0.2; });
+  const simple = new THREE.Group(); scene.add(simple);
+  add(new THREE.CylinderGeometry(1.4, 2.2, 10, 8), MAT.trunk, 0, 6, 0, simple);
+  [[-2.5, 7, 0.8, -0.6], [2.4, 8, -0.4, 0.7], [0.5, 9, 2.2, 0.3]].forEach(([x, y, z, r]) => { const b = add(new THREE.CylinderGeometry(0.5, 0.8, 6, 6), MAT.trunk, x, y, z, simple); b.rotation.z = r; b.rotation.x = z * 0.2; });
   [[0, 14, 0, 8], [-6, 12, 2, 5.5], [6, 12.5, -1, 5.5], [2, 15, 5, 5], [-3, 15.5, -5, 5], [5, 11, 5, 4.5], [-5, 11, -4, 4.5]].forEach(([x, y, z, r], i) =>
-    add(new THREE.IcosahedronGeometry(r, 1), i % 2 ? MAT.leaf : MAT.leafLight, x, y, z));
+    add(new THREE.IcosahedronGeometry(r, 1), i % 2 ? MAT.leaf : MAT.leafLight, x, y, z, simple));
+  // the Bodhi tree model replaces the simple one once it has loaded
+  loadProp("bodhi").then((m) => { if (m) simple.visible = false; });
+  props("bodhi", 18, [[0, 0, 0.6, 1.4]]);
   colliders.push({ x: 0, z: 0, r: 7 });
 }
 
 /* ---------------- lanterns ---------------- */
+const lanternSpots = [[-5, 20], [5, 20], [-5, 30], [5, 30], [-17, 0], [17, 0], [-6, -28], [4, -40]];
 const lantern = (x, z) => {
   add(new THREE.BoxGeometry(0.5, 2.4, 0.5), MAT.woodDark, x, 1.2, z);
   add(new THREE.BoxGeometry(1, 1, 1), MAT.glow, x, 2.9, z);
   add(new THREE.ConeGeometry(0.9, 0.6, 4), MAT.roof, x, 3.7, z).rotation.y = Math.PI / 4;
-  colliders.push({ x, z, r: 0.7 });
 };
-[[-5, 20], [5, 20], [-5, 30], [5, 30], [-17, 0], [17, 0], [-10, -40], [10, -40]].forEach(([x, z]) => lantern(x, z));
+lanternSpots.forEach(([x, z]) => colliders.push({ x, z, r: 0.7 }));
+props("lamppost", 4.2, lanternSpots.map(([x, z]) => [x, z, Math.atan2(-x, -z)]), { fallback: () => lanternSpots.forEach(([x, z]) => lantern(x, z)) });
 
 /* ---------------- ponds with lotus ---------------- */
 const pond = (x, z, r) => {
@@ -177,16 +270,139 @@ function hall(x, z, rotY, w = 12, d = 9) {
 /* ---------------- place the halls ---------------- */
 const signs = [];
 const halls = {
-  library: hall(-30, -24, Math.PI / 5), learn: hall(-13, -38, 0.12), media: hall(13, -38, -0.12), access: hall(30, -24, -Math.PI / 5),
+  library: hall(-30, -24, Math.PI / 5), media: hall(13, -38, -0.12), access: hall(30, -24, -Math.PI / 5),
   care: hall(34, 6, -Math.PI / 2.4, 9, 7),
 };
 PLACES.forEach((p) => {
   if (p.id === "yard" || p.id === "exit") return;
-  const yOffset = p.id === "garden" || p.id === "journey" || p.id === "rest" ? 5 : 7.2;
-  const [sx, sz] = { library: [-30, -18], learn: [-13, -31], media: [13, -31], access: [30, -18], care: [29, 9], rest: [-28, 14], garden: [0, -48], journey: [15, 49] }[p.id] || p.pos;
+  const yOffset = p.id === "garden" || p.id === "journey" || p.id === "rest" ? 5 : p.id === "learn" ? 9.6 : 7.2;
+  const [sx, sz] = { library: [-30, -18], learn: [-14, -31.4], media: [13, -31], access: [30, -18], care: [29, 9], rest: [-28, 14], garden: [0, -48], journey: [15, 49] }[p.id] || p.pos;
   signs.push(sign(L === "en" ? p.en : p.th, p.sub[L === "en" ? 1 : 0], p.icon, sx, yOffset, sz, 5.2));
 });
 sign(tx("ลานกลาง", "Central Courtyard"), tx("อยากไปไหนวันนี้?", "Where would you like to go today?"), "🌳", 0, 21, 0, 8);
+
+/* ---------------- the Learning Hall: an open Thai sala you can walk into ---------------- */
+// Eight story boards (U01–U08, approved titles) line the walls and open the matching lesson.
+// At the front of the hall stands a Dhamma wheel, not a statue.
+const boards = [];
+{
+  const CX = -14, CZ = -38, W = 13, D = 11, FY = 0.35, H = 5.6;
+  const g = new THREE.Group(); g.position.set(CX, 0, CZ); scene.add(g);
+  halls.learn = g;
+  // stone base, steps and wooden floor
+  add(new THREE.BoxGeometry(W + 1.6, FY - 0.02, D + 1.6), MAT.stoneDark, 0, (FY - 0.02) / 2, 0, g, false);
+  add(new THREE.BoxGeometry(W + 0.4, 0.06, D + 0.4), MAT.floor, 0, FY, 0, g, false);
+  add(new THREE.BoxGeometry(5, 0.18, 1), MAT.stoneDark, 0, 0.09, D / 2 + 1.2, g, false);
+  floors.push({ minX: CX - W / 2 - 0.8, maxX: CX + W / 2 + 0.8, minZ: CZ - D / 2 - 0.8, maxZ: CZ + D / 2 + 0.8, y: FY + 0.03 });
+  // walls: back and both sides; the front stays open like a sala
+  const wall = (w, d, x, z) => { const m = add(new THREE.BoxGeometry(w, H, d), MAT.wall, x, FY + H / 2, z, g); camBlock.push(m); return m; };
+  wall(W, 0.4, 0, -D / 2);
+  wall(0.4, D, -W / 2, 0); wall(0.4, D, W / 2, 0);
+  blockers.push({ x: CX, z: CZ - D / 2, c: 1, s: 0, hx: W / 2, hz: 0.3 });
+  blockers.push({ x: CX - W / 2, z: CZ, c: 1, s: 0, hx: 0.3, hz: D / 2 });
+  blockers.push({ x: CX + W / 2, z: CZ, c: 1, s: 0, hx: 0.3, hz: D / 2 });
+  // red lacquer wainscot along the walls
+  add(new THREE.BoxGeometry(W - 0.5, 1, 0.05), MAT.lacquer, 0, FY + 0.5, -D / 2 + 0.23, g, false);
+  [-1, 1].forEach((sg) => add(new THREE.BoxGeometry(0.05, 1, D - 0.2), MAT.lacquer, sg * (W / 2 - 0.23), FY + 0.5, 0.1, g, false));
+  // ceiling, lintel and red columns with gold capitals
+  camBlock.push(add(new THREE.BoxGeometry(W + 0.4, 0.25, D + 0.6), MAT.woodDark, 0, FY + H + 0.12, 0.1, g));
+  add(new THREE.BoxGeometry(W + 0.6, 0.6, 0.5), MAT.lacquer, 0, FY + H - 0.3, D / 2 + 0.2, g);
+  add(new THREE.BoxGeometry(W + 0.7, 0.12, 0.56), MAT.gold, 0, FY + H - 0.66, D / 2 + 0.2, g, false);
+  for (let i = 0; i < 6; i++) {
+    const x = -W / 2 + 0.3 + i * (W - 0.6) / 5;
+    add(new THREE.CylinderGeometry(0.28, 0.32, H, 16), MAT.lacquer, x, FY + H / 2, D / 2 + 0.2, g);
+    add(new THREE.CylinderGeometry(0.42, 0.3, 0.45, 16), MAT.gold, x, FY + H - 0.85, D / 2 + 0.2, g, false);
+    add(new THREE.CylinderGeometry(0.4, 0.4, 0.25, 16), MAT.gold, x, FY + 0.12, D / 2 + 0.2, g, false);
+    if (i > 0 && i < 5) colliders.push({ x: CX + x, z: CZ + D / 2 + 0.2, r: 0.45 });
+  }
+  // two-tier Thai roof with gold gable panels and chofa finials
+  [[W + 3.4, D + 3.4, 3.8, FY + H + 0.2], [W * 0.72, D * 0.86, 3.2, FY + H + 2.4]].forEach(([rw, rd, rh, ry]) => {
+    const r = gable(rw, rd, rh, MAT.roof); r.position.y = ry; r.castShadow = true; g.add(r); camBlock.push(r);
+    [-1, 1].forEach((sg) => {
+      const e = gable(rw + 0.3, 0.25, rh + 0.15, MAT.roofEdge); e.position.set(0, ry - 0.05, sg * rd / 2); g.add(e);
+      const pnl = gable(rw * 0.55, 0.12, rh * 0.55, MAT.gold); pnl.position.set(0, ry + 0.25, sg * (rd / 2 + 0.1)); g.add(pnl);
+      const f = add(new THREE.ConeGeometry(0.25, 1.8, 6), MAT.gold, 0, ry + rh + 0.7, sg * rd / 2, g); f.rotation.x = sg * 0.55;
+    });
+    const bt = new THREE.BoxGeometry(0.25, 0.25, rd + 0.3);
+    [-1, 1].forEach((sg) => { const b = add(bt, MAT.roofGreen, sg * rw / 2, ry + 0.05, 0, g, false); b.rotation.z = sg * 0.1; });
+  });
+  // altar: stepped red-and-gold stand with the Dhamma wheel
+  add(new THREE.BoxGeometry(4.4, 1, 1.8), MAT.lacquer, 0, FY + 0.5, -D / 2 + 1.2, g);
+  add(new THREE.BoxGeometry(4.5, 0.1, 1.9), MAT.gold, 0, FY + 1.02, -D / 2 + 1.2, g, false);
+  add(new THREE.BoxGeometry(2.6, 0.8, 1.1), MAT.lacquer, 0, FY + 1.45, -D / 2 + 0.9, g);
+  add(new THREE.BoxGeometry(2.7, 0.08, 1.2), MAT.gold, 0, FY + 1.87, -D / 2 + 0.9, g, false);
+  blockers.push({ x: CX, z: CZ - D / 2 + 1.2, c: 1, s: 0, hx: 2.4, hz: 1.1 });
+  {
+    const wheel = new THREE.Group(); wheel.position.set(0, FY + 3.25, -D / 2 + 0.85); g.add(wheel);
+    wheel.add(new THREE.Mesh(new THREE.TorusGeometry(1.05, 0.08, 12, 48), MAT.gold));
+    wheel.add(new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.06, 10, 24), MAT.gold));
+    for (let i = 0; i < 8; i++) { const sp = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.8, 6), MAT.gold); const a = i * Math.PI / 4; sp.position.set(Math.cos(a) * 0.66, Math.sin(a) * 0.66, 0); sp.rotation.z = a - Math.PI / 2; wheel.add(sp); }
+    for (let i = 0; i < 8; i++) { const k = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), MAT.gold); const a = i * Math.PI / 4 + Math.PI / 8; k.position.set(Math.cos(a) * 1.18, Math.sin(a) * 1.18, 0); wheel.add(k); }
+    add(new THREE.CylinderGeometry(0.08, 0.12, 1.1, 8), MAT.gold, 0, FY + 2.15, -D / 2 + 0.85, g, false);
+    wheel.traverse((o) => { o.castShadow = true; });
+    // a red cloth hanging behind
+    add(new THREE.BoxGeometry(3.2, 3.6, 0.05), S(0x9b2a1d, { roughness: 0.9 }), 0, FY + 3.4, -D / 2 + 0.24, g, false);
+    add(new THREE.BoxGeometry(3.3, 0.12, 0.07), MAT.gold, 0, FY + 5.2, -D / 2 + 0.25, g, false);
+  }
+  // candles with soft flames (they glow; no sound, no flicker in calm motion)
+  const flameMat = new THREE.MeshStandardMaterial({ color: 0xffd27a, emissive: 0xffa53a, emissiveIntensity: 3 });
+  const waxMat = S(0xfff6e4, { roughness: 0.7 });
+  const flames = [];
+  [-1.6, -1.1, 1.1, 1.6].forEach((x) => {
+    add(new THREE.CylinderGeometry(0.06, 0.06, 0.45, 10), waxMat, x, FY + 1.27, -D / 2 + 1.9, g, false);
+    const f = add(new THREE.SphereGeometry(0.06, 10, 8), flameMat, x, FY + 1.58, -D / 2 + 1.9, g, false); f.scale.y = 1.8; flames.push(f);
+  });
+  g.userData.flames = flames;
+  const altarLight = new THREE.PointLight(0xffb066, 18, 9, 2); altarLight.position.set(0, FY + 2.6, -D / 2 + 2.6); g.add(altarLight);
+  const hallLight = new THREE.PointLight(0xffd2a0, 22, 14, 2); hallLight.position.set(0, FY + H - 1, 1); g.add(hallLight);
+  // story boards: canvas textures so the Thai text stays sharp
+  const seg = typeof Intl !== "undefined" && Intl.Segmenter ? new Intl.Segmenter(L, { granularity: "word" }) : null;
+  const wrap = (gx, text, maxW) => {
+    const parts = seg ? [...seg.segment(text)].map((s) => s.segment) : text.split(/(\s+)/);
+    const lines = []; let cur = "";
+    for (const p of parts) { if (gx.measureText(cur + p).width > maxW && cur) { lines.push(cur.trim()); cur = p; } else cur += p; }
+    if (cur.trim()) lines.push(cur.trim()); return lines;
+  };
+  const boardTex = (n, title) => {
+    const c = document.createElement("canvas"); c.width = 512; c.height = 640;
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+    const draw = () => {
+      const gx = c.getContext("2d");
+      gx.fillStyle = "#7a1c14"; gx.fillRect(0, 0, 512, 640);
+      gx.fillStyle = "#e8b84a"; gx.fillRect(14, 14, 484, 612);
+      gx.fillStyle = "#fdf3dc"; gx.fillRect(30, 30, 452, 580);
+      gx.strokeStyle = "#c9963a"; gx.lineWidth = 3; gx.strokeRect(46, 46, 420, 548);
+      gx.fillStyle = "#a5560f"; gx.font = "44px Itim, sans-serif"; gx.textAlign = "center"; gx.textBaseline = "middle";
+      gx.fillText(tx("เรื่องที่ ", "Story ") + n, 256, 118);
+      gx.beginPath(); gx.arc(256, 228, 64, 0, Math.PI * 2); gx.fillStyle = "#f2cc62"; gx.fill();
+      gx.font = "70px sans-serif"; gx.fillStyle = "#3a2a1d"; gx.fillText("👣", 256, 232);
+      gx.font = "52px Itim, sans-serif"; gx.fillStyle = "#3a2a1d";
+      wrap(gx, title, 380).slice(0, 3).forEach((ln, i) => gx.fillText(ln, 256, 360 + i * 66));
+      gx.font = "28px Mali, sans-serif"; gx.fillStyle = "#6e5c4c"; gx.fillText(tx("เดินมาใกล้ ๆ แล้วกด E", "Walk close and press E"), 256, 560);
+      t.needsUpdate = true;
+    };
+    draw(); signDraws.push(draw); return t;
+  };
+  const spots = [[-1, 2.6], [-1, -0.1], [-1, -2.8], [-3.9, "b"], [3.9, "b"], [1, -2.8], [1, -0.1], [1, 2.6]];
+  spots.forEach((sp, i) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 2.12), new THREE.MeshStandardMaterial({ map: boardTex(i + 1, L === "en" ? JOURNEY[i][1] : JOURNEY[i][0]), roughness: 0.8 }));
+    let lx, lz;
+    if (sp[1] === "b") { lx = sp[0]; lz = -D / 2 + 0.22; }
+    else { lx = sp[0] * (W / 2 - 0.22); lz = sp[1]; m.rotation.y = -sp[0] * Math.PI / 2; }
+    m.position.set(lx, FY + 2.6, lz); g.add(m);
+    boards.push({ x: CX + lx * 0.8, z: CZ + (sp[1] === "b" ? lz + 1.4 : lz), i });
+  });
+  // cushions in rows facing the altar, a reading table and hanging lanterns
+  const cushions = [];
+  for (let r = 0; r < 3; r++) for (let c = -2; c <= 2; c++) if (c !== 0) cushions.push([CX + c * 1.5, CZ - 1.2 + r * 1.6, Math.PI, FY]);
+  const cushGeo = new THREE.CylinderGeometry(0.42, 0.46, 0.2, 24), rimGeo = new THREE.TorusGeometry(0.44, 0.035, 8, 32);
+  const cushMat = S(0x9b2a1d, { roughness: 0.95 });
+  cushions.forEach(([x, z]) => { add(cushGeo, cushMat, x, FY + 0.1, z); const r = add(rimGeo, MAT.gold, x, FY + 0.19, z, scene, false); r.rotation.x = Math.PI / 2; });
+  props("candles", 0.9, [[CX - 1.6, CZ - D / 2 + 0.95, 0, FY + 1.9], [CX + 1.6, CZ - D / 2 + 0.95, 0, FY + 1.9]]);
+  props("lotus", 0.7, [[CX, CZ - D / 2 + 2.05, 0, FY + 1.05]]);
+  props("table", 0.8, [[CX - 4.6, CZ + 3.4, Math.PI / 2, FY]]);
+  props("lantern", 1.3, [[CX - 3.5, CZ + 1, 0, FY + H - 1.35], [CX + 3.5, CZ + 1, 0, FY + H - 1.35], [CX, CZ + 3.2, 0, FY + H - 1.35]], { shadow: false });
+}
 
 // the Sambodhaya wheel hangs on the Media Hall as explanatory media (image used unchanged)
 new THREE.TextureLoader().load("img/sambodhaya-wheel.png", (t) => {
@@ -220,7 +436,7 @@ new THREE.TextureLoader().load("img/sambodhaya-wheel.png", (t) => {
     sign(L === "en" ? en : th, "", ic, x, 2.6, z, 3.2);
     colliders.push({ x, z, r: 1.5 });
   });
-  [[-14, -52], [14, -52], [-16, -44], [16, -44]].forEach(([x, z]) => { add(new THREE.CylinderGeometry(0.5, 0.7, 3, 6), MAT.trunk, x, 1.5, z); add(new THREE.IcosahedronGeometry(2.6, 0), MAT.leafLight, x, 4.4, z); colliders.push({ x, z, r: 1 }); });
+  [[-14, -52], [14, -52], [16, -44]].forEach(([x, z]) => { add(new THREE.CylinderGeometry(0.5, 0.7, 3, 6), MAT.trunk, x, 1.5, z); add(new THREE.IcosahedronGeometry(2.6, 0), MAT.leafLight, x, 4.4, z); colliders.push({ x, z, r: 1 }); });
 }
 
 /* ---------------- my journey: eight stepping stones ---------------- */
@@ -234,23 +450,38 @@ JOURNEY.forEach(([th, en], i) => {
 
 /* ---------------- gates (enter left, exit right) ---------------- */
 [[-7, tx("ยินดีต้อนรับ", "Welcome"), "🚪"], [7, tx("ออกจากวัดได้เสมอ", "Leave any time"), "🚪"]].forEach(([x, label]) => {
-  add(new THREE.BoxGeometry(1.6, 7, 1.6), MAT.woodDark, x, 3.5, 36);
-  add(new THREE.BoxGeometry(2.2, 0.6, 2.2), MAT.roof, x, 7.2, 36);
-  add(new THREE.BoxGeometry(0.9, 0.9, 0.9), MAT.glow, x, 8, 36);
-  sign(label, "", "🚪", x, 10, 36, 4.4);
+  add(new THREE.BoxGeometry(1.8, 0.6, 1.8), MAT.stoneDark, x, 0.3, 36);
+  add(new THREE.BoxGeometry(1.1, 6.4, 1.1), MAT.lacquer, x, 3.8, 36);
+  add(new THREE.BoxGeometry(1.3, 0.25, 1.3), MAT.gold, x, 1.0, 36, scene, false);
+  add(new THREE.BoxGeometry(1.4, 0.35, 1.4), MAT.gold, x, 7.1, 36);
+  add(new THREE.ConeGeometry(1.1, 1.6, 4), MAT.roof, x, 8.1, 36).rotation.y = Math.PI / 4;
+  add(new THREE.ConeGeometry(0.14, 1.2, 6), MAT.gold, x, 9.4, 36);
+  sign(label, "", "🚪", x, 11, 36, 4.4);
   colliders.push({ x, z: 36, r: 1.3 });
 });
 [-4.5, 4.5].forEach((x) => { const door = add(new THREE.BoxGeometry(3.4, 4.4, 0.3), MAT.wood, x + (x < 0 ? -2.4 : 2.4), 2.2, 34); door.rotation.y = x < 0 ? -1.1 : 1.1; });
 
 /* ---------------- scattered trees around the edge ---------------- */
+const edgeTrees = [];
 for (let i = 0; i < 40; i++) {
   const a = (i / 40) * Math.PI * 2 + 0.07, d = 58 + ((i * 13) % 14);
   const x = Math.cos(a) * d, z = Math.sin(a) * d;
   if (z > 30 && Math.abs(x) < 14) continue; // keep the entrance view open
   if (z > 26 && x > 10 && x < 54) continue; // keep the My Journey path clear
+  if (!HIGH && i % 2) continue; // fewer trees on weaker phones
+  edgeTrees.push([x, z, i * 1.3, 0, i]);
+}
+props("frangipani", 8, edgeTrees.map(([x, z, r]) => [x, z, r]), { fallback: () => edgeTrees.forEach(([x, z, , , i]) => {
   add(new THREE.CylinderGeometry(0.5, 0.8, 4, 6), MAT.trunk, x, 2, z);
   add(new THREE.IcosahedronGeometry(3 + (i % 3), 0), i % 2 ? MAT.leaf : MAT.leafLight, x, 6, z);
-}
+}) });
+
+/* ---------------- small things that make it feel lived in ---------------- */
+props("bell", 4.6, [[-22, 25, 0.9]]); colliders.push({ x: -22, z: 25, r: 1.6 });
+const jars = [[-33, 7], [-19, 21], [-11, 39], [11, 39], [22, 19], [-36, -8]];
+props("jar", 1.1, jars.map(([x, z], i) => [x, z, i])); jars.forEach(([x, z]) => colliders.push({ x, z, r: 0.7 }));
+const blooms = [[-5, -15.5], [5, -15.5], [-15.5, 3], [15.5, 3]];
+props("lotus", 1, blooms.map(([x, z], i) => [x, z, i])); blooms.forEach(([x, z]) => colliders.push({ x, z, r: 0.8 }));
 
 /* ---------------- avatars ---------------- */
 const AV_DEFAULT = { kind: "blocky", skin: "#e8b48a", shirt: "#e98a2b", pants: "#5e4a3a", hair: "#2b1d14", hairStyle: "short", face: "smile" };
@@ -369,6 +600,14 @@ const dog = { obj: new THREE.Group(), x: 3, z: 40, y: 0, yaw: Math.PI };
   dog.tail.rotation.x = -0.6;
   dog.obj.visible = settings.guide !== false;
   scene.add(dog.obj);
+  // the temple dog from the entrance artwork, as a 3D model (the block dog stays if it can't load)
+  loadProp("dog").then((src) => {
+    if (!src) return;
+    dog.obj.children.forEach((c) => { c.visible = false; });
+    src.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    const m = fitTo(src, 1.7); m.rotation.y = -Math.PI / 2; // the model faces sideways; turn it to walk head-first
+    dog.obj.add(m); dog.model = m;
+  });
 }
 
 /* ---------------- input ---------------- */
@@ -415,7 +654,7 @@ if (stick) {
   stick.addEventListener("pointermove", (e) => { if (e.pointerId === joy.id) moveKnob(e); });
   const end = () => { joy.id = null; joy.x = joy.y = 0; knob.style.transform = ""; };
   stick.addEventListener("pointerup", end); stick.addEventListener("pointercancel", end);
-  document.getElementById("t-jump").addEventListener("click", () => { if (player.y <= 0.01) player.vy = 9; });
+  document.getElementById("t-jump").addEventListener("click", () => { if (player.y <= groundAt(player.x, player.z) + 0.01) player.vy = 9; });
   document.getElementById("t-act").addEventListener("click", () => { if (near) openPlace(near); else openPlaces(true); });
 }
 
@@ -454,7 +693,7 @@ function showPrompt(p) {
   const el = $("prompt");
   if (!p) { el.hidden = true; return; }
   $("prompt-name").textContent = p.icon + " " + placeName(p);
-  $("prompt-sub").textContent = p.stone != null ? tx("เรื่องที่ ", "Story ") + (p.stone + 1) : p.sub[L === "en" ? 1 : 0];
+  $("prompt-sub").textContent = p.stone != null ? (p.board ? tx("ป้ายเรื่องที่ ", "Story board ") : tx("เรื่องที่ ", "Story ")) + (p.stone + 1) : p.sub[L === "en" ? 1 : 0];
   $("prompt-go").textContent = tx("เข้า", "Visit");
   el.hidden = false;
 }
@@ -474,7 +713,7 @@ function openPlace(p) {
   if (p.stone != null) {
     const n = p.stone + 1;
     openDialog(`👣 ${n} · ${esc(L === "en" ? JOURNEY[p.stone][1] : JOURNEY[p.stone][0])}`,
-      `<p>${tx("หินก้อนที่ " + n + " บนเส้นทางของฉัน เรื่องนี้อ่านได้ในศาลาเรียนรู้ พร้อมต้นทางและกระจกอีกบาน", "Stone " + n + " on My Journey. Read this story in the Learning Hall, with its source and the other mirror.")}</p>
+      `<p>${p.board ? tx("ป้ายเรื่องที่ " + n + " ในศาลาเรียนรู้ เปิดอ่านเรื่องนี้ได้ พร้อมต้นทางและกระจกอีกบาน", "Story board " + n + " in the Learning Hall. Open the story, with its source and the other mirror.") : tx("หินก้อนที่ " + n + " บนเส้นทางของฉัน เรื่องนี้อ่านได้ในศาลาเรียนรู้ พร้อมต้นทางและกระจกอีกบาน", "Stone " + n + " on My Journey. Read this story in the Learning Hall, with its source and the other mirror.")}</p>
        <div class="row"><a class="btn" href="index.html#u0${n}">${tx("เปิดเรื่องนี้ →", "Open this story →")}</a><button class="chip" data-close>${tx("เดินต่อ", "Keep walking")}</button></div>`);
   } else {
     openDialog(`${p.icon} ${esc(placeName(p))}`,
@@ -512,6 +751,11 @@ $("btn-help").addEventListener("click", () => openDialog(tx("❔ วิธีเ
    <p>${tx("📱 จอยซ้ายล่าง = เดิน • ลากจอ = หมุนมุมมอง • ปุ่ม E = เข้า", "📱 Bottom-left stick = walk • Drag the screen = turn the view • E button = visit")}</p>
    <p class="note">${tx("ที่นี่ไม่มีคะแนน ไม่มีของให้เก็บ และไม่มีการแข่งขัน เดินดูตามสบาย และออกได้ทุกเมื่อที่ประตูขวา", "There are no points, nothing to collect and no competition here. Walk around as you like, and leave any time by the right-hand gate.")}</p>
    <div class="row"><button class="chip" data-close>${tx("ปิด", "Close")}</button></div>`));
+const qBtn = $("btn-quality");
+qBtn.querySelector(".label").textContent = HIGH ? tx("ภาพสวย", "Detailed") : tx("ภาพเบา", "Light");
+qBtn.firstChild.textContent = HIGH ? "✨ " : "⚡ ";
+qBtn.title = tx("สลับภาพสวย / ภาพเบา (สำหรับเครื่องที่ช้า)", "Switch detailed / light graphics (for slower devices)");
+qBtn.addEventListener("click", () => { write("world-quality", HIGH ? "light" : "high"); location.reload(); });
 const calmBtn = $("btn-calm");
 const syncCalm = () => { calmBtn.setAttribute("aria-pressed", settings.calmMotion); calmBtn.classList.toggle("on", settings.calmMotion); };
 calmBtn.addEventListener("click", () => { settings.calmMotion = !settings.calmMotion; write("settings", { ...read("settings", {}), calmMotion: settings.calmMotion }); syncCalm(); });
@@ -583,9 +827,10 @@ $("btn-avatar").addEventListener("click", () => openAvatar("build"));
 
 /* ---------------- main loop ---------------- */
 const clock = new THREE.Clock();
-const tmp = new THREE.Vector3();
+const tmp = new THREE.Vector3(), head = new THREE.Vector3();
+const camRay = new THREE.Raycaster();
 let walkPhase = 0;
-function resize() { renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
+function resize() { renderer.setSize(innerWidth, innerHeight, false); if (composer) composer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
 addEventListener("resize", resize); resize();
 
 function tick() {
@@ -596,7 +841,7 @@ function tick() {
     if (keys.KeyW || keys.ArrowUp) fz -= 1; if (keys.KeyS || keys.ArrowDown) fz += 1;
     if (keys.KeyA || keys.ArrowLeft) fx -= 1; if (keys.KeyD || keys.ArrowRight) fx += 1;
     fx += joy.x; fz += joy.y;
-    if ((keys.Space) && player.y <= 0.01) player.vy = 9;
+    if ((keys.Space) && player.y <= groundAt(player.x, player.z) + 0.01) player.vy = 9;
   }
   const mag = Math.min(1, Math.hypot(fx, fz));
   const speed = (keys.ShiftLeft || keys.ShiftRight ? 11 : 6.5) * mag;
@@ -608,7 +853,8 @@ function tick() {
     const target = Math.atan2(wx, wz);
     let diff = target - player.yaw; diff = Math.atan2(Math.sin(diff), Math.cos(diff)); player.yaw += diff * Math.min(1, dt * 12);
   }
-  player.vy -= 25 * dt; player.y = Math.max(0, player.y + player.vy * dt); if (player.y === 0) player.vy = Math.max(0, player.vy);
+  const gy = groundAt(player.x, player.z);
+  player.vy -= 25 * dt; player.y = Math.max(gy, player.y + player.vy * dt); if (player.y === gy) player.vy = Math.max(0, player.vy);
   player.obj.position.set(player.x, player.y, player.z); player.obj.rotation.y = player.yaw;
 
   // limb swing for blocky avatars, clips for 3D models
@@ -638,8 +884,9 @@ function tick() {
     const fx2 = -Math.sin(camYaw), fz2 = -Math.cos(camYaw), rx = Math.cos(camYaw), rz = -Math.sin(camYaw);
     const bx = player.x + fx2 * 1.4 - rx * 2.6, bz = player.z + fz2 * 1.4 - rz * 2.6;
     const ddx = bx - dog.x, ddz = bz - dog.z, dd = Math.hypot(ddx, ddz);
+    dog.moving = dd > 0.4;
     if (dd > 0.4) { const st = Math.min(dd, dt * (dd > 6 ? 12 : 6)); [dog.x, dog.z] = collide(dog.x + ddx / dd * st, dog.z + ddz / dd * st); dog.yaw = Math.atan2(ddx, ddz); }
-    dog.obj.position.set(dog.x, 0, dog.z); dog.obj.rotation.y = dog.yaw;
+    dog.obj.position.set(dog.x, groundAt(dog.x, dog.z), dog.z); dog.obj.rotation.y = dog.yaw;
     if (!settings.calmMotion) dog.tail.rotation.y = Math.sin(performance.now() / 160) * 0.6;
   }
 
@@ -647,16 +894,27 @@ function tick() {
   let best = null, bestD = Infinity;
   for (const p of PLACES) { const d = Math.hypot(player.x - p.pos[0], player.z - p.pos[1]); if (d < p.r && d < bestD) { best = p; bestD = d; } }
   for (const s of journeyStones) { const d = Math.hypot(player.x - s.x, player.z - s.z); if (d < 2.6 && d < bestD) { best = { ...PLACES.find((p) => p.id === "journey"), stone: s.i }; bestD = d; } }
+  for (const s of boards) { const d = Math.hypot(player.x - s.x, player.z - s.z); if (d < 1.9 && d < bestD) { best = { ...PLACES.find((p) => p.id === "learn"), stone: s.i, board: true }; bestD = d; } }
   if ((best && best.id) !== (near && near.id) || (best && best.stone) !== (near && near.stone)) { near = best; showPrompt(near); }
 
   // camera follows
   const cx = player.x + Math.sin(camYaw) * Math.cos(camPitch) * camDist;
   const cz = player.z + Math.cos(camYaw) * Math.cos(camPitch) * camDist;
   const cy = player.y + 2 + Math.sin(camPitch) * camDist;
-  if (settings.calmMotion) camera.position.set(cx, cy, cz); else camera.position.lerp(tmp.set(cx, cy, cz), Math.min(1, dt * 8));
-  camera.lookAt(player.x, player.y + 2.2, player.z);
+  // don't look through walls or roofs: pull the camera in front of whatever is in the way
+  head.set(player.x, player.y + 2.2, player.z); tmp.set(cx, cy, cz);
+  const want = tmp.clone().sub(head), dist = want.length(); want.normalize();
+  camRay.set(head, want); camRay.far = dist;
+  const hit = camRay.intersectObjects(camBlock, false)[0];
+  if (hit) tmp.copy(head).addScaledVector(want, Math.max(1.2, hit.distance - 0.35));
+  if (settings.calmMotion || hit) camera.position.copy(tmp); else camera.position.lerp(tmp, Math.min(1, dt * 8));
+  camera.lookAt(head);
 
-  renderer.render(scene, camera);
+  // candle flames sway a little (not in calm motion)
+  if (!settings.calmMotion) { const t = performance.now() / 1000; halls.learn.userData.flames.forEach((f, i) => { f.scale.y = 1.8 + Math.sin(t * 7 + i * 1.7) * 0.18; }); }
+  if (dog.model && !settings.calmMotion) dog.model.position.y = dog.moving ? Math.abs(Math.sin(performance.now() / 110)) * 0.08 : 0;
+
+  if (composer) composer.render(); else renderer.render(scene, camera);
   requestAnimationFrame(tick);
 }
 
@@ -665,6 +923,9 @@ document.fonts.load("64px Itim").then(() => document.fonts.load("36px Mali")).ca
   signDraws.forEach((d) => d());
 });
 camYaw = 0; camera.position.set(0, 8, 56);
-$("loading").hidden = true;
-canvas.focus();
+if (/[?&]debug\b/.test(location.search)) window.__w = { player, dog, boards, setCam: (y, p) => { camYaw = y; if (p != null) camPitch = p; } };
+Promise.race([Promise.all(propJobs), new Promise((r) => setTimeout(r, 7000))]).then(() => {
+  $("loading").hidden = true;
+  canvas.focus();
+});
 requestAnimationFrame(tick);

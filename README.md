@@ -10,6 +10,12 @@ Child-facing (10+) prototype of the Sambodhaya Online Temple, in the visual styl
 
 ## 3D temple (`world.html`, trial)
 A solo, Roblox-style low-poly walk through the same temple, built with Three.js (loaded from jsDelivr; no build step). Halls, the great tree, ponds, the Practice Garden's four stones and the eight My Journey stepping stones follow the entrance artwork. Walking up to a place and pressing E (or tapping) opens a panel that links to the matching page of the 2D site, so the 3D world never holds teaching content of its own.
+
+**Showcase upgrade (Oct 2026):** sunset-sky lighting, real materials, soft shadows and a gentle glow, plus a walk-in **Learning Hall** (open Thai sala) with eight U01–U08 story boards that open the matching lesson. The hall's altar holds a Dhamma wheel, not a statue. A ✨/⚡ button switches between detailed and light graphics (light is picked automatically on weaker phones and remembered on that device only).
+
+Asset credits:
+- `assets/tex/`: textures and the `belfast_sunset_puresky` sky from [Poly Haven](https://polyhaven.com) (CC0).
+- `assets/models/`: the Bodhi tree, frangipani trees, lamp posts, lanterns, bell, lotus bowls, jars, altar candles, reading table and the temple dog were generated for this project with Higgsfield (Tripo 3D). The dog was made from the temple dog in the entrance artwork. All models were simplified and their textures converted to WebP with gltf-transform; every model falls back to simple shapes if it can't load.
 - Avatars: build a blocky character (saved on the device), use a picture as the face (kept only if the player ticks "remember"; drawings recommended for children), or upload a `.glb`/`.vrm` model (never stored; VRMs get a relaxed pose and a procedural walk, glTF clips named idle/walk are used when present, and a turn-around button fixes models that face backwards).
 - The temple dog follows the player and opens a "where would you like to go?" list (scripted, not an AI). A plain places list, a calm-motion toggle and a link back to the 2D map are always available. No points, collectibles, streaks or automatic sound.
 - Solo only: nothing a player does leaves the device. Multiplayer would need a real-time server and its own child-safety design.
