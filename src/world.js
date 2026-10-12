@@ -448,8 +448,8 @@ Object.entries(salas).forEach(([id, h]) => {
 PLACES.forEach((p) => {
   if (p.id === "yard" || p.id === "exit") return;
   const h = salas[p.id];
-  // the garden's sign floats above the cliff, so it doesn't hide the waterfall
-  const [sx, sz, sy] = h ? h.signAt : ({ garden: [0, -55, 12.2], journey: [15, 49, 5] }[p.id] || [...p.pos, 5]);
+  // the garden's sign hangs before the rock wall, beside the waterfall, so it hides neither the fall nor the great Buddha above
+  const [sx, sz, sy] = h ? h.signAt : ({ garden: [-6.6, -55, 7.4], journey: [15, 49, 5] }[p.id] || [...p.pos, 5]);
   signs.push(sign(L === "en" ? p.en : p.th, p.sub[L === "en" ? 1 : 0], p.icon, sx, sy, sz, 5.2));
 });
 sign(tx("ลานกลาง", "Central Courtyard"), tx("อยากไปไหนวันนี้?", "Where would you like to go today?"), "🌳", 0, 21, 0, 8);
@@ -716,6 +716,7 @@ function waterfall(x, zTop, yTop, yPool, width) {
   }
 }
 
+const BIG_BUDDHA_H = 21, BIG_BUDDHA_TURN = -Math.PI / 2; // the great white Buddha above the waterfall: its height; turns it to face the temple
 /* ---------------- practice garden: four observation stones and a waterfall wall ---------------- */
 {
   add(new THREE.BoxGeometry(22, 9, 3), MAT.rock, 0, 4.5, -60);
@@ -725,6 +726,18 @@ function waterfall(x, zTop, yTop, yPool, width) {
   waterfall(0, -58.35, 9, 0.42, 4.6);
   colliders.push({ x: 0, z: -56, r: 5 });
   blockers.push({ x: 0, z: -60, c: 1, s: 0, hx: 11, hz: 1.6 });
+  // above the waterfall, a great white Buddha image (Maravijaya, ปางมารวิชัย) sits on a rock terrace, facing the
+  // temple; seen from all over the grounds, like the great white Buddhas on Thai hillsides. The water seems to pour
+  // from beneath its seat. Soft floodlights light it at night.
+  add(new THREE.BoxGeometry(24, 9, 11.5), MAT.rock, 0, 4.5, -67.25);                       // the terrace behind the cliff
+  add(new THREE.BoxGeometry(17, 1.2, 9), MAT.rock, 0, 9.6, -67.5).rotation.y = 0.05;         // its uneven top
+  blockers.push({ x: 0, z: -67.25, c: 1, s: 0, hx: 12, hz: 5.75 });
+  props("boulder", 4.5, [[-10.5, -61.6, 0.7, 8.6], [10.4, -62, 2.1, 8.6], [-11.2, -70, 3, 8.6], [11, -70.5, 1, 8.6]]);
+  props("buddha-white", BIG_BUDDHA_H, [[0, -67.5, BIG_BUDDHA_TURN, 10.2]]);
+  if (HIGH) [-1, 1].forEach((sg) => { // (real lights are costly: light mode leaves it unlit at night)
+    const l = new THREE.SpotLight(0xfff0d8, 0, 60, 0.42, 0.6, 1.2); l.position.set(sg * 12, 3, -44); l.target.position.set(0, 21, -67); scene.add(l, l.target);
+    hallLamps.push({ light: l, day: 0, night: 140 });
+  });
   const four = [["🧍", "กาย", "Body"], ["💗", "ความรู้สึก", "Feelings"], ["🧠", "จิต", "Mind"], ["☸", "ธรรม", "Dhamma"]];
   four.forEach(([ic, th, en], i) => {
     const x = -9 + i * 6, z = -47;
@@ -992,7 +1005,7 @@ const gardenSpots = []; // (for ?debug checks)
   const clear = (x, z, r, pathGap = 0.8) => {
     const d = Math.hypot(x, z);
     if (d < 16 + r + 1 || d > 72.5 - r) return false;                                   // the plaza; inside the wall
-    if (x > -18 && x < 18 && z < -42 && z > -64) return false;                          // the Practice Garden
+    if (x > -18 && x < 18 && z < -42) return false;                                     // the Practice Garden and the great Buddha's terrace
     if (Math.abs(x) < 6 + r && z > 13) return false;                                    // the entrance road and the alms row
     for (const p of paths) if (segDist(x, z, p) < p.w / 2 + r + pathGap) return false;
     for (const f of floors) { const lx = (x - f.x) * f.c - (z - f.z) * f.s, lz = (x - f.x) * f.s + (z - f.z) * f.c; if (Math.abs(lx) < f.hx + r + 1.2 && Math.abs(lz) < f.hz + r + 1.2) return false; }
