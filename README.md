@@ -17,6 +17,14 @@ A solo, Roblox-style low-poly walk through the same temple, built with Three.js 
 
 **Learning Hall and Universal Hall seating follow temple custom:** visitors and students sit on the floor; teachers and monks sit on a raised platform along the back wall (not walkable for visitors); the Buddha image sits on a stepped altar on that platform, always the highest, with candles, phan phum offerings and flower vases.
 
+**Sound (`src/sound.js`):** made in the browser with Web Audio, nothing is downloaded. Following the charter, nothing plays until the visitor presses something: the 🔈 button (off every time the page opens) starts the ambience, and the temple bell rings only when struck (walk to it, press E). The site-wide "turn off all sound" setting is respected: the button and the bell ask first. Sounds are placed in 3D:
+- breeze and rustling leaves that follow slow gusts, and small roof bells (kradueng) at the hall eaves that tinkle in the gusts
+- birds in the trees: bulbul-like twitters and, now and then, the Asian koel's rising "ko-el"
+- the Practice Garden waterfall
+- footsteps: stone on paths and the plaza, soft on grass, hollow wood inside halls
+- inside a hall the outside world is muffled and quieter
+- the bronze temple bell: a deep strike with a long, beating ring
+
 Asset credits:
 - `assets/tex/`: textures (paving, roof tiles, plaster, wood, grass, mossy rock) and the `belfast_sunset_puresky` sky from [Poly Haven](https://polyhaven.com) (CC0).
 - `assets/models/`: the Bodhi tree, frangipani trees, lamp posts, lanterns, bell, lotus bowls, jars, altar candles, reading table, Buddha image, phan phum, flower vases, bookshelves, benches, plants, rocks, footbridge and the temple dog were generated for this project with Higgsfield (Tripo 3D). The dog was made from the temple dog in the entrance artwork. All models were simplified and their textures converted to WebP with gltf-transform; every model falls back to simple shapes if it can't load.

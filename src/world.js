@@ -10,6 +10,7 @@ import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { VRMLoaderPlugin, VRMUtils } from "@pixiv/three-vrm";
+import { createSound } from "./sound.js";
 
 /* ---------------- settings shared with the 2D site ---------------- */
 const read = (k, d) => { try { const v = localStorage.getItem("sambodhaya-" + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } };
@@ -181,7 +182,9 @@ function props(name, h, list, { fallback, shadow = true, parent = scene, extra =
 /* ---------------- ground, plaza and paths ---------------- */
 add(new THREE.CylinderGeometry(120, 120, 1, 48), MAT.grass, 0, -0.5, 0, scene, false);
 add(new THREE.CylinderGeometry(16, 16, 0.2, 64), P("brick_pavement_02", 11, 11, { color: new THREE.Color(1.75, 1.5, 1.2) }), 0, 0.05, 0, scene, false);
+const paths = []; // for footsteps: stone on paths, grass elsewhere
 const path = (x1, z1, x2, z2, w = 5) => {
+  paths.push({ x1, z1, x2, z2, w });
   const dx = x2 - x1, dz = z2 - z1, len = Math.hypot(dx, dz);
   const m = add(new THREE.BoxGeometry(w, 0.15, len), P("brick_pavement_02", Math.round(w / 3), Math.round(len / 3), { color: new THREE.Color(1.75, 1.5, 1.2) }), (x1 + x2) / 2, 0.06, (z1 + z2) / 2, scene, false);
   m.rotation.y = Math.atan2(dx, dz);
@@ -617,7 +620,8 @@ kinds.forEach(([name, h], k) => {
 }
 
 /* ---------------- small things that make it feel lived in ---------------- */
-props("bell", 4.6, [[-22, 25, 0.9]]); colliders.push({ x: -22, z: 25, r: 1.6 });
+const BELL = [-22, 25];
+props("bell", 4.6, [[BELL[0], BELL[1], 0.9]]); colliders.push({ x: BELL[0], z: BELL[1], r: 1.6 });
 const jars = [[-33, 7], [-19, 21], [-11, 39], [11, 39], [22, 19], [-36, -8]];
 props("jar", 1.1, jars.map(([x, z], i) => [x, z, i]), { extra: true }); jars.forEach(([x, z]) => colliders.push({ x, z, r: 0.7 }));
 const bushes = [[-9, 18], [9, 18], [-19, -5], [19, -5], [-24, -36], [24, -36], [-40, 0], [40, -4], [22, 52], [36, 40], [-8, -52], [8, -52]];
@@ -626,6 +630,25 @@ const pots = [[-3.2, 34], [3.2, 34], [-5.2, 15.8], [5.2, 15.8]];
 props("potplant", 1.6, pots.map(([x, z], i) => [x, z, i]), { extra: true }); pots.forEach(([x, z]) => colliders.push({ x, z, r: 0.6 }));
 const blooms = [[-9.5, 12], [9.5, 12]];
 props("lotus", 1, blooms.map(([x, z], i) => [x, z, i]), { extra: true }); blooms.forEach(([x, z]) => colliders.push({ x, z, r: 0.8 }));
+
+/* ---------------- sound: off until the visitor turns it on (charter: no autoplay) ---------------- */
+const sound = createSound({ high: HIGH });
+{
+  const chimes = [];
+  Object.values(salas).forEach((h) => [[-1, 1], [1, 1], [-1, -1], [1, -1]].forEach(([sx, sz]) => {
+    const [x, z] = h.toWorld(sx * (h.W / 2 + 1.5), sz * (h.D / 2 + 1.5)); chimes.push([x, h.FY + h.H, z]);
+  }));
+  const trees = [...edgeTrees.map(([x, z]) => [x, 4, z]), [0, 10, 0], ...bushes.map(([x, z]) => [x, 1, z]), [-13, 4, -50], [13, 4, -50]];
+  sound.places({ waterfalls: [[0, 4.4, -58.3]], chimes, trees });
+}
+const onPath = (x, z) => {
+  if (Math.hypot(x, z) < 16) return true;
+  return paths.some(({ x1, z1, x2, z2, w }) => {
+    const dx = x2 - x1, dz = z2 - z1, L2 = dx * dx + dz * dz, t = Math.max(0, Math.min(1, ((x - x1) * dx + (z - z1) * dz) / L2));
+    return Math.hypot(x - (x1 + t * dx), z - (z1 + t * dz)) < w / 2;
+  });
+};
+addEventListener("visibilitychange", () => { if (document.hidden) sound.pause(); else sound.resume(); });
 
 /* ---------------- avatars ---------------- */
 const AV_DEFAULT = { kind: "blocky", skin: "#e8b48a", shirt: "#e98a2b", pants: "#5e4a3a", hair: "#2b1d14", hairStyle: "short", face: "smile" };
@@ -839,10 +862,15 @@ function showPrompt(p) {
   if (!p) { el.hidden = true; return; }
   $("prompt-name").textContent = p.icon + " " + placeName(p);
   $("prompt-sub").textContent = p.stone != null ? (p.board ? tx("ป้ายเรื่องที่ ", "Story board ") : tx("เรื่องที่ ", "Story ")) + (p.stone + 1) : p.sub[L === "en" ? 1 : 0];
-  $("prompt-go").textContent = tx("เข้า", "Visit");
+  $("prompt-go").textContent = p.id === "bell" ? tx("ตี", "Strike") : tx("เข้า", "Visit");
   el.hidden = false;
 }
 $("prompt-go").addEventListener("click", () => near && openPlace(near));
+const BELL_PLACE = { id: "bell", icon: "🔔", th: "ระฆังวัด", en: "Temple bell", sub: ["ตีระฆังได้ ฟังเสียงจนเงียบ", "Strike it, and listen until it fades"] };
+function ringBell() {
+  if (settings.mute) { askSound(); return; }
+  sound.bell(BELL[0], 3.4, BELL[1]);
+}
 const dialogOpen = () => !$("dlg").hidden;
 let lastFocus = null;
 function openDialog(title, html) {
@@ -855,6 +883,7 @@ function closeDialog() { $("dlg").hidden = true; if (lastFocus && lastFocus.focu
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 function openPlace(p) {
+  if (p.id === "bell") { ringBell(); return; }
   if (p.stone != null) {
     const n = p.stone + 1;
     openDialog(`👣 ${n} · ${esc(L === "en" ? JOURNEY[p.stone][1] : JOURNEY[p.stone][0])}`,
@@ -894,6 +923,7 @@ $("btn-help").addEventListener("click", () => openDialog(tx("❔ วิธีเ
   `<p>${tx("⌨️ W A S D หรือปุ่มลูกศร = เดิน • Shift = เดินเร็ว • Space = กระโดด • E = เข้าศาลาที่อยู่ใกล้ • G = เรียกหมาวัด", "⌨️ W A S D or arrow keys = walk • Shift = faster • Space = jump • E = visit the nearby hall • G = call the temple dog")}</p>
    <p>${tx("🖱️ ลากเมาส์ = หมุนมุมมอง • ล้อเมาส์ = ซูม • คลิกหมาวัดหรือศาลา = เปิด", "🖱️ Drag = turn the view • Wheel = zoom • Click the dog or a hall = open it")}</p>
    <p>${tx("📱 จอยซ้ายล่าง = เดิน • ลากจอ = หมุนมุมมอง • ปุ่ม E = เข้า", "📱 Bottom-left stick = walk • Drag the screen = turn the view • E button = visit")}</p>
+   <p>${tx("🔈 ปุ่มเสียง = เปิดเสียงนก ลม น้ำตก และกระดิ่งชายคา (ปิดอยู่จนกว่าจะกด) • 🔔 เดินไปที่ระฆังแล้วกด E เพื่อตีระฆัง", "🔈 Sound button = birds, breeze, the waterfall and the roof bells (off until you press it) • 🔔 Walk to the bell and press E to strike it")}</p>
    <p class="note">${tx("ที่นี่ไม่มีคะแนน ไม่มีของให้เก็บ และไม่มีการแข่งขัน เดินดูตามสบาย และออกได้ทุกเมื่อที่ประตูขวา", "There are no points, nothing to collect and no competition here. Walk around as you like, and leave any time by the right-hand gate.")}</p>
    <div class="row"><button class="chip" data-close>${tx("ปิด", "Close")}</button></div>`));
 const qBtn = $("btn-quality");
@@ -901,6 +931,21 @@ qBtn.querySelector(".label").textContent = HIGH ? tx("ภาพสวย", "Deta
 qBtn.firstChild.textContent = HIGH ? "✨ " : "⚡ ";
 qBtn.title = tx("สลับภาพสวย / ภาพเบา (สำหรับเครื่องที่ช้า)", "Switch detailed / light graphics (for slower devices)");
 qBtn.addEventListener("click", () => { write("world-quality", HIGH ? "light" : "high"); location.reload(); });
+// sound button: off every time the page opens; the site-wide "turn off all sound" setting is respected
+const soundBtn = $("btn-sound");
+const syncSound = () => { soundBtn.setAttribute("aria-pressed", sound.on); soundBtn.classList.toggle("on", sound.on); soundBtn.firstChild.textContent = sound.on ? "🔊 " : "🔈 "; };
+function askSound() {
+  openDialog(tx("🔇 เสียงถูกปิดไว้", "🔇 Sound is turned off"),
+    `<p>${tx("ในการตั้งค่าของวัด เลือกไว้ว่า \"ปิดเสียงทั้งหมด\" อยากเปิดเสียงไหม?", "The temple's settings say \"turn off all sound\". Would you like sound on?")}</p>
+     <div class="row"><button class="btn" id="snd-yes">${tx("เปิดเสียง", "Turn sound on")}</button><button class="chip" data-close>${tx("ไม่เป็นไร", "No thanks")}</button></div>`);
+  $("snd-yes").addEventListener("click", () => { settings.mute = false; write("settings", { ...read("settings", {}), mute: false }); closeDialog(); sound.start().then(syncSound); });
+}
+soundBtn.addEventListener("click", () => {
+  if (sound.on) { sound.stop(); syncSound(); return; }
+  if (settings.mute) { askSound(); return; }
+  sound.start().then(syncSound);
+});
+syncSound();
 const calmBtn = $("btn-calm");
 const syncCalm = () => { calmBtn.setAttribute("aria-pressed", settings.calmMotion); calmBtn.classList.toggle("on", settings.calmMotion); };
 calmBtn.addEventListener("click", () => { settings.calmMotion = !settings.calmMotion; write("settings", { ...read("settings", {}), calmMotion: settings.calmMotion }); syncCalm(); });
@@ -973,7 +1018,7 @@ $("btn-avatar").addEventListener("click", () => openAvatar("build"));
 /* ---------------- main loop ---------------- */
 const clock = new THREE.Clock();
 const tmp = new THREE.Vector3(), head = new THREE.Vector3();
-const camRay = new THREE.Raycaster();
+const camRay = new THREE.Raycaster(), camFwd = new THREE.Vector3();
 let walkPhase = 0;
 function resize() { renderer.setSize(innerWidth, innerHeight, false); if (composer) composer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
 addEventListener("resize", resize); resize();
@@ -1004,7 +1049,9 @@ function tick() {
 
   // limb swing for blocky avatars, clips for 3D models
   const moving = mag > 0.05;
+  const stepsBefore = Math.floor(walkPhase / Math.PI);
   walkPhase += dt * (moving ? speed * 1.6 : 0);
+  if (moving && Math.floor(walkPhase / Math.PI) !== stepsBefore && player.y <= gy + 0.05) sound.step(gy > 0 ? "wood" : onPath(player.x, player.z) ? "stone" : "grass");
   const limbs = player.model && player.model.userData.limbs;
   if (limbs) {
     const sw = moving ? Math.sin(walkPhase) * 0.7 : 0;
@@ -1039,6 +1086,7 @@ function tick() {
   let best = null, bestD = Infinity;
   for (const p of PLACES) { const d = Math.hypot(player.x - p.pos[0], player.z - p.pos[1]); if (d < p.r && d < bestD) { best = p; bestD = d; } }
   for (const s of journeyStones) { const d = Math.hypot(player.x - s.x, player.z - s.z); if (d < 2.6 && d < bestD) { best = { ...PLACES.find((p) => p.id === "journey"), stone: s.i }; bestD = d; } }
+  if (Math.hypot(player.x - BELL[0], player.z - BELL[1]) < 3.6 && 3 < bestD) { best = BELL_PLACE; bestD = 3; }
   for (const s of boards) { const d = Math.hypot(player.x - s.x, player.z - s.z); if (d < 1.9 && d < bestD) { best = { ...PLACES.find((p) => p.id === "learn"), stone: s.i, board: true }; bestD = d; } }
   if ((best && best.id) !== (near && near.id) || (best && best.stone) !== (near && near.stone)) { near = best; showPrompt(near); }
 
@@ -1059,6 +1107,9 @@ function tick() {
   if (!settings.calmMotion) { const t = performance.now() / 1000; flames.forEach((f, i) => { f.scale.y = 1.8 + Math.sin(t * 7 + i * 1.7) * 0.18; }); }
   if (dog.model && !settings.calmMotion) dog.model.position.y = dog.moving ? Math.abs(Math.sin(performance.now() / 110)) * 0.08 : 0;
 
+  camera.getWorldDirection(camFwd);
+  sound.update(camera.position, camFwd, groundAt(player.x, player.z) > 0 && Math.hypot(camera.position.x - player.x, camera.position.z - player.z) < 14, dt);
+
   if (composer) composer.render(); else renderer.render(scene, camera);
   requestAnimationFrame(tick);
 }
@@ -1068,7 +1119,7 @@ document.fonts.load("64px Itim").then(() => document.fonts.load("36px Mali")).ca
   signDraws.forEach((d) => d());
 });
 camYaw = 0; camera.position.set(0, 8, 56);
-if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, scene, salas, player, dog, boards, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
+if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, scene, salas, sound, player, dog, boards, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
 Promise.race([Promise.all(propJobs), new Promise((r) => setTimeout(r, 7000))]).then(() => {
   $("loading").hidden = true;
   canvas.focus();
