@@ -448,7 +448,7 @@ sign(tx("ลานกลาง", "Central Courtyard"), tx("อยากไปไ
    Returns the local z of the platform's front edge. */
 const buddhaImages = [];
 // monks (Higgsfield, from artwork in the boy's style): brown temple robes, right shoulder bare, seated cross-legged
-const MONK_H = 0.98, MONK_TURN = -Math.PI / 2;                         // seated height (m); quarter turns if a model faces sideways
+const MONK_H = 1.75, MONK_TURN = -Math.PI / 2;                         // seated height, to the boy's scale (he stands ~2.75, sits ~1.6); quarter turns if a model faces sideways
 const monkFigures = []; let monkTime = 0;                                     // each breathes slowly (still when calm motion is on)
 function seatMonk(name, g, x, y, z) {
   propJobs.push(loadProp(name).then((src) => {
@@ -469,12 +469,12 @@ function shrine(h, monks = []) {
   add(new THREE.BoxGeometry(W - 0.75, 0.1, 0.06), MAT.gold, 0, FY + 0.12, pz + PD / 2 + 0.01, g, false);
   h.block(0, pz, (W - 0.8) / 2, PD / 2);
   // teachers' seats: a square cushion with a triangle backrest, two each side of the altar
-  const tri = new THREE.Shape(); tri.moveTo(-0.45, 0); tri.lineTo(0, 0.75); tri.lineTo(0.45, 0); tri.lineTo(-0.45, 0);
+  const tri = new THREE.Shape(); tri.moveTo(-0.72, 0); tri.lineTo(0, 1.2); tri.lineTo(0.72, 0); tri.lineTo(-0.72, 0);
   const triGeo = new THREE.ExtrudeGeometry(tri, { depth: 0.22, bevelEnabled: false }); triGeo.translate(0, 0, -0.11);
-  const seatGeo = new THREE.BoxGeometry(0.95, 0.14, 0.95), seatMat = S(0xb8862e, { roughness: 0.9 }), backMat = S(0x9b2a1d, { roughness: 0.9 });
-  [-4.6, -3.2, 3.2, 4.6].forEach((lx) => {
-    add(seatGeo, seatMat, lx, top + 0.1, pz + 0.35, g);
-    add(triGeo, backMat, lx, top + 0.03, pz - 0.35, g);
+  const seatGeo = new THREE.BoxGeometry(1.5, 0.14, 1.5), seatMat = S(0xb8862e, { roughness: 0.9 }), backMat = S(0x9b2a1d, { roughness: 0.9 });
+  [-4.6, -2.6, 2.6, 4.6].forEach((lx) => {
+    add(seatGeo, seatMat, lx, top + 0.1, pz + 0.3, g);
+    add(triGeo, backMat, lx, top + 0.03, pz - 0.6, g);
   });
   monks.forEach(([name, lx]) => seatMonk(name, g, lx, top + 0.17, pz + 0.3));
   // the stepped altar (to mu bucha) in the middle of the platform
@@ -513,7 +513,7 @@ function shrine(h, monks = []) {
         along the side walls that open the matching lesson ---- */
 {
   const h = salas.learn;
-  shrine(h, [["monk-elder", -3.2], ["monk-young", 3.2]]);
+  shrine(h, [["monk-elder", -2.6], ["monk-young", 2.6]]);
   const spots = [["left", 4.2], ["left", 2.2], ["left", 0.2], ["left", -1.8], ["right", -1.8], ["right", 0.2], ["right", 2.2], ["right", 4.2]];
   spots.forEach(([side, u], i) => {
     const tex = boardTexture({ head: tx("เรื่องที่ ", "Story ") + (i + 1), icon: "👣", title: L === "en" ? JOURNEY[i][1] : JOURNEY[i][0], foot: tx("เดินมาใกล้ ๆ แล้วกด E", "Walk close and press E") });
@@ -561,7 +561,7 @@ function shrine(h, monks = []) {
 /* ---- Universal Hall: languages and access, with the hall's shrine ---- */
 {
   const h = salas.access, { g, FY, W, D } = h;
-  shrine(h, [["monk-young", -4.6], ["monk-elder", -3.2], ["monk", 3.2]]);
+  shrine(h, [["monk-elder", -2.6], ["monk", 2.6], ["monk-young", 4.6]]);
   // the hall's own board moves to the side wall
   wallBoard(h, "left", 0.6, boardTexture({ head: tx("ศาลาสากล", "Universal Hall"), icon: "🌍", title: "ภาษาไทย · English", foot: tx("เลือกภาษา ขนาดตัวอักษร และการเคลื่อนไหวได้ในหน้าเว็บของศาลานี้", "Choose language and motion settings on this hall's web page"), wide: true }), 2.8, 2.33, 2.6);
   props("potplant", 1.6, [[-W / 2 + 1, D / 2 - 1, 2, FY], [W / 2 - 1, D / 2 - 1, 3, FY]], { parent: g });
