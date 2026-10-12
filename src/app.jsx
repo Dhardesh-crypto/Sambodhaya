@@ -8,7 +8,7 @@ const store = {
   set(k, v) { try { localStorage.setItem("sambodhaya-" + k, JSON.stringify(v)); } catch (e) {} },
   del(k) { try { localStorage.removeItem("sambodhaya-" + k); } catch (e) {} },
 };
-const IMG = { bg: "img/temple-bg.webp", dog: "img/temple-dog.jpg", entrance: "img/entrance.jpg" };
+const IMG = { bg: "img/temple-bg.webp", dog: "img/temple-dog.jpg", entrance: "img/entrance.jpg", world: "img/world-preview.jpg" };
 
 // UI wording (not teaching). Thai first; English is a draft.
 const UI = (th, en) => ({ th, en });
@@ -149,15 +149,33 @@ function Gate() {
               {h.pin && <span className={"pin" + (h.pinPos === "top" ? " pin-top" : "")} aria-hidden="true">{h.pin}</span>}
             </button>
           ))}
+          {/* the 3D temple, right on the hero: a clear second way in */}
+          <a className="hero-3d" href="world.html"><img src={IMG.world} alt="" width="96" height="60" /><span>🏯 {t(UI("เดินในวัดแบบ 3 มิติ", "Walk the temple in 3D"))} →</span></a>
         </div>
       )}
+      {/* two equal ways in: the pages, or walking the temple in 3D */}
+      <h2 className="ways-title">{t(UI("เข้าวัดแบบไหนดี?", "How would you like to come in?"))}</h2>
+      <div className="ways-in">
+        <button className="way-card" onClick={() => go("yard")}>
+          {!settings.textOnly ? <img className="way-img" src={IMG.bg} alt="" width="480" height="300" /> : <span className="way-icon" aria-hidden="true">🚪</span>}
+          <span className="way-text">
+            <span className="way-name">🚪 {t(UI("เข้าวัด", "Enter the temple"))} →</span>
+            <span className="way-sub">{t(UI("อ่าน ฟัง และเลือกไปทีละศาลา ใช้ได้ทุกเครื่อง", "Read, listen and choose one hall at a time. Works on every device."))}</span>
+          </span>
+        </button>
+        <a className="way-card way-3d" href="world.html">
+          {!settings.textOnly ? <img className="way-img" src={IMG.world} alt="" width="480" height="300" /> : <span className="way-icon" aria-hidden="true">🏯</span>}
+          <span className="way-text">
+            <span className="way-name">🏯 {t(UI("เดินในวัดแบบ 3 มิติ", "Walk the temple in 3D"))} →</span>
+            <span className="way-sub">{t(UI("เดินเอง ไหว้พระ นั่งสมาธิ ใส่บาตร กับหมาวัด • ต้นแบบ ใช้กับเครื่องรุ่นใหม่ได้ดีที่สุด เสียงปิดอยู่จนกว่าจะเปิดเอง", "Walk around yourself: wai, sit, give alms, with the temple dog • a prototype; best on newer devices; sound stays off until you turn it on"))}</span>
+          </span>
+        </a>
+      </div>
       <div className="gate-actions">
         <button className="bell" onClick={() => ringBell(settings.mute)}>
           <span aria-hidden="true">🔔</span> {t(UI("ฟังเสียงระฆัง", "Ring the bell"))}
           <span className="bell-note">{t(UI("เลือกกดเองได้ • ไม่เปิดเอง", "Only if you press it • never plays by itself"))}</span>
         </button>
-        <button className="btn big" onClick={() => go("yard")}>{t(UI("เข้าวัด →", "Enter the temple →"))}</button>
-        <a className="btn world-link" href="world.html">🎮 {t(UI("เดินในวัดแบบ 3 มิติ (ทดลอง)", "Walk the temple in 3D (trial)"))}</a>
       </div>
       <h2 className="hubs-title">{t(UI("อยากไปไหนวันนี้?", "Where would you like to go today?"))}</h2>
       <ul className="hubs">

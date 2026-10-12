@@ -98,6 +98,35 @@ a.way { color: var(--ink); text-decoration: none; display: inline-block; }
 .pin-top { top: -14px; }
 .hotspot:hover .pin, .hotspot:focus-visible .pin { background: var(--gold); }
 .world-link { background: var(--leaf); text-decoration: none; }
+/* the 3D way in, on the hero picture: beside the temple's name, over the leaves of the great tree (no painted text there) */
+.hero-3d { position: absolute; left: 30%; top: 11.5%; display: flex; align-items: center; gap: 10px; line-height: 1.2; padding: 6px 16px 6px 6px; background: var(--saffron); color: var(--cream); text-decoration: none; font-family: var(--display); font-size: clamp(.95rem, 1.3vw, 1.25rem); border: 2px solid var(--ink); border-radius: 999px; box-shadow: 0 3px 0 rgba(58, 42, 29, .55), 0 6px 18px rgba(40, 25, 10, .35); }
+.hero-3d img { width: clamp(48px, 5vw, 84px); height: auto; aspect-ratio: 16 / 10; object-fit: cover; border-radius: 999px; border: 2px solid var(--cream); }
+.hero-3d:hover { background: var(--saffron-deep); }
+.hero-3d:focus-visible { outline: 3px solid var(--cream); outline-offset: 2px; box-shadow: 0 0 0 6px var(--saffron-deep); }
+@media (max-width: 640px) { .hero-3d { display: none; } }
+/* the two ways in, side by side under the hero picture (stacked on phones) */
+.ways-title { font-size: 1.5rem; text-align: center; margin: 4px 0 -4px; }
+.ways-in { width: 100%; max-width: 920px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.way-card { display: flex; flex-direction: column; text-align: left; padding: 0; overflow: hidden; background: var(--cream); color: var(--ink); text-decoration: none; border: 2px solid var(--ink); border-radius: 18px; box-shadow: var(--pop); font: inherit; cursor: pointer; }
+.way-card:hover { background: #fff7e6; }
+.way-card:focus-visible { outline: 3px solid var(--saffron-deep); outline-offset: 3px; }
+.way-3d { border-color: var(--saffron-deep); }
+.way-img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 10; object-fit: cover; border-bottom: 2px solid var(--ink); }
+.way-icon { display: grid; place-items: center; height: 96px; font-size: 2.6rem; background: var(--leaf-soft); border-bottom: 2px solid var(--ink); }
+.way-text { display: flex; flex-direction: column; gap: 4px; padding: 12px 16px 14px; }
+.way-name { font-family: var(--display); font-size: 1.35rem; }
+.way-3d .way-name { color: var(--saffron-deep); }
+.way-sub { font-size: .92rem; color: var(--muted); line-height: 1.5; }
+@media (max-width: 640px) {
+  /* phones: both ways in fit on the first screen, a small picture beside the words */
+  .ways-in { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .way-card { flex-direction: row; align-items: stretch; }
+  .way-img { width: 112px; flex: none; aspect-ratio: auto; height: auto; min-height: 100%; border-bottom: 0; border-right: 2px solid var(--ink); }
+  .way-icon { width: 80px; height: auto; flex: none; border-bottom: 0; border-right: 2px solid var(--ink); }
+  .way-text { padding: 10px 12px; }
+  .way-name { font-size: 1.15rem; }
+  .way-sub { font-size: .84rem; }
+}
 .gate-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: center; }
 .bell { display: flex; flex-direction: column; align-items: center; gap: 2px; background: var(--leaf-soft); border: 1.5px solid var(--ink); border-radius: 16px; padding: 8px 18px; font-family: var(--display); font-size: 1.1rem; }
 .bell-note { font-family: var(--body); font-size: .8rem; color: var(--muted); }
