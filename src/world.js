@@ -806,8 +806,12 @@ const onPath = (x, z) => {
 addEventListener("visibilitychange", () => { if (document.hidden) sound.pause(); else sound.resume(); });
 
 /* ---------------- avatars ---------------- */
-const AV_DEFAULT = { kind: "blocky", skin: "#e8b48a", shirt: "#e98a2b", pants: "#5e4a3a", hair: "#2b1d14", hairStyle: "short", face: "smile" };
-let avatarCfg = { ...AV_DEFAULT, ...read("avatar", {}) };
+// kind: "boy" (the Sambodhaya film's boy, the default), "blocky" (built here) or "photo" (a picture as the face)
+const AV_DEFAULT = { kind: "boy", skin: "#e8b48a", shirt: "#e98a2b", pants: "#5e4a3a", hair: "#2b1d14", hairStyle: "short", face: "smile" };
+const savedAvatar = read("avatar", {});
+let avatarCfg = { ...AV_DEFAULT, ...savedAvatar };
+if (!savedAvatar.v && savedAvatar.kind !== "photo") avatarCfg.kind = "boy"; // the boy became the default in v2
+avatarCfg.v = 2;
 let faceImage = null; // data URL, only kept if the player chose to remember it
 if (avatarCfg.kind === "photo") faceImage = read("avatar-face", null);
 if (avatarCfg.kind === "photo" && !faceImage) avatarCfg.kind = "blocky";
@@ -863,19 +867,41 @@ function setModel(obj, mixerClips) {
   if (player.model) player.obj.remove(player.model);
   if (player.vrm) { VRMUtils.deepDispose(player.vrm.scene); player.vrm = null; }
   player.model = obj; player.obj.add(obj);
-  player.mixer = null; player.clips = {}; player.current = null;
+  player.mixer = null; player.clips = {}; player.current = null; player.action = null;
+  player.gait = {};
   if (mixerClips && mixerClips.length) {
-    player.mixer = new THREE.AnimationMixer(obj);
     const find = (re) => mixerClips.find((c) => re.test(c.name));
     player.clips.idle = find(/idle|stand|breath/i) || mixerClips[0];
-    player.clips.walk = find(/walk|run|move/i);
+    player.clips.walk = find(/walk/i) || find(/run|jog|move/i);
+    player.clips.run = find(/run|jog|sprint/i);
+    if (player.clips.run === player.clips.walk) delete player.clips.run;
+    ["walk", "run"].forEach((k) => { if (player.clips[k]) player.gait[k] = measureGait(obj, player.clips[k]); });
+    player.mixer = new THREE.AnimationMixer(obj);
     playClip("idle");
   }
 }
+// How fast a walk or run clip carries the character, so the clip can be played at the speed that keeps
+// the feet planted: sample a foot through the clip, count its strides and how far it travels.
+function measureGait(obj, clip) {
+  let foot = null; obj.traverse((o) => { if (!foot && o.isBone && /left.?foot|foot.?l\b|l.?foot/i.test(o.name)) foot = o; });
+  if (!foot) return { speed: 3, steps: 2 };
+  const mixer = new THREE.AnimationMixer(obj), act = mixer.clipAction(clip); act.play();
+  const v = new THREE.Vector3(), zs = [], N = 160;
+  for (let i = 0; i <= N; i++) { mixer.setTime(clip.duration * i / N); obj.updateMatrixWorld(true); foot.getWorldPosition(v); obj.worldToLocal(v); zs.push(v.z); }
+  mixer.stopAllAction(); mixer.uncacheRoot(obj);
+  const mean = zs.reduce((a, z) => a + z, 0) / zs.length;
+  let cross = 0; for (let i = 1; i < zs.length; i++) if ((zs[i - 1] - mean) * (zs[i] - mean) < 0) cross++;
+  const cycles = Math.max(1, cross / 2), range = Math.max(...zs) - Math.min(...zs);
+  // the holder is scaled; convert to world units
+  const s = new THREE.Vector3(); obj.getWorldScale(s);
+  return { speed: Math.max(0.5, (2 * range * cycles) / clip.duration * (s.z || 1)), steps: (2 * cycles) / clip.duration };
+}
 function playClip(name) {
   if (!player.mixer || !player.clips[name] || player.current === name) return;
-  const a = player.mixer.clipAction(player.clips[name]);
-  player.mixer.stopAllAction(); a.reset().fadeIn(0.2).play(); player.current = name;
+  const a = player.mixer.clipAction(player.clips[name]), prev = player.action;
+  a.reset().setEffectiveWeight(1).play();
+  if (prev && prev !== a) prev.crossFadeTo(a, 0.25, false); else a.fadeIn(0.2);
+  player.action = a; player.current = name;
 }
 function fitModel(obj, height = 2.9) {
   const box = new THREE.Box3().setFromObject(obj); const size = box.getSize(new THREE.Vector3());
@@ -885,7 +911,30 @@ function fitModel(obj, height = 2.9) {
   obj.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
 }
 function buildBlocky() { setModel(blockyAvatar(avatarCfg, avatarCfg.kind === "photo" ? faceImage : null)); }
-buildBlocky();
+
+// the Sambodhaya boy: a rigged 3D model with walk and idle animations (assets/models/boy*.glb)
+const boyLoader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+let boyReady = null;
+function loadBoy() {
+  // boy.glb holds the model and its walk; the other two files hold only an animation for the same skeleton
+  if (!boyReady) boyReady = Promise.all(["boy", "boy-idle", "boy-run"].map((n) => new Promise((res) => boyLoader.load(`assets/models/${n}.glb`, res, undefined, () => res(null)))))
+    .then(([walk, idle, run]) => {
+      if (!walk) return null;
+      const obj = walk.scene, holder = new THREE.Group(); holder.add(obj); fitModel(obj);
+      return { holder, clips: [walk, idle, run].flatMap((g) => (g ? g.animations : [])) };
+    });
+  return boyReady;
+}
+function buildAvatar() {
+  if (avatarCfg.kind !== "boy") { buildBlocky(); return; }
+  if (!player.model) buildBlocky(); // a stand-in while the boy loads
+  loadBoy().then((b) => {
+    if (avatarCfg.kind !== "boy") return;
+    if (!b) { buildBlocky(); return; } // couldn't load: stay a built character
+    setModel(b.holder, b.clips);
+  });
+}
+buildAvatar();
 
 const loader = new GLTFLoader();
 loader.register((p) => new VRMLoaderPlugin(p));
@@ -1112,7 +1161,7 @@ $("dlg").addEventListener("click", (e) => {
 });
 $("btn-places").addEventListener("click", () => openPlaces(false));
 $("btn-help").addEventListener("click", () => openDialog(tx("❔ วิธีเดินในวัด", "❔ How to walk around"),
-  `<p>${tx("⌨️ W A S D หรือปุ่มลูกศร = เดิน • Shift = เดินเร็ว • Space = กระโดด • E = เข้าศาลาที่อยู่ใกล้ • G = เรียกหมาวัด", "⌨️ W A S D or arrow keys = walk • Shift = faster • Space = jump • E = visit the nearby hall • G = call the temple dog")}</p>
+  `<p>${tx("⌨️ W A S D หรือปุ่มลูกศร = เดิน • Shift = วิ่ง • Space = กระโดด • E = เข้าศาลาที่อยู่ใกล้ • G = เรียกหมาวัด", "⌨️ W A S D or arrow keys = walk • Shift = run • Space = jump • E = visit the nearby hall • G = call the temple dog")}</p>
    <p>${tx("🖱️ ลากเมาส์ = หมุนมุมมอง • ล้อเมาส์ = ซูม • คลิกหมาวัดหรือศาลา = เปิด", "🖱️ Drag = turn the view • Wheel = zoom • Click the dog or a hall = open it")}</p>
    <p>${tx("📱 จอยซ้ายล่าง = เดิน • ลากจอ = หมุนมุมมอง • ปุ่ม E = เข้า", "📱 Bottom-left stick = walk • Drag the screen = turn the view • E button = visit")}</p>
    <p>${tx("🔈 ปุ่มเสียง = เปิดเสียงนก ลม น้ำตก และกระดิ่งชายคา (ปิดอยู่จนกว่าจะกด) • 🔔 เดินไปที่ระฆังแล้วกด E เพื่อตีระฆัง", "🔈 Sound button = birds, breeze, the waterfall and the roof bells (off until you press it) • 🔔 Walk to the bell and press E to strike it")}</p>
@@ -1149,12 +1198,16 @@ const SH = ["#e98a2b", "#4f9a5d", "#3d8fd1", "#f27aa0", "#f2cc62", "#fffdf8", "#
 const PA = ["#5e4a3a", "#2f3b55", "#3f6b3a", "#7a2f2f", "#d9c7a5"];
 const HA = ["#2b1d14", "#6b3e1f", "#c98e3a", "#9aa0a6"];
 function swatches(field, list) { return `<div class="swatches" role="radiogroup">${list.map((c) => `<button class="sw${avatarCfg[field] === c ? " on" : ""}" style="background:${c}" data-sw="${field}" data-c="${c}" aria-label="${c}" role="radio" aria-checked="${avatarCfg[field] === c}"></button>`).join("")}</div>`; }
-function openAvatar(tab = "build") {
+function openAvatar(tab = avatarCfg.kind === "boy" ? "boy" : "build") {
   const tabs = `<div class="tabs" role="tablist">
+    <button class="chip${tab === "boy" ? " on" : ""}" data-tab="boy">🧒 ${tx("เด็กชายสัมโพธายะ", "Sambodhaya boy")}</button>
     <button class="chip${tab === "build" ? " on" : ""}" data-tab="build">🧱 ${tx("สร้างเอง", "Build")}</button>
     <button class="chip${tab === "photo" ? " on" : ""}" data-tab="photo">🖼️ ${tx("รูปเป็นหน้า", "Picture face")}</button>
     <button class="chip${tab === "model" ? " on" : ""}" data-tab="model">🧩 ${tx("ไฟล์ 3 มิติ", "3D file")}</button></div>`;
   let body = "";
+  if (tab === "boy") body = `
+    <div class="row"><img class="preview" src="img/avatar-boy.jpg" alt="" style="object-fit:contain;background:#fff"><p>${tx("เด็กชายจากภาพยนตร์สั้นของวัดสัมโพธายะ เดินได้ ยืนพักได้ สะพายกระเป๋านักเรียน", "The boy from the Sambodhaya film. He walks, stands at ease and carries his school bag.")}</p></div>
+    <div class="row"><button class="btn" id="use-boy" ${avatarCfg.kind === "boy" ? "disabled" : ""}>${avatarCfg.kind === "boy" ? tx("กำลังใช้อยู่ ✓", "In use ✓") : tx("ใช้ตัวละครนี้", "Use this character")}</button></div>`;
   if (tab === "build") body = `
     <div class="field"><span>${tx("สีผิว", "Skin")}</span>${swatches("skin", SK)}</div>
     <div class="field"><span>${tx("เสื้อ", "Shirt")}</span>${swatches("shirt", SH)}</div>
@@ -1175,10 +1228,11 @@ function openAvatar(tab = "build") {
     <p class="note">${tx("ไฟล์อยู่ในเครื่องของคุณเท่านั้น ไม่ถูกส่งไปไหน และไม่ถูกเก็บไว้ เมื่อเปิดหน้าใหม่จะกลับเป็นตัวละครที่สร้างเอง", "The file stays on your device. It isn't sent anywhere or stored; next time the page opens you'll be your built character again.")}</p>`;
   openDialog(tx("🧍 ตัวละครของฉัน", "🧍 My avatar"), tabs + body + `<div class="row"><button class="btn" data-close>${tx("เสร็จแล้ว", "Done")}</button></div>`);
   const dlg = $("dlg");
+  const ub = $("use-boy"); if (ub) ub.addEventListener("click", () => { avatarCfg.kind = "boy"; write("avatar", avatarCfg); buildAvatar(); openAvatar("boy"); });
   dlg.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => openAvatar(b.dataset.tab)));
   dlg.querySelectorAll("[data-sw]").forEach((b) => b.addEventListener("click", () => { avatarCfg = { ...avatarCfg, kind: avatarCfg.kind === "photo" ? "photo" : "blocky", [b.dataset.sw]: b.dataset.c }; write("avatar", avatarCfg); buildBlocky(); openAvatar("build"); }));
-  dlg.querySelectorAll("[data-hs]").forEach((b) => b.addEventListener("click", () => { avatarCfg.hairStyle = b.dataset.hs; write("avatar", avatarCfg); buildBlocky(); openAvatar("build"); }));
-  dlg.querySelectorAll("[data-face]").forEach((b) => b.addEventListener("click", () => { avatarCfg.face = b.dataset.face; if (avatarCfg.kind === "photo") { avatarCfg.kind = "blocky"; } write("avatar", avatarCfg); buildBlocky(); openAvatar("build"); }));
+  dlg.querySelectorAll("[data-hs]").forEach((b) => b.addEventListener("click", () => { avatarCfg.hairStyle = b.dataset.hs; if (avatarCfg.kind === "boy") avatarCfg.kind = "blocky"; write("avatar", avatarCfg); buildBlocky(); openAvatar("build"); }));
+  dlg.querySelectorAll("[data-face]").forEach((b) => b.addEventListener("click", () => { avatarCfg.face = b.dataset.face; if (avatarCfg.kind === "photo" || avatarCfg.kind === "boy") { avatarCfg.kind = "blocky"; } write("avatar", avatarCfg); buildBlocky(); openAvatar("build"); }));
   const ff = $("face-file");
   if (ff) ff.addEventListener("change", () => {
     const f = ff.files[0]; if (!f) return;
@@ -1205,7 +1259,7 @@ function openAvatar(tab = "build") {
     loadModelFile(f, (err) => { $("model-status").textContent = err ? tx("เปิดไฟล์นี้ไม่ได้ ลองไฟล์ .glb หรือ .vrm อื่น", "Couldn't open this file. Try another .glb or .vrm.") : tx("ใส่ตัวละครแล้ว ✓", "Avatar applied ✓"); if (!err && $("model-flip")) $("model-flip").disabled = false; });
   });
 }
-$("btn-avatar").addEventListener("click", () => openAvatar("build"));
+$("btn-avatar").addEventListener("click", () => openAvatar());
 
 /* ---------------- main loop ---------------- */
 const clock = new THREE.Clock();
@@ -1227,7 +1281,9 @@ function tick() {
     if ((keys.Space) && player.y <= groundAt(player.x, player.z) + 0.01) player.vy = 9;
   }
   const mag = Math.min(1, Math.hypot(fx, fz));
-  const speed = (keys.ShiftLeft || keys.ShiftRight ? 11 : 6.5) * mag;
+  // a calm walk, like the boy in the film; Shift (or the touch stick pushed to its edge) runs
+  const running = keys.ShiftLeft || keys.ShiftRight || Math.hypot(joy.x, joy.y) > 0.92;
+  const speed = (running ? 6 : 2.6) * mag; // a 10-year-old's natural walking and running pace at this scale
   if (mag > 0.05) {
     const s = Math.sin(camYaw), c = Math.cos(camYaw);
     const nx = fx / (Math.hypot(fx, fz) || 1), nz = fz / (Math.hypot(fx, fz) || 1);
@@ -1243,13 +1299,19 @@ function tick() {
   // limb swing for blocky avatars, clips for 3D models
   const moving = mag > 0.05;
   const stepsBefore = Math.floor(walkPhase / Math.PI);
-  walkPhase += dt * (moving ? speed * 1.6 : 0);
+  const gait = player.gait && player.gait[player.current];
+  walkPhase += dt * (moving ? (gait && player.action ? Math.PI * gait.steps * player.action.timeScale : speed * 1.6) : 0); // footsteps follow the animation's own steps
   if (moving && Math.floor(walkPhase / Math.PI) !== stepsBefore && player.y <= gy + 0.05) sound.step(insideHall(player.x, player.z) ? "wood" : onPath(player.x, player.z) ? "stone" : "grass");
   const limbs = player.model && player.model.userData.limbs;
   if (limbs) {
     const sw = moving ? Math.sin(walkPhase) * 0.7 : 0;
     limbs.legL.rotation.x = sw; limbs.legR.rotation.x = -sw; limbs.armL.rotation.x = -sw * 0.8; limbs.armR.rotation.x = sw * 0.8;
-  } else if (player.mixer) { playClip(moving && player.clips.walk ? "walk" : "idle"); player.mixer.update(dt); }
+  } else if (player.mixer) {
+    playClip(!moving ? "idle" : player.clips.run && speed > 5 ? "run" : player.clips.walk ? "walk" : "idle");
+    const g = player.gait[player.current];
+    if (g && player.action) player.action.timeScale = Math.min(2.6, Math.max(0.4, speed / g.speed)); // feet keep pace with the ground
+    player.mixer.update(dt);
+  }
   else if (player.model && !player.vrm && !settings.calmMotion) player.model.position.y = moving ? Math.abs(Math.sin(walkPhase)) * 0.12 : 0;
   if (player.vrm) {
     // VRM files carry no animation: relax the arms and swing the limbs procedurally
