@@ -153,5 +153,5 @@ const SUPPORT = {
   },
   taxNote: { th: "ไม่สามารถนำไปลดหย่อนภาษีได้ เนื่องจากเป็นบัญชีบุคคลสำหรับพัฒนาและสร้างวัด จึงออกใบเสร็จเพื่อลดหย่อนภาษีไม่ได้", en: "Not tax-deductible: this is an individual's account for the project's development and construction, so official tax-deductible receipts can't be issued." },
   retentionDays: 90,    // slips are kept 90 days for accounting and audit verification, then deleted
-  contact: null,        // e.g. "email@example.org" for privacy or deletion requests (not yet provided)
+  contact: "defidhardesh@gmail.com", // for privacy or deletion requests (a backup address for now, 12 Oct 2026)
 };
