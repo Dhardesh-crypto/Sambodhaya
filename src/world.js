@@ -227,6 +227,14 @@ const path = (x1, z1, x2, z2, w = 5) => {
 const ROAD = 7;
 // the roads run half a metre onto each end of the bridge, so road and bridge join without a gap
 path(0, 13, 0, BRIDGE.zc - BRIDGE.half + 0.5, ROAD); path(0, BRIDGE.zc + BRIDGE.half - 0.5, 0, 98, ROAD); path(0, -13, 0, -44); // entrance and Practice Garden; the hall paths are drawn from the halls themselves
+// the walking-meditation lane (ทางเดินจงกรม) on the lawn by the kuti: a straight strip of raked sand
+const LANE = { x1: 22, z1: -9, x2: 34, z2: -9, w: 1.5 };
+{
+  paths.push(LANE);
+  const len = Math.hypot(LANE.x2 - LANE.x1, LANE.z2 - LANE.z1);
+  const m = add(new THREE.BoxGeometry(LANE.w, 0.12, len + 1), S(0xd9c49a, { roughness: 1 }), (LANE.x1 + LANE.x2) / 2, -0.04, (LANE.z1 + LANE.z2) / 2, scene, false);
+  m.rotation.y = Math.atan2(LANE.x2 - LANE.x1, LANE.z2 - LANE.z1); m.receiveShadow = true;
+}
 
 /* ---------------- the great tree at the centre ---------------- */
 {
@@ -460,7 +468,10 @@ sign(tx("ลานกลาง", "Central Courtyard"), tx("อยากไปไ
    always the highest of all. The platform is not walkable, as lay visitors don't step onto it.
    Returns the local z of the platform's front edge. */
 const buddhaImages = [];
-const altars = []; // the offering tables before the shrines (merit-making, below)
+const altars = []; // the low incense tables before the shrines (merit-making, below)
+// offerings before an image are made kneeling: he kneels this far from the table (or the gold-leaf stand) to reach
+// it, then moves back on his knees to bow three times from the kraap's spot, clear of the table
+const KNEEL_NEAR = 0.6, KRAAP_BACK = 2.3, INCENSE_H = 0.45, INCENSE_D = 0.5, GILD_H = 0.5, GILD_D = 0.6;
 const gildImage = { mesh: null, leaves: [] }; // the small image for gold leaf, in the Universal Hall
 // folded monks' robes (the same brown as the monks wear), stacked
 const robeMat = S(0x8a4f22, { roughness: 0.9 }), robeEdge = S(0x6e3d18, { roughness: 0.9 });
@@ -543,7 +554,7 @@ function shrine(h, monks = [], { gifts = false } = {}) {
   arch.scale.y = 1.25;
   add(new THREE.BoxGeometry(3.6, 4.4, 0.05), S(0x9b2a1d, { roughness: 0.9 }), 0, top + 2.3, -D / 2 + 0.24, g, false);
   add(new THREE.BoxGeometry(3.7, 0.12, 0.07), MAT.gold, 0, top + 4.5, -D / 2 + 0.25, g, false);
-  { const [bx, bz] = h.toWorld(0, az - 0.24), [sx, sz] = h.toWorld(0, pz + PD / 2 + 1.75); // bowed head and hands reach ~1.45 m forward
+  { const [bx, bz] = h.toWorld(0, az - 0.24), [sx, sz] = h.toWorld(0, pz + PD / 2 + KRAAP_BACK); // bowed head and hands reach ~1.45 m forward, clear of the incense table
     buddhaImages.push({ x: bx, z: bz, hall: h, spot: { x: sx, z: sz } }); } // the wai turns toward it; the kraap is made from the spot
   // the model is built facing +x; a quarter turn makes the image face the entrance
   props("buddha", 1.9, [[0, az - 0.12 * 2, -Math.PI / 2, statueY]], { parent: g, fallback: () => {
@@ -558,25 +569,24 @@ function shrine(h, monks = [], { gifts = false } = {}) {
   props("lotus", 0.45, [[0, az + 0.55, 0, top + 0.58]], { parent: g });
   const shrineLight = new THREE.PointLight(0xffc27a, 10, 7, 2); shrineLight.position.set(0, top + 2.4, az + 1.6); g.add(shrineLight);
   hallLamps.push({ light: shrineLight, day: 10, night: 16 });
-  // an offering table (โต๊ะบูชา) before the platform, just right of the middle (clear of the kraap) and turned to
-  // face the Buddha image: two candles waiting to be lit, a brass urn of sand for incense and a vase for a lotus
+  // a low incense table (โต๊ะหมู่บูชา) on the floor against the middle of the platform, below the image: two candles
+  // waiting to be lit, a brass urn of sand for incense and a vase for a lotus. Offerings are made kneeling before it.
   {
-    const lx = 1.55, lz = pz + PD / 2 + 0.5, T = FY + 1.15;
-    const ag = new THREE.Group(); ag.position.set(lx, 0, lz); ag.rotation.y = Math.atan2(lx, lz - (az - 0.24)); g.add(ag); // its +z looks away from the image
-    add(new THREE.BoxGeometry(1.0, 1.1, 0.5), MAT.lacquer, 0, FY + 0.55, 0, ag);
-    add(new THREE.BoxGeometry(1.08, 0.06, 0.58), MAT.gold, 0, T - 0.02, 0, ag, false);
+    const lz = pz + PD / 2 + INCENSE_D / 2, T = FY + INCENSE_H;
+    const ag = new THREE.Group(); ag.position.set(0, 0, lz); g.add(ag);
+    add(new THREE.BoxGeometry(1.3, INCENSE_H, INCENSE_D), MAT.lacquer, 0, FY + INCENSE_H / 2, 0, ag);
+    add(new THREE.BoxGeometry(1.36, 0.05, INCENSE_D + 0.06), MAT.gold, 0, T - 0.02, 0, ag, false);
     add(new THREE.CylinderGeometry(0.16, 0.12, 0.14, 20), MAT.gold, 0, T + 0.07, -0.04, ag);                         // the urn
     add(new THREE.CylinderGeometry(0.15, 0.15, 0.02, 20), S(0xcdb98a, { roughness: 1 }), 0, T + 0.135, -0.04, ag, false); // its sand
-    add(new THREE.CylinderGeometry(0.05, 0.07, 0.2, 12), S(0x2f6f9f, { roughness: 0.4 }), 0.3, T + 0.1, 0.08, ag); // the vase
-    const candles = [-0.36, 0.36].map((dx) => {
+    add(new THREE.CylinderGeometry(0.05, 0.07, 0.2, 12), S(0x2f6f9f, { roughness: 0.4 }), 0.26, T + 0.1, 0.1, ag); // the vase
+    const candles = [-0.45, 0.45].map((dx) => {
       add(new THREE.CylinderGeometry(0.035, 0.035, 0.26, 10), waxMat, dx, T + 0.13, -0.04, ag, false);
       const f = add(new THREE.SphereGeometry(0.035, 8, 6), flameMat, dx, T + 0.29, -0.04, ag, false); f.scale.y = 1.8; f.visible = false;
       return f;
     });
-    h.post(lx, lz, 0.55);
-    g.updateMatrixWorld(true);
-    const spot = ag.localToWorld(new THREE.Vector3(0, 0, 1.05)), mid = ag.localToWorld(new THREE.Vector3(0, 0, 0));
-    altars.push({ h, g: ag, T, candles, spot: { x: spot.x, z: spot.z }, faceYaw: Math.atan2(mid.x - spot.x, mid.z - spot.z), sticks: [], lit: 0 });
+    h.block(0, lz, 0.68, INCENSE_D / 2);
+    const [nx, nz] = h.toWorld(0, pz + PD / 2 + INCENSE_D + KNEEL_NEAR), [fx, fz] = h.toWorld(0, pz + PD / 2 + KRAAP_BACK), [ix, iz] = h.toWorld(0, az - 0.24);
+    altars.push({ h, g: ag, T, candles, near: { x: nx, z: nz }, far: { x: fx, z: fz }, faceYaw: Math.atan2(ix - nx, iz - nz), sticks: [], lit: 0 });
   }
   return pz + PD / 2;
 }
@@ -635,11 +645,13 @@ function shrine(h, monks = [], { gifts = false } = {}) {
 {
   const h = salas.access, { g, FY, W, D } = h;
   shrine(h); // the teachers' seats stand ready; the monks sit in the Learning Hall
-  // a small bronze Buddha image on a stand for gold leaf (ปิดทอง), before the platform on the left
+  // a small bronze Buddha image on a low stand for gold leaf (ปิดทอง), before the platform on the left: it is
+  // gilded kneeling, like every offering before an image
   {
-    const lx = -3.0, lz = -D / 2 + 0.2 + 2.8 + 0.55, T = FY + 0.95;
-    add(new THREE.BoxGeometry(1.0, 0.95, 0.8), MAT.lacquer, lx, FY + 0.475, lz, g);
-    add(new THREE.BoxGeometry(1.08, 0.06, 0.88), MAT.gold, lx, T, lz, g, false);
+    const edge = -D / 2 + 0.2 + 2.8, lx = -4.2, lz = edge + GILD_D / 2, T = FY + GILD_H;
+    add(new THREE.BoxGeometry(0.9, GILD_H, GILD_D), MAT.lacquer, lx, FY + GILD_H / 2, lz, g);
+    add(new THREE.BoxGeometry(0.98, 0.05, GILD_D + 0.08), MAT.gold, lx, T, lz, g, false);
+    h.block(lx, lz, 0.49, GILD_D / 2);
     const holder = new THREE.Group(); holder.position.set(lx, T + 0.03, lz); g.add(holder);
     loadProp("buddha").then((src) => {
       if (!src) return;
@@ -647,8 +659,8 @@ function shrine(h, monks = [], { gifts = false } = {}) {
       c.traverse((o) => { if (o.isMesh) { o.material = o.material.clone(); o.material.color = new THREE.Color(0x7a5532); o.material.metalness = 0.65; o.material.roughness = 0.45; o.material.map = null; o.castShadow = true; } }); // dark bronze, waiting for gold
       holder.add(c); gildImage.mesh = c;
     });
-    const [wx, wz] = h.toWorld(lx, lz + 1.15);
-    Object.assign(gildImage, { h, holder, spot: { x: wx, z: wz }, faceYaw: h.g.rotation.y + Math.PI, chest: new THREE.Vector3(lx, T + 0.62, lz + 0.2) });
+    const [nx, nz] = h.toWorld(lx, edge + GILD_D + KNEEL_NEAR), [fx, fz] = h.toWorld(lx, edge + GILD_D + 1.55);
+    Object.assign(gildImage, { h, holder, near: { x: nx, z: nz }, far: { x: fx, z: fz }, faceYaw: h.g.rotation.y + Math.PI, chest: new THREE.Vector3(lx, T + 0.62, lz + 0.2) });
   }
   // the hall's own board moves to the side wall
   wallBoard(h, "left", 0.6, boardTexture({ head: tx("ศาลาสากล", "Universal Hall"), icon: "🌍", title: "ภาษาไทย · English", foot: tx("เลือกภาษา ขนาดตัวอักษร และการเคลื่อนไหวได้ในหน้าเว็บของศาลานี้", "Choose language and motion settings on this hall's web page"), wide: true }), 2.8, 2.33, 2.6);
@@ -1218,17 +1230,20 @@ function fishStep(dt) {
 }
 
 /* ---------------- making merit (ทำบุญ): incense, candles and a lotus; gold leaf; cloth on the Bodhi tree ---------------- */
-// Three standing offerings, posed on the boy's skeleton like the wai:
-// • at an offering table before a shrine he lights the two candles, holds three incense sticks and a lotus bud
-//   between his palms in the high wai and bows, plants the incense in the sand and the lotus in the vase, and makes
-//   a last wai; the candles and incense burn on (smoke rising) for a few minutes;
-// • at the small bronze image he presses a leaf of gold onto it and makes a wai; the gold stays where he pressed;
-// • at the edge of the Bodhi tree's platform he makes a wai holding a folded three-coloured cloth, and a new band
-//   of cloth appears around the trunk, shaped to it.
+// Three offerings, posed on the boy's skeleton like the wai. Before a Buddha image they are made kneeling, as in
+// Thailand, with the kraap's kneeling and bows (below):
+// • kneeling at the low incense table before a shrine he lights the two candles, lights three incense sticks from
+//   them, holds the sticks and a lotus bud between his palms in the high wai, plants the incense in the sand and the
+//   lotus in the vase, brings his hands to a wai at the chest, moves back on his knees and bows three times; the
+//   candles and incense burn on (smoke rising) for a few minutes;
+// • kneeling before the small bronze image he makes the high wai, presses a leaf of gold onto it, makes the high
+//   wai again, moves back and bows three times; the gold stays where he pressed;
+// • standing at the edge of the Bodhi tree's platform he makes a wai holding a folded three-coloured cloth, and a
+//   new band of cloth appears around the trunk, shaped to it.
 const merit = { t: -1, kind: null, spot: null, faceYaw: 0, dur: 0, altar: null, items: null, placed: false, done: false };
 const MERIT = {
-  offer: { dur: 8.0, place: { id: "offer", icon: "🪔", th: "บูชาพระด้วยธูปเทียนดอกไม้", en: "Offer incense, candles and a lotus", sub: ["จุดเทียน จุดธูป ถวายดอกบัว", "Light the candles and incense, offer a lotus"] } },
-  gild: { dur: 5.2, place: { id: "gild", icon: "✨", th: "ปิดทององค์พระ", en: "Apply gold leaf", sub: ["ปิดทองแล้วไหว้", "Press on a leaf of gold, then wai"] } },
+  offer: { place: { id: "offer", icon: "🪔", th: "บูชาพระด้วยธูปเทียนดอกไม้", en: "Offer incense, candles and a lotus", sub: ["คุกเข่า จุดเทียน จุดธูป ถวายดอกบัว แล้วกราบ 3 ครั้ง", "Kneel, light the candles and incense, offer a lotus, bow three times"] } },
+  gild: { place: { id: "gild", icon: "✨", th: "ปิดทององค์พระ", en: "Apply gold leaf", sub: ["คุกเข่า ปิดทอง แล้วกราบ 3 ครั้ง", "Kneel, press on a leaf of gold, bow three times"] } },
   cloth: { dur: 4.4, place: { id: "cloth", icon: "🎗️", th: "ผูกผ้าสามสีต้นโพธิ์", en: "Tie a cloth on the Bodhi tree", sub: ["ผ้าสามสี แล้วไหว้", "A three-coloured cloth, then wai"] } },
 };
 const incenseMat = S(0x8c2f22, { roughness: 0.9 }), emberMat = new THREE.MeshBasicMaterial({ color: 0xff7a2a }), lotusMat = S(0xf2a3b8, { roughness: 0.7 }), stemMat = S(0x4f8f3f, { roughness: 0.8 });
@@ -1242,8 +1257,8 @@ function incenseBundle() { // three sticks and a lotus bud, held together
 const smokes = []; // incense smoke: soft puffs rising and fading
 function puff(x, y, z) { const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: softTex, color: 0xe8e4dc, transparent: true, opacity: 0.35, depthWrite: false })); m.position.set(x, y, z); m.scale.setScalar(0.08); m.userData = { t: 0, dx: (Math.random() - 0.5) * 0.08 }; scene.add(m); smokes.push(m); }
 function meritHere() {
-  for (const a of altars) if (Math.hypot(player.x - a.spot.x, player.z - a.spot.z) < 1.3) return { kind: "offer", spot: a.spot, faceYaw: a.faceYaw, altar: a };
-  if (gildImage.spot && Math.hypot(player.x - gildImage.spot.x, player.z - gildImage.spot.z) < 1.3) return { kind: "gild", spot: gildImage.spot, faceYaw: gildImage.faceYaw };
+  for (const a of altars) if (Math.hypot(player.x - a.near.x, player.z - a.near.z) < 1.1) return { kind: "offer", near: a.near, far: a.far, faceYaw: a.faceYaw, altar: a };
+  if (gildImage.near && Math.hypot(player.x - gildImage.near.x, player.z - gildImage.near.z) < 1.1) return { kind: "gild", near: gildImage.near, far: gildImage.far, faceYaw: gildImage.faceYaw };
   const d = Math.hypot(player.x, player.z);
   if (d > 7.2 && d < 9.2 && player.y < 0.5) { const a = Math.atan2(player.x, player.z); return { kind: "cloth", spot: { x: Math.sin(a) * 7.9, z: Math.cos(a) * 7.9 }, faceYaw: a + Math.PI }; }
   return null;
@@ -1252,25 +1267,94 @@ function startMerit(here) {
   if (!here || merit.t >= 0 || kraap.t >= 0 || alms.t >= 0 || feed.t >= 0) return;
   if (sit.on) { sit.on = false; sit.rise = 0; sit.faceYaw = null; }
   if (broom.held) putBroomBack();
+  if (here.kind !== "cloth") { startKneelingOffering(here); return; }
   wai.t = -1; wai.level = "buddha";
-  Object.assign(merit, here, { t: 0, dur: MERIT[here.kind].dur, items: null, placed: false, done: false });
-  if (here.kind === "offer" || here.kind === "cloth") { merit.items = here.kind === "offer" ? incenseBundle() : clothBundle(); merit.items.visible = false; scene.add(merit.items); }
+  Object.assign(merit, here, { t: 0, dur: 4.4, items: clothBundle(), placed: false, done: false });
+  merit.items.visible = false; scene.add(merit.items);
   if (player.mixer) playClip("idle", 0.4);
+}
+// Kneeling offerings run on the kraap (its kneeling, wai and bows), with two more channels: the right hand reaching
+// to something (the candles, the urn, the image) and the incense held. Keyframes:
+// [time, kneel, chest wai, high wai, palms on the floor, bow, (tray, lift, place: Kathina only), moved back, reach]
+function kneelKeys(kind) {
+  const k = kind === "offer" ? [
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0.6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [2.0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],             // kneeling before the table
+    [2.6, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1],             // lights the left candle
+    [3.1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1],             // and the right
+    [3.7, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1], [4.2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1],   // lights the incense at the candle
+    [4.9, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0], [6.6, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0],   // incense and lotus held in the high wai
+    [7.3, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1], [7.8, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1],   // planted in the urn
+    [8.4, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],             // hands to a wai at the chest
+    [9.6, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0],             // back on his knees, room to bow
+  ] : [
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0.6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [2.0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],             // kneeling before the image, a wai at the chest
+    [2.6, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0], [3.2, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0],   // the high wai
+    [3.9, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1], [4.7, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1],   // presses the gold leaf on
+    [5.4, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0], [6.2, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0],   // the high wai again
+    [6.8, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+    [8.0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0],             // back on his knees
+  ];
+  const shift = k[k.length - 1][0] - 2.0;
+  KRAAP_KEYS.filter((q) => q[0] > 2.0).forEach((q) => k.push([q[0] + shift, ...q.slice(1), 0, 0, 0, 1, 0])); // the high wai, three bows, up
+  return k;
+}
+const KNEEL_EVENTS = { offer: { candleL: 2.65, candleR: 3.15, embers: 4.0, plant: 7.6 }, gild: { leaf: 4.4 } };
+function startKneelingOffering(here) {
+  wai.t = -1;
+  kraap.kathin = null;
+  const items = here.kind === "offer" ? incenseBundle() : null; if (items) { items.visible = false; scene.add(items); }
+  kraap.merit = { ...here, items, placed: false };
+  kraap.spot = here.near; kraap.faceYaw = here.faceYaw;
+  kraap.floorY = groundAt(here.near.x, here.near.z);
+  kraap.keys = kneelKeys(here.kind); kraap.dur = kraap.keys[kraap.keys.length - 1][0];
+  kraap.t = 0;
+  if (player.mixer) playClip("idle", 0.4);
+}
+// where the right hand reaches, by the time in the offering
+function kneelReach(t) {
+  const m = kraap.merit;
+  if (m.kind === "gild") return reachPoint("image");
+  const a = m.altar, flame = (i) => a.candles[i].getWorldPosition(new THREE.Vector3());
+  if (t < 2.9) return flame(0).add(new THREE.Vector3(0, 0.05, 0));
+  if (t < 3.45) return flame(1).add(new THREE.Vector3(0, 0.05, 0));
+  if (t < 4.6) return flame(1).add(new THREE.Vector3(0, -0.3, 0));   // the incense tips held in the flame
+  return a.g.localToWorld(new THREE.Vector3(0, a.T + 0.3, -0.04));     // over the urn
+}
+function kneelStep(before, t) {
+  const m = kraap.merit; if (!m) return;
+  const at = (x) => before < x && t >= x, E = KNEEL_EVENTS[m.kind];
+  if (m.kind === "offer") {
+    const a = m.altar;
+    if (at(E.candleL)) a.candles[0].visible = true;
+    if (at(E.candleR)) a.candles[1].visible = true;
+    if (at(E.embers) && m.items) m.items.children.forEach((c) => { if (c.userData.ember) c.visible = true; }); // lit from the candle
+    if (at(E.plant) && m.items) { // planted in the sand, the lotus into the vase
+      m.placed = true; const g = m.items; a.g.attach(g);
+      g.position.set((Math.random() - 0.5) * 0.12, a.T + 0.12, -0.04 + (Math.random() - 0.5) * 0.06); g.rotation.set((Math.random() - 0.5) * 0.12, 0, (Math.random() - 0.5) * 0.12);
+      const bud = g.children.find((c) => c.userData.lotus); if (bud) bud.position.set(0.26 - g.position.x, 0.33 - 0.12, 0.1 - g.position.z); // into the vase
+      a.sticks.push(g); if (a.sticks.length > 3) { const old = a.sticks.shift(); old.parent && old.parent.remove(old); }
+      a.lit = 180;
+    }
+  }
+  if (m.kind === "gild" && at(E.leaf)) gildLeaf();
+}
+function endKneelingOffering() { const m = kraap.merit; if (m && m.items && !m.placed) scene.remove(m.items); kraap.merit = null; }
+// the hand's target and turn for a reach (fingers forward and down, palm down), as in poseKraap
+function kneelHand(model, fwd, up, t) {
+  const shape = handShape(model); if (!shape) return null;
+  const hs = shape.Right, Q = basisQuat(hs.finger, hs.palm, fwd.clone().addScaledVector(up, -0.4).normalize(), up.clone().negate().addScaledVector(fwd, 0.4).normalize());
+  const along = hs.points.reduce((a, q) => a + q.clone().applyQuaternion(Q).dot(fwd), 0) / hs.points.length * model.getWorldScale(new THREE.Vector3()).y;
+  return { target: kneelReach(t).addScaledVector(fwd, -along - 0.05), Q };
 }
 const clothBundle = () => { const g = new THREE.Group(); [0xf2c230, 0xc8322a, 0x3f9a4f].forEach((c, i) => add(new THREE.BoxGeometry(0.2, 0.05, 0.14), S(c, { roughness: 0.9 }), 0, 0.05 + i * 0.05, 0, g, false)); return g; };
 // envelopes for each offering: reach (to a point), wai (hands together), bow
 function meritState(t) {
   const k = merit.kind, e = (a, b, c, d) => smooth(a, b, t) * (1 - smooth(c, d, t));
-  if (k === "offer") return { reach: Math.max(e(0.8, 1.2, 1.75, 2.05), e(5.0, 5.5, 6.1, 6.45)), reachTo: t < 3.5 ? (t < 1.5 ? "candleL" : "candleR") : "urn", wai: Math.max(e(2.0, 2.5, 4.7, 5.1), e(6.4, 6.8, 7.4, 7.9)), bow: e(2.9, 3.4, 4.2, 4.6) };
-  if (k === "gild") return { reach: e(0.8, 1.4, 1.9, 2.3), reachTo: "image", wai: e(2.4, 2.9, 4.4, 4.9), bow: e(3.0, 3.4, 4.0, 4.4) };
   return { reach: 0, wai: e(0.8, 1.3, 3.6, 4.1), bow: e(1.6, 2.1, 3.0, 3.4) };
 }
-function reachPoint(to) {
-  const a = merit.altar;
-  if (to === "candleL" || to === "candleR") { const f = a.candles[to === "candleL" ? 0 : 1]; return f.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 0.05, 0)); }
-  if (to === "urn") return a.g.localToWorld(new THREE.Vector3(0, a.T + 0.3, -0.04));
-  return gildImage.holder.parent.localToWorld(gildImage.chest.clone());
-}
+function reachPoint() { return gildImage.holder.parent.localToWorld(gildImage.chest.clone()); }
 function poseMerit(model, B) {
   const st = meritState(merit.t), w = Math.max(st.reach, st.wai);
   const rest = restPose(model);
@@ -1293,7 +1377,7 @@ function poseMerit(model, B) {
   }
   // what he holds: between his palms in the wai, in his right hand as he reaches
   if (merit.items && !merit.placed) {
-    const it = merit.items; it.visible = merit.t > (merit.kind === "offer" ? 2.15 : 0.9);
+    const it = merit.items; it.visible = merit.t > 0.9;
     if (st.wai >= st.reach) { it.position.copy(wai.plane.point).addScaledVector(up, -0.06); it.rotation.set(0, player.yaw, 0); }
     else { it.position.copy(B.RightHand.getWorldPosition(new THREE.Vector3())).addScaledVector(fwd, 0.06); it.rotation.set(0, player.yaw, 0); }
   }
@@ -1310,20 +1394,6 @@ function meritStep(dt) {
   if (t < 0.8) { player.x += (merit.spot.x - player.x) * Math.min(1, dt * 8); player.z += (merit.spot.z - player.z) * Math.min(1, dt * 8); }
   let dy = merit.faceYaw - player.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); player.yaw += dy * Math.min(1, dt * 8);
   const at = (x) => before < x && t >= x;
-  if (merit.kind === "offer") {
-    const a = merit.altar;
-    if (at(1.45)) a.candles[0].visible = true;
-    if (at(1.75)) a.candles[1].visible = true;
-    if (at(2.2) && merit.items) merit.items.children.forEach((c) => { if (c.userData.ember) c.visible = true; }); // lit from the candle
-    if (at(5.95) && merit.items) { // planted in the sand, the lotus into the vase
-      merit.placed = true; const g = merit.items; a.g.attach(g);
-      g.position.set((Math.random() - 0.5) * 0.12, a.T + 0.12, -0.04 + (Math.random() - 0.5) * 0.06); g.rotation.set((Math.random() - 0.5) * 0.12, 0, (Math.random() - 0.5) * 0.12);
-      const bud = g.children.find((c) => c.userData.lotus); if (bud) bud.position.set(0.3 - g.position.x, 0.33 - 0.12, 0.08 - g.position.z); // into the vase
-      a.sticks.push(g); if (a.sticks.length > 3) { const old = a.sticks.shift(); old.parent && old.parent.remove(old); }
-      a.lit = 180;
-    }
-  }
-  if (merit.kind === "gild" && at(1.65)) gildLeaf();
   if (merit.kind === "cloth" && at(2.4)) { tieCloth(); if (merit.items) { merit.items.visible = false; merit.placed = true; } }
   if (t > merit.dur) { if (merit.items && !merit.placed) scene.remove(merit.items); merit.t = -1; merit.kind = null; merit.items = null; }
 }
@@ -1332,17 +1402,18 @@ const leafGeo = new THREE.PlaneGeometry(0.1, 0.1), leafMat = new THREE.MeshStand
 function gildLeaf() {
   if (!gildImage.mesh) return;
   const base = new THREE.Vector3((Math.random() - 0.5) * 0.3, (Math.random() - 0.4) * 0.35, 0);
-  for (let k = 0; k < 3; k++) gildOne(base.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.08, (Math.random() - 0.5) * 0.08, 0))); // a few overlapping leaves
+  for (let k = 0, put = 0; k < 10 && put < 3; k++) if (gildOne(base.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.08, (Math.random() - 0.5) * 0.08, 0)))) put++; // a few overlapping leaves
 }
 function gildOne(jitter) {
-  const target = reachPoint("image"), from = target.clone().add(new THREE.Vector3(Math.sin(player.yaw), 0, Math.cos(player.yaw)).multiplyScalar(-0.8));
+  const target = reachPoint("image"), from = target.clone().add(new THREE.Vector3(Math.sin(gildImage.faceYaw), 0, Math.cos(gildImage.faceYaw)).multiplyScalar(-0.8));
   const ray = new THREE.Raycaster(from.clone().add(jitter), target.clone().add(jitter).sub(from).normalize(), 0, 2);
-  const hit = ray.intersectObject(gildImage.mesh, true)[0]; if (!hit) return;
+  const hit = ray.intersectObject(gildImage.mesh, true)[0]; if (!hit) return false;
   const leaf = new THREE.Mesh(leafGeo, leafMat); leaf.position.copy(hit.point);
   const n = hit.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld) : ray.ray.direction.clone().negate();
   leaf.lookAt(hit.point.clone().add(n)); leaf.position.addScaledVector(n, 0.004); leaf.rotation.z += Math.random();
   gildImage.holder.attach(leaf); gildImage.leaves.push(leaf);
   if (gildImage.leaves.length > 120) { const old = gildImage.leaves.shift(); old.parent && old.parent.remove(old); }
+  return true;
 }
 // a three-coloured cloth around the Bodhi tree's trunk, shaped to the trunk at its height
 const bodhiBands = [];
@@ -1419,6 +1490,231 @@ function poseBroom(model, B) {
     armTo(B, s, p.clone().addScaledVector(side, sg * 0.06), Q, new THREE.Vector3().addScaledVector(up, -1).addScaledVector(side, sg * 0.7), 1);
   });
 }
+
+/* ---------------- a living temple: walking meditation, a novice sweeping, the temple cat, pigeons ---------------- */
+// The temple goes on with its day whether or not the visitor joins in: a monk at walking meditation (เดินจงกรม)
+// on the sand lane by the kuti, a novice sweeping the courtyard round the Bodhi tree (by day), the temple cat asleep
+// on the library's veranda, and pigeons pecking on the plaza that take off when someone comes close. None of them
+// speaks or teaches; they are scenery. The monk and the novice are rigged like the boy (the same skeleton), so
+// their hands are posed the same way: the monk's clasped before him, the novice's on his broom.
+const npcLoader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+function loadNpc(name, height) {
+  return Promise.all([name, name + "-idle"].map((n) => new Promise((res) => npcLoader.load(`assets/models/${n}.glb`, res, undefined, () => res(null)))))
+    .then(([main, idle]) => {
+      if (!main) return null;
+      const obj = main.scene, holder = new THREE.Group(); holder.add(obj); fitModel(obj, height); scene.add(holder);
+      holder.updateMatrixWorld(true);
+      const walkClip = main.animations.find((c) => /walk/i.test(c.name)) || main.animations[0], idleClip = idle && idle.animations[0];
+      if (!walkClip) return null;
+      const B = {}; obj.traverse((o) => { if (o.isBone) B[o.name] = o; });
+      const mixer = new THREE.AnimationMixer(obj);
+      const n = { holder, obj, B, mixer, walk: mixer.clipAction(walkClip), idle: idleClip ? mixer.clipAction(idleClip) : null, gait: measureGait(obj, walkClip), liftWalk: measureLift(obj, walkClip), liftIdle: idleClip ? measureLift(obj, idleClip) : 0, k: height / 1.7 };
+      n.lift = n.liftIdle;
+      n.walk.play(); if (n.idle) n.idle.play();
+      return n;
+    });
+}
+// play walk and idle blended by how fast he goes; the walk at the speed that keeps the feet planted
+function npcAnimate(n, speed, dt) {
+  const w = Math.min(1, speed / 0.15);
+  n.walk.setEffectiveWeight(n.idle ? w : 1); if (n.idle) n.idle.setEffectiveWeight(1 - w);
+  n.walk.timeScale = speed > 0.01 ? speed / n.gait.speed : (n.idle ? 1 : 0);
+  n.lift = n.idle ? n.liftIdle + (n.liftWalk - n.liftIdle) * w : n.liftWalk; // feet on the ground in either clip
+  n.mixer.update(dt);
+}
+const npcAxes = (yaw) => { const up = new THREE.Vector3(0, 1, 0), fwd = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw)); return { up, fwd, side: new THREE.Vector3().crossVectors(up, fwd) }; };
+
+// the monk: slowly along the lane and back, hands clasped before him, eyes lowered; at each end he stands a
+// moment and turns round; if someone is standing in his way he waits for them
+const lane = { n: null, u: 0, dir: 1, stop: 3, turn: -1, speed: 0, col: { x: LANE.x1, z: LANE.z1, r: 0.55 } };
+colliders.push(lane.col);
+function poseClasped(n, yaw) {
+  const B = n.B; if (!B.Hips || !B.LeftArm) return;
+  waiBegin(B);
+  const { up, fwd, side } = npcAxes(yaw), k = n.k;
+  [["neck", 0.12], ["Head", 0.16]].forEach(([b, a]) => { if (B[b]) turnBone(B[b], _q2.setFromAxisAngle(side, a)); }); // eyes on the ground ahead
+  const shape = handShape(n.obj);
+  if (shape) {
+    const c = B.Hips.getWorldPosition(new THREE.Vector3()).addScaledVector(fwd, 0.17 * k).addScaledVector(up, -0.02 * k);
+    const down = up.clone().negate();
+    // the left hand lies against the body, the right hand holds it, a little in front
+    [["Left", 1, 0], ["Right", -1, 0.05]].forEach(([s, sg, out]) => {
+      const hs = shape[s]; if (!hs) return;
+      const fingers = side.clone().multiplyScalar(-sg * 0.65).addScaledVector(down, 0.76).normalize();
+      const palm = fwd.clone().negate(); palm.addScaledVector(fingers, -palm.dot(fingers)).normalize();
+      const Q = basisQuat(hs.finger, hs.palm, fingers, palm);
+      const wrist = c.clone().addScaledVector(side, sg * 0.085 * k).addScaledVector(fwd, out * k).addScaledVector(up, 0.03 * k);
+      armTo(B, s, wrist, Q, side.clone().multiplyScalar(sg).addScaledVector(fwd, -0.5).addScaledVector(up, -0.3), 1);
+    });
+  }
+  waiMark(B);
+}
+function laneStep(dt) {
+  const n = lane.n; if (!n) return;
+  const L = Math.hypot(LANE.x2 - LANE.x1, LANE.z2 - LANE.z1), dx = (LANE.x2 - LANE.x1) / L, dz = (LANE.z2 - LANE.z1) / L;
+  const walkYaw = Math.atan2(dx * lane.dir, dz * lane.dir);
+  let yaw = walkYaw, target = 0;
+  if (lane.stop > 0) { lane.stop -= dt; if (lane.stop <= 0) lane.turn = 0; yaw = Math.atan2(-dx * lane.dir, -dz * lane.dir); }
+  else if (lane.turn >= 0) { // turning round slowly, on the spot
+    lane.turn += dt / 2.6; const from = Math.atan2(-dx * lane.dir, -dz * lane.dir);
+    yaw = from + Math.PI * smooth(0, 1, Math.min(1, lane.turn)) * (lane.dir > 0 ? 1 : -1);
+    if (lane.turn >= 1) { lane.turn = -1; yaw = walkYaw; }
+  } else {
+    const x = LANE.x1 + dx * lane.u, z = LANE.z1 + dz * lane.u;
+    const ahead = (player.x - x) * dx * lane.dir + (player.z - z) * dz * lane.dir, across = Math.abs((player.x - x) * dz - (player.z - z) * dx);
+    target = ahead > 0 && ahead < 2.2 && across < 1.2 ? 0 : 0.55; // someone in the way: he waits
+    lane.u += lane.speed * dt * lane.dir;
+    if (lane.u >= L || lane.u <= 0) { lane.u = Math.max(0, Math.min(L, lane.u)); lane.dir = -lane.dir; lane.stop = 2.5; lane.speed = 0; }
+  }
+  lane.speed += (target - lane.speed) * Math.min(1, dt * 2);
+  const x = LANE.x1 + dx * lane.u, z = LANE.z1 + dz * lane.u;
+  n.holder.position.set(x, groundAt(x, z) + n.lift, z); n.holder.rotation.y = yaw; lane.col.x = x; lane.col.z = z;
+  npcAnimate(n, lane.stop > 0 || lane.turn >= 0 ? 0 : lane.speed, dt);
+  n.holder.updateMatrixWorld(true);
+  poseClasped(n, yaw);
+}
+
+// the novice: sweeping his way round the courtyard and back, now and then stopping to sweep one spot; at night
+// he has gone in
+const novice = { n: null, a: 2.1, dir: 1, speed: 0, pause: 0, phase: 0, broom: null, grips: null, col: { x: 0, z: 10, r: 0.55 } };
+const NOVICE_ARC = [1.75, 4.55]; // the side of the courtyard away from the entrance road (angles round the tree)
+colliders.push(novice.col);
+function noviceStep(dt) {
+  const n = novice.n; if (!n) return;
+  const away = night.on; n.holder.visible = !away; novice.broom.visible = !away; novice.col.r = away ? 0 : 0.55;
+  if (away) return;
+  const r = 10.6 + Math.sin(novice.a * 3.1) * 2.2;
+  let x = Math.sin(novice.a) * r, z = Math.cos(novice.a) * r;
+  const yaw = Math.atan2(Math.cos(novice.a) * novice.dir, -Math.sin(novice.a) * novice.dir); // along the circle
+  const { up, fwd, side } = npcAxes(yaw), right = side.clone().negate();
+  let target = 0.42;
+  if (novice.pause > 0) { novice.pause -= dt; target = 0; }
+  else if (Math.random() < dt / 14) novice.pause = 3 + Math.random() * 4;
+  const toP = new THREE.Vector3(player.x - x, 0, player.z - z);
+  if (toP.length() < 2.6 && toP.dot(fwd) > 0) target = 0; // someone in the way: he waits
+  novice.speed += (target - novice.speed) * Math.min(1, dt * 2);
+  novice.a += (novice.speed * dt / r) * novice.dir;
+  if (novice.a > NOVICE_ARC[1] || novice.a < NOVICE_ARC[0]) { novice.a = Math.max(NOVICE_ARC[0], Math.min(NOVICE_ARC[1], novice.a)); novice.dir = -novice.dir; novice.pause = 2; }
+  n.holder.position.set(x, groundAt(x, z) + n.lift, z); n.holder.rotation.y = yaw; novice.col.x = x; novice.col.z = z;
+  npcAnimate(n, novice.speed, dt);
+  n.holder.updateMatrixWorld(true);
+  // the broom swings from side to side before him, brushing leaves along
+  novice.phase += dt * (novice.speed > 0.1 ? 4.2 : 3);
+  const k = n.k / 1.6;
+  const head = new THREE.Vector3(x, 0, z).addScaledVector(fwd, 1.1 * k).addScaledVector(right, 0.1 + Math.sin(novice.phase) * 0.38);
+  const top = new THREE.Vector3(x, 1.85 * k, z).addScaledVector(fwd, 0.25 * k).addScaledVector(right, 0.25 * k);
+  const dir = top.clone().sub(head).normalize();
+  novice.broom.position.copy(head); novice.broom.quaternion.setFromUnitVectors(up, dir);
+  const grips = [head.clone().addScaledVector(dir, 1.05 * k), head.clone().addScaledVector(dir, 1.5 * k)];
+  for (const l of fallenLeaves) { const u = l.userData; if (u.fall > 0 || u.fade >= 0) continue; if (Math.hypot(u.x - head.x, u.z - head.z) < 0.75) { u.fade = 0; u.vx = fwd.x * 0.8 + right.x * Math.cos(novice.phase) * 1.2; u.vz = fwd.z * 0.8 + right.z * Math.cos(novice.phase) * 1.2; } }
+  const B = n.B, shape = handShape(n.obj); if (!shape || !B.LeftArm) return;
+  waiBegin(B);
+  [["neck", 0.1], ["Head", 0.12]].forEach(([b, a]) => { if (B[b]) turnBone(B[b], _q2.setFromAxisAngle(side, a)); }); // watching the broom
+  [["Right", grips[0], -1], ["Left", grips[1], 1]].forEach(([s, p, sg]) => {
+    const hs = shape[s], Q = basisQuat(hs.finger, hs.palm, side.clone().multiplyScalar(-sg), fwd.clone().negate());
+    armTo(B, s, p.clone().addScaledVector(side, sg * 0.06), Q, new THREE.Vector3().addScaledVector(up, -1).addScaledVector(side, sg * 0.7), 1);
+  });
+  waiMark(B);
+}
+
+// the temple cat, curled up asleep on the library's veranda; it breathes
+const cat = { obj: null };
+loadProp("cat").then((src) => {
+  if (!src) return;
+  const c = fitTo(src.clone(), 0.58), h = salas.library, [x, z] = h.toWorld(h.W / 2 - 1.1, h.D / 2 - 0.7);
+  c.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  c.position.set(x, h.FY, z); c.rotation.y = h.g.rotation.y + 2.4; c.userData.sy = c.scale.y; scene.add(c); cat.obj = c;
+});
+
+// pigeons on the plaza: they walk and peck; when someone comes close (or the dog) they clatter up and fly to
+// a tree, and come back down a while later somewhere quieter. At night they roost (out of sight).
+const birds = [];
+{
+  const body = new THREE.SphereGeometry(0.12, 10, 8), head = new THREE.SphereGeometry(0.075, 10, 8), beak = new THREE.ConeGeometry(0.022, 0.07, 6), wing = new THREE.BoxGeometry(0.3, 0.015, 0.16), tail = new THREE.BoxGeometry(0.12, 0.012, 0.14);
+  const looks = [[0x8d929c, 0x5e6470, 0x6f8f86], [0x9aa0aa, 0x6b7180, 0x7a6f8f], [0xb8b2a8, 0x7e7468, 0x8f8a7a], [0x6f7480, 0x4a4f5a, 0x5f7f78]];
+  const beakMat = S(0x2b2b2b);
+  for (let i = 0; i < (HIGH ? 9 : 5); i++) {
+    const [cb, cw, cn] = looks[i % looks.length], mb = S(cb, { roughness: 0.8 }), mw = S(cw, { roughness: 0.8 }), mn = S(cn, { roughness: 0.5, metalness: 0.2 });
+    const g = new THREE.Group(), b = new THREE.Mesh(body, mb); b.scale.set(1, 0.9, 1.6); b.position.y = 0.17; b.castShadow = true; g.add(b);
+    const hp = new THREE.Group(); hp.position.set(0, 0.27, 0.15); g.add(hp);
+    const hd = new THREE.Mesh(head, mn); hd.castShadow = true; hp.add(hd);
+    const bk = new THREE.Mesh(beak, beakMat); bk.rotation.x = Math.PI / 2; bk.position.set(0, -0.01, 0.09); hp.add(bk);
+    const wings = [-1, 1].map((sg) => { const p = new THREE.Group(); p.position.set(sg * 0.08, 0.22, 0); const m = new THREE.Mesh(wing, mw); m.position.x = sg * 0.14; p.add(m); g.add(p); return p; });
+    const tl = new THREE.Mesh(tail, mw); tl.position.set(0, 0.17, -0.25); tl.rotation.x = -0.2; g.add(tl);
+    [-1, 1].forEach((sg) => add(new THREE.CylinderGeometry(0.008, 0.008, 0.1, 4), S(0xc0605a), sg * 0.04, 0.05, 0.02, g, false));
+    g.scale.setScalar(1.15);
+    scene.add(g);
+    birds.push({ g, hp, wings, state: "ground", x: 0, z: 0, y: 0, yaw: Math.random() * 6, t: Math.random() * 5, peck: 0, hop: 0, flight: null, perch: 0 });
+  }
+}
+const BIRD_GROUND = [[-6, -11], [7, -12], [-12, 3], [12, 2], [-8, 8], [9, -6]];
+function birdHome(b, far) { // a quiet spot on the plaza, away from whoever scared them
+  const pick = BIRD_GROUND.filter(([x, z]) => !far || Math.hypot(x - player.x, z - player.z) > 10);
+  const [x, z] = (pick.length ? pick : BIRD_GROUND)[Math.floor(Math.random() * (pick.length || BIRD_GROUND.length))];
+  const a = Math.random() * 6.28, r = Math.random() * 2.2; return [x + Math.cos(a) * r, z + Math.sin(a) * r];
+}
+birds.forEach((b) => { const [x, z] = birdHome(b, false); b.x = x; b.z = z; });
+function fly(b, to, y1) {
+  const from = new THREE.Vector3(b.x, b.y, b.z), dist = Math.hypot(to[0] - b.x, to[1] - b.z);
+  b.flight = { from, to: new THREE.Vector3(to[0], y1, to[1]), mid: new THREE.Vector3((b.x + to[0]) / 2, Math.max(b.y, y1) + 3 + dist * 0.12, (b.z + to[1]) / 2), t: 0, dur: Math.max(1.6, dist / 8) };
+  b.state = "fly";
+}
+let flutterAt = 0;
+function birdsStep(dt) {
+  const roost = night.on;
+  for (const b of birds) {
+    b.g.visible = !roost || b.state === "fly"; b.t += dt;
+    if (b.state === "ground") {
+      if (roost) { b.state = "perch"; b.perch = 1e9; continue; }
+      // someone close: up they go, to a tree
+      const dp = Math.hypot(player.x - b.x, player.z - b.z), dd = Math.hypot(dog.x - b.x, dog.z - b.z);
+      if (dp < (keys.ShiftLeft || keys.ShiftRight ? 6 : 3.6) || dd < 2.4) {
+        const tr = edgeTrees.length ? edgeTrees[Math.floor(Math.random() * edgeTrees.length)] : [b.x + 20, b.z];
+        fly(b, [tr[0] + (Math.random() - 0.5) * 3, tr[1] + (Math.random() - 0.5) * 3], 6.5 + Math.random() * 2);
+        if (performance.now() - flutterAt > 400) { flutterAt = performance.now(); sound.flutter(b.x, 0.5, b.z); }
+        continue;
+      }
+      // walking and pecking
+      b.peck = Math.max(0, b.peck - dt); b.hop = Math.max(0, b.hop - dt);
+      if (b.peck <= 0 && b.hop <= 0 && Math.random() < dt * 0.8) { if (Math.random() < 0.55) b.peck = 0.5; else { b.hop = 0.6 + Math.random() * 0.8; b.yaw += (Math.random() - 0.5) * 2.2; } }
+      if (b.hop > 0) { b.x += Math.sin(b.yaw) * dt * 0.7; b.z += Math.cos(b.yaw) * dt * 0.7; if (Math.hypot(b.x, b.z) < 7.6 || Math.hypot(b.x, b.z) > 15.5) b.yaw += Math.PI; }
+      b.hp.rotation.x = b.peck > 0 ? Math.sin((0.5 - b.peck) / 0.5 * Math.PI) * 1.1 : 0;
+      b.hp.position.z = 0.15 + (b.hop > 0 ? Math.sin(b.t * 12) * 0.03 : 0); // the pigeon's nodding walk
+      b.wings.forEach((w, i) => { w.rotation.z = 0; });
+      b.y = 0.03;
+    } else if (b.state === "fly") {
+      const f = b.flight; f.t += dt / f.dur; const u = Math.min(1, f.t), iu = 1 - u;
+      const p = f.from.clone().multiplyScalar(iu * iu).addScaledVector(f.mid, 2 * iu * u).addScaledVector(f.to, u * u);
+      const v = f.mid.clone().sub(f.from).multiplyScalar(2 * iu).addScaledVector(f.to.clone().sub(f.mid), 2 * u);
+      b.yaw = Math.atan2(v.x, v.z); b.x = p.x; b.z = p.z; b.y = p.y;
+      b.g.rotation.x = -Math.atan2(v.y, Math.hypot(v.x, v.z)) * 0.5;
+      const flap = u > 0.85 ? 0.35 : Math.sin(b.t * 30) * 0.9; // gliding in to land
+      b.wings.forEach((w, i) => { w.rotation.z = (i ? 1 : -1) * flap; });
+      b.hp.rotation.x = 0;
+      if (u >= 1) { b.g.rotation.x = 0; b.flight = null; if (f.to.y > 1) { b.state = "perch"; b.perch = 15 + Math.random() * 25; } else { b.state = "ground"; b.y = 0.03; } }
+    } else { // perched in a tree (hidden among its leaves), or roosting for the night
+      b.g.visible = false;
+      b.perch -= dt;
+      if (roost) b.perch = Math.max(b.perch, 1);
+      else if (b.perch > 1e8) { b.perch = Math.random() * 6; }
+      if (b.perch <= 0) { const [x, z] = birdHome(b, true); if (Math.hypot(player.x - x, player.z - z) > 8) fly(b, [x, z], 0.03); else b.perch = 3; }
+    }
+    b.g.position.set(b.x, b.y, b.z); b.g.rotation.y = b.yaw;
+  }
+}
+
+function lifeStep(dt) {
+  laneStep(dt); noviceStep(dt); birdsStep(dt);
+  if (cat.obj) cat.obj.scale.y = cat.obj.userData.sy * (1 + Math.sin(performance.now() / 1000 * 1.7) * 0.025);
+}
+// the rigged monk and novice load after the boy, so his first steps are never delayed
+setTimeout(() => {
+  loadNpc("monk-walk", 3.3).then((n) => { if (n) lane.n = n; });
+  loadNpc("novice", 2.95).then((n) => {
+    if (!n) return; novice.n = n;
+    novice.broom = broom.obj.clone(); scene.add(novice.broom);
+  });
+}, 1500);
 
 /* ---------------- day and night ---------------- */
 // Night: a dark blue sky with stars and a moon, soft moonlight instead of the sun, every lamp post lit (a warm
@@ -1779,7 +2075,7 @@ const toggleSit = () => (sit.on ? standUp() : startSit());
 // them, coming back up into the high wai each time. Then he lowers his hands and stands. No animation for
 // this exists, so it is posed on his skeleton: the knee, hip and forehead heights come from his measured
 // body, and the bow is solved so the forehead really reaches the floor.
-const kraap = { t: -1, spot: null, faceYaw: null, floorY: 0, touch: null, keys: null, dur: 0, kathin: null };
+const kraap = { t: -1, spot: null, faceYaw: null, floorY: 0, touch: null, keys: null, dur: 0, kathin: null, merit: null };
 // keyframes: [time, kneel, chest wai, high wai, palms on the floor, bow]
 const KRAAP_KEYS = (() => {
   const k = [[0, 0, 0, 0, 0, 0], [0.6, 0, 0, 0, 0, 0], [2.0, 1, 1, 0, 0, 0], [2.7, 1, 0, 1, 0, 0], [3.0, 1, 0, 1, 0, 0]];
@@ -1799,7 +2095,7 @@ function kraapState(t) {
   const K = kraap.keys || KRAAP_KEYS; let i = 0; while (i < K.length - 2 && t > K[i + 1][0]) i++;
   const a = K[i], b = K[i + 1], u = smooth(a[0], b[0], t);
   const v = (j) => (a[j] || 0) + ((b[j] || 0) - (a[j] || 0)) * u;
-  return { kneel: v(1), chest: v(2), high: v(3), floor: v(4), bow: v(5), tray: v(6), lift: v(7), place: v(8), back: v(9) };
+  return { kneel: v(1), chest: v(2), high: v(3), floor: v(4), bow: v(5), tray: v(6), lift: v(7), place: v(8), back: v(9), reach: v(10) };
 }
 
 /* ---------------- Kathina (ทอดกฐิน): offering the robe to the Sangha ---------------- */
@@ -1836,7 +2132,7 @@ function startKathin(h) {
   const [mx, mz] = h.toWorld(s.lx, s.lz);
   if (h.kathinTray && h.kathinTray.parent) h.kathinTray.parent.remove(h.kathinTray); // one robe at a time before the monk
   const tray = kathinTray(); tray.visible = false; scene.add(tray); h.kathinTray = tray;
-  kraap.kathin = { h, near: sp.near, far: sp.far, tray, released: false, monk: s };
+  kraap.merit = null; kraap.kathin = { h, near: sp.near, far: sp.far, tray, released: false, monk: s };
   kraap.spot = sp.near; kraap.faceYaw = Math.atan2(mx - sp.near.x, mz - sp.near.z);
   kraap.floorY = groundAt(sp.near.x, sp.near.z);
   kraap.keys = KATHIN_KEYS; kraap.dur = KATHIN_KEYS[KATHIN_KEYS.length - 1][0];
@@ -1866,7 +2162,7 @@ function startKraap() {
   }
   if (sit.on) { sit.on = false; sit.rise = 0; sit.faceYaw = null; }
   wai.t = -1;
-  kraap.keys = null; kraap.kathin = null;
+  kraap.keys = null; kraap.kathin = null; kraap.merit = null;
   kraap.spot = here.face.spot; kraap.faceYaw = Math.atan2(here.face.x - here.face.spot.x, here.face.z - here.face.spot.z);
   kraap.floorY = groundAt(here.face.spot.x, here.face.spot.z);
   kraap.t = 0;
@@ -2284,7 +2580,8 @@ function poseKraap(model, B, st) {
   applyBow(B, axis, (1 - PELVIS_SHARE) * touch.theta * st.bow, st.bow, st.high);
   model.updateMatrixWorld(true);
   // 4) the hands: a wai at the chest, the high wai, or palms flat on the floor either side of the forehead
-  const wsum = st.chest + st.high + st.floor + st.tray; if (wsum < 0.001) return;
+  const wsum = st.chest + st.high + st.floor + st.tray + st.reach;
+  if (wsum < 0.001) { if (kraap.merit && kraap.merit.items && !kraap.merit.placed) kraap.merit.items.visible = false; return; }
   const shape = handShape(model); if (!shape) return;
   // Kathina: the tray held in both hands at its rim, raised to the forehead or set on the platform edge
   let trayT = null;
@@ -2312,6 +2609,7 @@ function poseKraap(model, B, st) {
   const mainTip = st.high >= st.chest ? (high ? WAI_LEVELS.buddha.tip : null) : (chest ? CHEST_TIP : null);
   if (mainTip != null) waiHands(model, B, mainTip, side, up, fwd, st.chest + st.high); else wai.plane.on = 0;
   const jointsNow = wp("LeftUpLeg").add(wp("RightUpLeg")).multiplyScalar(0.5);
+  const reachT = st.reach > 0.001 && kraap.merit ? kneelHand(model, fwd, up, kraap.t) : null;
   [["Left", 1], ["Right", -1]].forEach(([s, sg]) => {
     const hs = shape[s];
     // palms flat on the floor: fingers forward, palm down, either side of the forehead
@@ -2328,8 +2626,21 @@ function poseKraap(model, B, st) {
     if (high) addIn(st.high, high[s].target, high[s].Q, high.pole(sg));
     addIn(st.floor, floorT, Qf, floorPole);
     if (trayT) addIn(st.tray, trayT[s].target, trayT[s].Q, trayT[s].pole);
-    armTo(B, s, target, Q, pole, Math.min(1, wsum));
+    if (s === "Right" && reachT) addIn(st.reach, reachT.target, reachT.Q, new THREE.Vector3().addScaledVector(up, -1).addScaledVector(side, -0.6));
+    if (s === "Left" && reachT) { // the free hand rests on his thigh, palm down
+      const thighT = wp("LeftUpLeg").lerp(wp("LeftLeg"), 0.6).addScaledVector(up, palmTop + 0.06 * scale).sub(centroid.clone().setY(0));
+      addIn(st.reach, thighT, Qf, side.clone().multiplyScalar(0.8).addScaledVector(fwd, -0.4));
+    }
+    if (acc > 0.001) armTo(B, s, target, Q, pole, Math.min(1, acc));
   });
+  // kneeling offerings: the incense in his right hand as he lights it and plants it, between his palms in the wai
+  const m = kraap.merit;
+  if (m && m.items && !m.placed) {
+    m.items.visible = kraap.t > 3.5;
+    if (st.high > st.reach) m.items.position.copy(wai.plane.point).addScaledVector(up, -0.06);
+    else m.items.position.copy(B.RightHand.getWorldPosition(new THREE.Vector3())).addScaledVector(fwd, 0.06);
+    m.items.rotation.set(0, player.yaw, 0);
+  }
 }
 // put one arm's wrist at target with the hand turned to Qhand (world), elbow toward pole; blend by weight
 function armTo(B, s, target, Qhand, pole, weight) {
@@ -2830,7 +3141,7 @@ function tick() {
 // one step of the world: movement, animation, camera and the picture
 function frame(dt) {
   placeLampLights(dt);
-  feedStep(dt); fishStep(dt); meritStep(dt);
+  feedStep(dt); fishStep(dt); meritStep(dt); lifeStep(dt);
   if (broom.held && (alms.t >= 0 || kraap.t >= 0 || feed.t >= 0 || shoes.t >= 0 || sit.on || merit.t >= 0)) putBroomBack(); // hands needed elsewhere
   monkTime += dt;
   if (!settings.calmMotion) for (const m of monkFigures) { const b = Math.sin(monkTime * 1.25 + m.ph); m.o.scale.set(1 + b * 0.004, 1 + b * 0.008, 1 + b * 0.004); } // slow breathing
@@ -2844,12 +3155,14 @@ function frame(dt) {
   }
   if (kraap.t >= 0) { // paying tribute: stay put (it ends by itself); glide to the spot and face the image first
     fx = fz = 0;
-    kraap.t += dt; if (kraap.t > (kraap.keys ? kraap.dur : KRAAP_DUR)) { kraap.t = -1; kraap.touch = null; kraap.keys = null; if (kraap.kathin) kraap.kathin.monk.lean.rotation.x = 0; }
-    if (kraap.kathin && kraap.keys && kraap.t >= 0) { // Kathina: kneel close to offer, then move back on the knees to bow
-      const k = kraap.kathin, b = kraapState(kraap.t).back;
-      kraap.spot = { x: k.near.x + (k.far.x - k.near.x) * b, z: k.near.z + (k.far.z - k.near.z) * b };
+    const kBefore = kraap.t;
+    kraap.t += dt; if (kraap.t > (kraap.keys ? kraap.dur : KRAAP_DUR)) { kraap.t = -1; kraap.touch = null; kraap.keys = null; if (kraap.kathin) kraap.kathin.monk.lean.rotation.x = 0; endKneelingOffering(); }
+    const mv = kraap.kathin || kraap.merit;
+    if (mv && kraap.keys && kraap.t >= 0) { // Kathina and kneeling offerings: kneel close to offer, then move back on the knees to bow
+      const b = kraapState(kraap.t).back;
+      kraap.spot = { x: mv.near.x + (mv.far.x - mv.near.x) * b, z: mv.near.z + (mv.far.z - mv.near.z) * b };
       if (kraap.t >= 0.8) { player.x = kraap.spot.x; player.z = kraap.spot.z; }
-      kathinStep();
+      if (kraap.kathin) kathinStep(); else kneelStep(kBefore, kraap.t);
     }
     if (kraap.spot && kraap.t >= 0 && kraap.t < 0.8) { player.x += (kraap.spot.x - player.x) * Math.min(1, dt * 8); player.z += (kraap.spot.z - player.z) * Math.min(1, dt * 8); }
     if (kraap.faceYaw != null) { let dy = kraap.faceYaw - player.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); player.yaw += dy * Math.min(1, dt * 8); }
@@ -2975,7 +3288,7 @@ function frame(dt) {
       // beside where he will be for the whole ceremony (the bowing spot, the spot before the monk), so the dog
       // sits down once and stays down while he steps up or moves back on his knees
       const k = kraap.t >= 0 ? kraap : null, al = !k && (alms.t >= 0 || wai.fromAlms) ? alms : null, fd = feed.t >= 0 ? feed : merit.t >= 0 ? { stand: merit.spot, faceYaw: merit.faceYaw } : null;
-      const at = k ? (k.kathin && k.keys ? k.kathin.far : k.spot) : al ? al.spot : fd ? fd.stand : null;
+      const at = k ? ((k.kathin || k.merit) && k.keys ? (k.kathin || k.merit).far : k.spot) : al ? al.spot : fd ? fd.stand : null;
       const ax = at ? at.x : player.x, az = at ? at.z : player.z;
       const ay = k && k.faceYaw != null ? k.faceYaw : al ? al.faceYaw : fd ? fd.faceYaw : player.yaw;
       bx = ax + Math.cos(ay) * 1.5 + Math.sin(ay) * 0.2; bz = az - Math.sin(ay) * 1.5 + Math.cos(ay) * 0.2;
@@ -3005,7 +3318,7 @@ function frame(dt) {
   { const d = Math.hypot(player.x - DONATE.x, player.z - (DONATE.z + 0.6)); if (d < 2.4 && d < bestD) { best = DONATE_PLACE; bestD = d; } } // only when standing at the box
   { const h = salas.learn; if (h && h.senior && kraap.t < 0) { const sp = kathinSpots(h), d = Math.hypot(player.x - sp.near.x, player.z - sp.near.z); if (d < 1.3 && d < bestD) { best = { ...KATHIN_PLACE, hall: h }; bestD = d; } } }
   if (onBridge(player.x, player.z) && feed.t < 0 && 2.5 < bestD) { best = FISH_PLACE; bestD = 2.5; }
-  if (merit.t < 0) { const mh = meritHere(); if (mh) { best = { ...MERIT[mh.kind].place, merit: mh }; bestD = 0.5; } } // standing at it: the offering comes first
+  if (merit.t < 0 && kraap.t < 0) { const mh = meritHere(); if (mh) { best = { ...MERIT[mh.kind].place, merit: mh }; bestD = 0.5; } } // standing at it: the offering comes first
   if (Math.hypot(player.x - BROOM_AT.x, player.z - BROOM_AT.z) < 1.8 && 2.3 < bestD) { best = broom.held ? BROOM_BACK : BROOM_PLACE; bestD = 2.3; }
   for (const m of almsMonks) { const d = Math.hypot(player.x - (m.x + Math.sin(m.yaw) * ALMS_STAND), player.z - (m.z + Math.cos(m.yaw) * ALMS_STAND)); if (d < 1.5 && d < bestD) { best = { ...ALMS_PLACE, monk: m }; bestD = d; } }
   for (const s of boards) { const d = Math.hypot(player.x - s.x, player.z - s.z); if (d < 1.9 && d < bestD) { best = { ...PLACES.find((p) => p.id === "learn"), stone: s.i, board: true }; bestD = d; } }
@@ -3049,7 +3362,7 @@ document.fonts.load("64px Itim").then(() => document.fonts.load("36px Mali")).ca
 });
 camYaw = 0; camera.position.set(0, 8, 105);
 restoreSpot(); // back from a page of the site: stand where you were
-if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, gardenSpots, paths, floors, ponds, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startKathin, kathinSpots, feed, startFeed, fishes, food, onBridge, merit, startMerit, meritHere, broom, fallenLeaves, altars, gildImage, bodhiBands, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
+if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, gardenSpots, paths, floors, ponds, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startKathin, kathinSpots, feed, startFeed, fishes, food, onBridge, merit, startMerit, meritHere, broom, fallenLeaves, altars, gildImage, bodhiBands, lane, novice, birds, cat, look: (eye, at) => { camera.position.set(...eye); camera.lookAt(...at); if (composer) composer.render(); else renderer.render(scene, camera); }, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
 Promise.race([Promise.all(propJobs), new Promise((r) => setTimeout(r, 7000))]).then(() => {
   $("loading").hidden = true;
   canvas.focus();

@@ -236,6 +236,16 @@ export function createSound({ high = true } = {}) {
       if (!on) setTimeout(() => { if (!on && ctx) { master.gain.setValueAtTime(0.0001, ctx.currentTime); ctx.suspend(); } }, 9500);
     },
     step(surface) { if (on) step(surface); },
+    // pigeons taking off: a clatter of wingbeats
+    flutter(x, y, z) {
+      if (!ctx || !on) return;
+      const out = placed(x, y, z, 3, 40, 1.3), t0 = ctx.currentTime + 0.01, buf = noiseBuffer("white", 0.1);
+      for (let i = 0, n = 6 + Math.floor(Math.random() * 5); i < n; i++) {
+        const t = t0 + i * (0.07 + Math.random() * 0.03), s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+        s.buffer = buf; f.type = "bandpass"; f.frequency.value = 900 + Math.random() * 700; f.Q.value = 0.9;
+        s.connect(f); f.connect(g); g.connect(out); env(g, t, 0.004, 0.35 * (1 - i / (n + 2)), 0.05); s.start(t); s.stop(t + 0.1);
+      }
+    },
     // for testing: the current output level (RMS) and the audio state
     level() {
       this._indoor = indoorNow;
