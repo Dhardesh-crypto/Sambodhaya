@@ -326,7 +326,9 @@ function sala({ x, z, rot = 0, W = 13, D = 10, H = 5.6, walls = true }) {
     // red lacquer wainscot inside
     add(new THREE.BoxGeometry(W - 0.5, 1, 0.05), MAT.lacquer, 0, FY + 0.5, -D / 2 + 0.23, g, false);
     [-1, 1].forEach((sg) => add(new THREE.BoxGeometry(0.05, 1, D - 0.2), MAT.lacquer, sg * (W / 2 - 0.23), FY + 0.5, 0.1, g, false));
-    for (let i = 0; i <= n; i++) column(-W / 2 + 0.3 + i * (W - 0.6) / n, D / 2 + 0.2, i > 0 && i < n);
+    // the two columns either side of the doorway stand at least DOOR from the middle, so the way in is wide enough to walk through
+    const DOOR = 1.3;
+    for (let i = 0; i <= n; i++) { let lx = -W / 2 + 0.3 + i * (W - 0.6) / n; if (Math.abs(lx) < DOOR) lx = Math.sign(lx) * DOOR; column(lx, D / 2 + 0.2, i > 0 && i < n); }
   } else {
     // open pavilion: columns on all four sides
     for (let i = 0; i <= n; i++) { const lx = -W / 2 + 0.3 + i * (W - 0.6) / n; column(lx, D / 2 + 0.2, true); column(lx, -D / 2 + 0.2, true); }
@@ -962,8 +964,12 @@ function setModel(obj, mixerClips) {
     player.clips.run = find(/run|jog|sprint/i);
     if (player.clips.run === player.clips.walk) delete player.clips.run;
     const sitClip = find(/sit|cross.?legged|meditat/i); if (sitClip) player.clips.sit = sitClip;
-    ["walk", "run"].forEach((k) => { if (player.clips[k]) player.gait[k] = measureGait(obj, player.clips[k]); });
-    player.lift = {}; ["idle", "walk", "run", "sit"].forEach((k) => { if (player.clips[k]) player.lift[k] = measureLift(obj, player.clips[k]); });
+    // measured once per model (the boy swaps between his shod and socked models at every hall)
+    if (!obj.userData.gait) {
+      obj.userData.gait = {}; ["walk", "run"].forEach((k) => { if (player.clips[k]) obj.userData.gait[k] = measureGait(obj, player.clips[k]); });
+      obj.userData.lift = {}; ["idle", "walk", "run", "sit"].forEach((k) => { if (player.clips[k]) obj.userData.lift[k] = measureLift(obj, player.clips[k]); });
+    }
+    player.gait = obj.userData.gait; player.lift = obj.userData.lift;
     player.mixer = new THREE.AnimationMixer(obj);
     playClip("idle");
   }
@@ -1015,25 +1021,27 @@ function buildBlocky() { setModel(blockyAvatar(avatarCfg, avatarCfg.kind === "ph
 
 // the Sambodhaya boy: a rigged 3D model with walk and idle animations (assets/models/boy*.glb)
 const boyLoader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
-let boyReady = null;
-function loadBoy() {
-  // boy.glb holds the model and its walk; the other two files hold only an animation for the same skeleton
-  if (!boyReady) boyReady = Promise.all(["boy", "boy-idle", "boy-run", "boy-sit"].map((n) => new Promise((res) => boyLoader.load(`assets/models/${n}.glb`, res, undefined, () => res(null)))))
+const boyReady = {};
+// kit "boy" wears his sneakers; kit "boy-socks" is the same boy in his white socks, for inside the halls
+function loadBoy(kit = "boy") {
+  // boy.glb holds the model and its walk; the other files hold only an animation for the same skeleton
+  if (!boyReady[kit]) boyReady[kit] = Promise.all([kit, kit + "-idle", kit + "-run", kit + "-sit"].map((n) => new Promise((res) => boyLoader.load(`assets/models/${n}.glb`, res, undefined, () => res(null)))))
     .then(([walk, idle, run, sitting]) => {
       if (!walk) return null;
       const obj = walk.scene, holder = new THREE.Group(); holder.add(obj); fitModel(obj);
       holder.updateMatrixWorld(true); pressHands(holder); // measure the hands in their rest pose
       return { holder, clips: [walk, idle, run, sitting].flatMap((g) => (g ? g.animations : [])) };
     });
-  return boyReady;
+  return boyReady[kit];
 }
 function buildAvatar() {
   if (avatarCfg.kind !== "boy") { buildBlocky(); return; }
   if (!player.model) buildBlocky(); // a stand-in while the boy loads
-  loadBoy().then((b) => {
+  loadBoy("boy").then((b) => {
     if (avatarCfg.kind !== "boy") return;
     if (!b) { buildBlocky(); return; } // couldn't load: stay a built character
-    setModel(b.holder, b.clips);
+    boyKits.shod = b; shoes.on = true; setModel(b.holder, b.clips);
+    loadBoy("boy-socks").then((socks) => { boyKits.socks = socks; }); // for inside the halls; until it arrives, he keeps his shoes on
   });
 }
 buildAvatar();
@@ -1362,7 +1370,11 @@ function handShape(model) {
       if (palm.clone().transformDirection(rest).dot(bodyPos.sub(handPos).setY(0)) < 0) palm.negate();
       const len = Math.max(...pts.map((q) => q.y));
       const tips = pts.filter((q) => q.y > 0.9 * len);
-      result[side] = { points: pts, tips, tipY: tips.reduce((a, q) => a + q.y, 0) / tips.length, finger: new THREE.Vector3(0, 1, 0), palm, bone: bi };
+      // the fingers run from the wrist to the fingertips, which need not be straight along the bone (one model's
+      // fingers bend 18 degrees toward the palm); the palm normal is kept square to them
+      const finger = tips.reduce((acc, q) => acc.add(q), new THREE.Vector3()).normalize();
+      palm.addScaledVector(finger, -palm.dot(finger)).normalize();
+      result[side] = { points: pts, tips, tipY: tips.reduce((acc, q) => acc + q.dot(finger), 0) / tips.length, finger, palm, bone: bi };
     }
   }
   model.userData.waiHands = result;
@@ -1456,6 +1468,7 @@ function poseOverlays(model, hands, bow, sitW) {
   if (!B.Spine || !B.LeftArm || !B.RightArm || !B.Head) return;
   if (kraap.t >= 0 && kraap.spot) { waiBegin(B); poseKraap(model, B, kraapState(kraap.t)); waiMark(B); return; }
   if (alms.t >= 0 && alms.m) { waiBegin(B); poseAlms(model, B, almsState(alms.t)); waiMark(B); return; }
+  if (shoes.t >= 0) { waiBegin(B); poseShoes(model, B, shoes.t); waiMark(B); return; }
   if (hands <= 0 && bow <= 0 && sitW <= 0.001) { waiEnd(B); return; }
   waiBegin(B);
   if (sitW > 0.001) poseSit(model, B, sitW);
@@ -1487,7 +1500,33 @@ function applyBow(B, axis, theta, neckHead, extraHead) {
   if (B.neck) turnBone(B.neck, _q2.setFromAxisAngle(axis, BOW_NECK * neckHead + 0.06 * extraHead));
   if (B.Head) turnBone(B.Head, _q2.setFromAxisAngle(axis, BOW_HEAD * neckHead + 0.08 * extraHead));
 }
-const foreheadAt = (B) => { const hs = B.Head.getWorldScale(new THREE.Vector3()).y || 1; return FOREHEAD.clone().multiplyScalar(1 / hs).applyMatrix4(B.Head.matrixWorld); };
+// Each model's own forehead (the shod and socked boys' faces sit differently on the head bone): the front-most
+// point of the face's midline at forehead height, measured from the head mesh in its rest pose. FOREHEAD came
+// from the first boy, whose forehead measures 0.011 behind it; the same margin is kept for every model.
+function foreheadOf(model) {
+  if (!model || model.userData.forehead !== undefined) return (model && model.userData.forehead) || FOREHEAD;
+  let sk = null; model.traverse((o) => { if (!sk && o.isSkinnedMesh) sk = o; });
+  let f = null;
+  if (sk) {
+    const bones = sk.skeleton.bones, bi = bones.findIndex((b) => b.name === "Head");
+    if (bi >= 0) {
+      const g = sk.geometry, pos = g.attributes.position, si = g.attributes.skinIndex, sw = g.attributes.skinWeight;
+      const sc = bones[bi].getWorldScale(new THREE.Vector3()).y / model.getWorldScale(new THREE.Vector3()).y;
+      const M = new THREE.Matrix4().multiplyMatrices(sk.skeleton.boneInverses[bi], sk.bindMatrix), v = new THREE.Vector3();
+      let z = -Infinity;
+      for (let i = 0; i < pos.count; i++) {
+        let wt = 0; for (let k = 0; k < 4; k++) if (si.getComponent(i, k) === bi) wt += sw.getComponent(i, k);
+        if (wt < 0.3) continue;
+        v.fromBufferAttribute(pos, i).applyMatrix4(M).multiplyScalar(sc);
+        if (Math.abs(v.x) < 0.03 && v.y > 0.22 && v.y < 0.32) z = Math.max(z, v.z);
+      }
+      if (z > -Infinity) f = new THREE.Vector3(0, FOREHEAD.y, z + 0.011);
+    }
+  }
+  model.userData.forehead = f;
+  return f || FOREHEAD;
+}
+const foreheadAt = (B) => { const hs = B.Head.getWorldScale(new THREE.Vector3()).y || 1; return foreheadOf(B.model).clone().multiplyScalar(1 / hs).applyMatrix4(B.Head.matrixWorld); };
 const PHI_BOW = 0.75, PELVIS_SHARE = 0.6; // in the bow the thighs pivot around the knees (hips stay low); most of the fold is at the hips, the back stays long
 // The lower body. Kneeling, he sits back on his heels; as he bows, his hips rise and come forward, the thighs
 // pivoting around the knees (which stay on the floor) and the pelvis tilting forward, so the torso can fold
@@ -1702,6 +1741,71 @@ function poseWaiCore(model, B, hands, bow) {
   const T = waiHands(model, B, L.tip, side, up, fwd, hands); if (!T) return;
   [["Left", 1], ["Right", -1]].forEach(([s, sg]) => armTo(B, s, T[s].target, T[s].Q, T.pole(sg), hands));
 }
+
+/* ---------------- shoes off at the hall steps ---------------- */
+// As at every Thai temple, shoes stay outside: stepping up into a hall, the boy stops on the step, slips
+// out of his sneakers one foot at a time and goes in in his socks; the pair waits at the step, toes turned
+// out. Leaving, he steps back into them. (Only the Sambodhaya boy: the built characters have no shoes.)
+const boyKits = { shod: null, socks: null };
+const shoes = { on: true, t: -1, mode: null, pair: null };
+const SHOES_DUR = 1.5, SHOES_SWAP = 0.62;
+let shoePairSrc = null; loadProp("shoes").then((m) => { shoePairSrc = m; });
+const isBoy = () => boyKits.shod && boyKits.socks && (player.model === boyKits.shod.holder || player.model === boyKits.socks.holder);
+function wearKit(kit) {
+  const k = boyKits[kit]; if (!k || player.model === k.holder) return;
+  const was = player.current;
+  setModel(k.holder, k.clips);
+  if (was && was !== "idle") { player.current = null; playClip(was, 0); }
+}
+function hallStepOf(x, z) { // the front step of the hall whose floor this is: where the shoes are left
+  const f = floors.find((q) => q.hall && inFloor(q, x, z) != null); if (!f) return null;
+  const d = f.hz + 0.4; return { x: f.x + d * f.s, z: f.z + d * f.c, yaw: Math.atan2(f.s, f.c) };
+}
+function placePair(x, z, yaw) {
+  removePair();
+  const g = new THREE.Group(); g.position.set(x, groundAt(x, z), z); g.rotation.y = yaw; scene.add(g);
+  // his sneakers at this scale: about 0.42 long
+  if (shoePairSrc) { const c = fitTo(shoePairSrc.clone(), 0.2); c.rotation.y = SHOES_TURN; c.traverse((o) => { if (o.isMesh) o.castShadow = true; }); g.add(c); }
+  else [-0.1, 0.1].forEach((dx) => { add(new THREE.BoxGeometry(0.15, 0.12, 0.34), S(0x1d1d22), dx, 0.07, 0, g); add(new THREE.BoxGeometry(0.16, 0.04, 0.35), S(0xf2f2f2), dx, 0.02, 0, g, false); });
+  shoes.pair = g;
+}
+function removePair() { if (shoes.pair) { scene.remove(shoes.pair); shoes.pair = null; } }
+// out: the step just outside, where he was heading (going out, he steps into his waiting pair if it is near)
+function startShoes(mode, out) {
+  if (shoes.t >= 0) return;
+  shoes.mode = mode; shoes.t = 0; shoes.glide = null;
+  if (mode === "on") {
+    const p = shoes.pair && shoes.pair.position;
+    shoes.glide = p && Math.hypot(p.x - player.x, p.z - player.z) < 3.5 ? { x: p.x, z: p.z } : out;
+  }
+  if (player.mixer) playClip("idle", 0.3);
+}
+function shoesStep(dt) {
+  const before = shoes.t; shoes.t += dt;
+  if (shoes.glide && shoes.t < 0.5) { player.x += (shoes.glide.x - player.x) * Math.min(1, dt * 8); player.z += (shoes.glide.z - player.z) * Math.min(1, dt * 8); }
+  if (before < SHOES_SWAP && shoes.t >= SHOES_SWAP) {
+    if (shoes.mode === "off") {
+      // the pair is left where he stood, a little to his right, toes turned out from the hall
+      const rx = -Math.cos(player.yaw), rz = Math.sin(player.yaw);
+      placePair(player.x + rx * 0.32, player.z + rz * 0.32, player.yaw + Math.PI);
+      wearKit("socks"); shoes.on = false;
+    } else { removePair(); wearKit("shod"); shoes.on = true; }
+  }
+  if (shoes.t > SHOES_DUR) { shoes.t = -1; shoes.mode = null; }
+}
+// one foot, then the other, lifts back out of (or into) its shoe; he looks down at his feet
+const shoeLift = (t, a) => smooth(a, a + 0.22, t) * (1 - smooth(a + 0.3, a + 0.52, t));
+function poseShoes(model, B, t) {
+  const fwd = new THREE.Vector3(Math.sin(player.yaw), 0, Math.cos(player.yaw)), side = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), fwd);
+  const look = smooth(0, 0.3, t) * (1 - smooth(SHOES_DUR - 0.35, SHOES_DUR, t));
+  [["neck", 0.2], ["Head", 0.25]].forEach(([n, a]) => { if (B[n]) turnBone(B[n], _q2.setFromAxisAngle(side, a * look)); });
+  [["Left", 0.25], ["Right", 0.75]].forEach(([s, a]) => {
+    const w = shoeLift(t, a); if (w <= 0.001 || !B[s + "UpLeg"] || !B[s + "Leg"]) return;
+    turnBone(B[s + "UpLeg"], _q2.setFromAxisAngle(side, SHOE_THIGH * w));  // thigh a little forward
+    turnBone(B[s + "Leg"], _q2.setFromAxisAngle(side, -SHOE_KNEE * w));    // shin back: the heel comes up out of the shoe
+  });
+}
+const SHOE_THIGH = 0.35, SHOE_KNEE = 1.3, SHOES_TURN = -Math.PI / 2; // the pair model lies toes-sideways; this points the toes along the group's +z
 
 /* ---------------- input ---------------- */
 const keys = {};
@@ -2019,13 +2123,25 @@ function frame(dt) {
     if (keys.KeyW || keys.ArrowUp) fz -= 1; if (keys.KeyS || keys.ArrowDown) fz += 1;
     if (keys.KeyA || keys.ArrowLeft) fx -= 1; if (keys.KeyD || keys.ArrowRight) fx += 1;
     fx += joy.x; fz += joy.y;
-    if ((keys.Space) && !sit.on && sit.rise <= 0 && kraap.t < 0 && alms.t < 0 && player.y <= groundAt(player.x, player.z) + 0.01) player.vy = 9;
+    if ((keys.Space) && !sit.on && sit.rise <= 0 && kraap.t < 0 && alms.t < 0 && shoes.t < 0 && player.y <= groundAt(player.x, player.z) + 0.01) player.vy = 9;
   }
   if (kraap.t >= 0) { // paying tribute: stay put (it ends by itself); glide to the spot and face the image first
     fx = fz = 0;
     kraap.t += dt; if (kraap.t > KRAAP_DUR) { kraap.t = -1; kraap.touch = null; }
     if (kraap.spot && kraap.t >= 0 && kraap.t < 0.8) { player.x += (kraap.spot.x - player.x) * Math.min(1, dt * 8); player.z += (kraap.spot.z - player.z) * Math.min(1, dt * 8); }
     if (kraap.faceYaw != null) { let dy = kraap.faceYaw - player.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); player.yaw += dy * Math.min(1, dt * 8); }
+  }
+  if (shoes.t >= 0) { fx = fz = 0; shoesStep(dt); } // shoes off or on at the step: a moment's pause
+  else if (!isBoy() && (shoes.pair || !shoes.on)) { removePair(); shoes.on = true; } // another character now: no shoes waiting
+  else if (isBoy() && !sit.on && kraap.t < 0 && alms.t < 0 && !shoes.hold) { // (shoes.hold: ?debug tests keep one kit)
+    const inH = insideHall(player.x, player.z);
+    // arrived inside some other way (the places menu, back from a page): socks on, the pair at the step
+    if (inH && shoes.on) { const st = hallStepOf(player.x, player.z); if (st) placePair(st.x, st.z, st.yaw); wearKit("socks"); shoes.on = false; }
+    // outside in socks: fine at the step; walking off (or carried away) he puts his shoes back on
+    else if (!inH && !shoes.on) {
+      const p = shoes.pair && shoes.pair.position;
+      if (!p || Math.hypot(p.x - player.x, p.z - player.z) > 1.0) startShoes("on", { x: player.x, z: player.z });
+    }
   }
   if (alms.t >= 0) { // giving alms: stay put (it ends by itself); step up to the monk and face him first
     fx = fz = 0;
@@ -2048,7 +2164,11 @@ function frame(dt) {
     const s = Math.sin(camYaw), c = Math.cos(camYaw);
     const nx = fx / (Math.hypot(fx, fz) || 1), nz = fz / (Math.hypot(fx, fz) || 1);
     const wx = nx * c + nz * s, wz = -nx * s + nz * c;
-    [player.x, player.z] = collide(player.x + wx * speed * dt, player.z + wz * speed * dt);
+    const [cx, cz] = collide(player.x + wx * speed * dt, player.z + wz * speed * dt);
+    // the edge of a hall floor: shoes come off going in, and go back on coming out
+    const gateIn = isBoy() && shoes.on && insideHall(cx, cz) && !insideHall(player.x, player.z);
+    const gateOut = isBoy() && !shoes.on && !insideHall(cx, cz) && insideHall(player.x, player.z);
+    if (gateIn || gateOut) startShoes(gateIn ? "off" : "on", { x: cx + wx * 0.5, z: cz + wz * 0.5 }); else [player.x, player.z] = [cx, cz];
     const target = Math.atan2(wx, wz);
     let diff = target - player.yaw; diff = Math.atan2(Math.sin(diff), Math.cos(diff)); player.yaw += diff * Math.min(1, dt * 12);
   }
@@ -2072,7 +2192,7 @@ function frame(dt) {
       player.model.position.y = -1.05 * sit.w + (sit.spot ? sit.spot.top * sit.w : 0);
     } else if (player.model.position.y < 0) player.model.position.y = 0;
   } else if (player.mixer) {
-    if (kraap.t >= 0 || alms.t >= 0) playClip("idle", 0.4);
+    if (kraap.t >= 0 || alms.t >= 0 || shoes.t >= 0) playClip("idle", 0.4);
     else if (sit.on && player.clips.sit) playClip("sit", 1.2);
     else if (sit.rise > 0) playClip("idle", 1.0);
     else playClip(!moving ? "idle" : player.clips.run && speed > 5 ? "run" : player.clips.walk ? "walk" : "idle");
@@ -2185,7 +2305,7 @@ document.fonts.load("64px Itim").then(() => document.fonts.load("36px Mali")).ca
 });
 camYaw = 0; camera.position.set(0, 8, 105);
 restoreSpot(); // back from a page of the site: stand where you were
-if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, alms, startAlms, almsState, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
+if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
 Promise.race([Promise.all(propJobs), new Promise((r) => setTimeout(r, 7000))]).then(() => {
   $("loading").hidden = true;
   canvas.focus();
