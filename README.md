@@ -17,6 +17,8 @@ A solo, Roblox-style low-poly walk through the same temple, built with Three.js 
 
 **Learning Hall and Universal Hall seating follow temple custom:** visitors and students sit on the floor; teachers and monks sit on a raised platform along the back wall (not walkable for visitors); the Buddha image sits on a stepped altar on that platform, always the highest, with candles, phan phum offerings and flower vases.
 
+**Movement:** the temple dog trots (diagonal legs swing together, paws lift, head bobs) and wags its tail; the model has no skeleton, so the walk is done in its vertex shader, shadow included. The Practice Garden waterfall runs: streaks flow down a curved sheet of water in two layers, foam turns where it lands, ripples spread across the pool, droplets splash and a soft mist hangs. Calm motion slows the water and the tail rather than stopping them.
+
 **Sound (`src/sound.js`):** made in the browser with Web Audio, nothing is downloaded. Following the charter, nothing plays until the visitor presses something: the 🔈 button (off every time the page opens) starts the ambience, and the temple bell rings only when struck (walk to it, press E). The site-wide "turn off all sound" setting is respected: the button and the bell ask first. Sounds are placed in 3D:
 - breeze and rustling leaves that follow slow gusts, and small roof bells (kradueng) at the hall eaves that tinkle in the gusts
 - birds in the trees: bulbul-like twitters and, now and then, the Asian koel's rising "ko-el"

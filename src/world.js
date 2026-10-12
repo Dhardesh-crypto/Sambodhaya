@@ -429,7 +429,8 @@ Object.entries(salas).forEach(([id, h]) => {
 PLACES.forEach((p) => {
   if (p.id === "yard" || p.id === "exit") return;
   const h = salas[p.id];
-  const [sx, sz, sy] = h ? h.signAt : [...({ garden: [0, -48], journey: [15, 49] }[p.id] || p.pos), 5];
+  // the garden's sign floats above the cliff, so it doesn't hide the waterfall
+  const [sx, sz, sy] = h ? h.signAt : ({ garden: [0, -55, 12.2], journey: [15, 49, 5] }[p.id] || [...p.pos, 5]);
   signs.push(sign(L === "en" ? p.en : p.th, p.sub[L === "en" ? 1 : 0], p.icon, sx, sy, sz, 5.2));
 });
 sign(tx("ลานกลาง", "Central Courtyard"), tx("อยากไปไหนวันนี้?", "Where would you like to go today?"), "🌳", 0, 21, 0, 8);
@@ -567,14 +568,88 @@ function shrine(h) {
   h.block(0, -0.6, 2.8, 0.45);
 }
 
+/* ---------------- running water: a waterfall that flows, foams and splashes ---------------- */
+// Streaks scroll down a curved sheet of water (two layers at different speeds for depth); where it
+// lands, foam turns, rings spread across the pool, droplets splash up and a soft mist hangs.
+// Calm motion slows all of it down rather than stopping it.
+const waterAnims = [];
+function canvasTexture(w, h, draw) {
+  const c = document.createElement("canvas"); c.width = w; c.height = h; draw(c.getContext("2d"), w, h);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; return t;
+}
+const streakTex = () => canvasTexture(128, 512, (g, w, h) => {
+  g.fillStyle = "rgba(190,230,240,0.35)"; g.fillRect(0, 0, w, h);
+  for (let i = 0; i < 260; i++) {
+    const x = Math.random() * w, y = Math.random() * h, len = 30 + Math.random() * 160, a = 0.15 + Math.random() * 0.6, wd = 1 + Math.random() * 3;
+    const gr = g.createLinearGradient(0, y, 0, y + len); gr.addColorStop(0, "rgba(255,255,255,0)"); gr.addColorStop(0.5, `rgba(255,255,255,${a})`); gr.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = gr; g.fillRect(x, y, wd, len); if (y + len > h) g.fillRect(x, y - h, wd, len); // wrap so it tiles
+  }
+});
+const foamTex = () => canvasTexture(256, 256, (g, w, h) => {
+  for (let i = 0; i < 380; i++) {
+    const a = Math.random() * Math.PI * 2, r = Math.pow(Math.random(), 0.7) * w * 0.48, x = w / 2 + Math.cos(a) * r, y = h / 2 + Math.sin(a) * r;
+    const rad = 3 + Math.random() * 12, fade = 1 - r / (w * 0.5);
+    const gr = g.createRadialGradient(x, y, 0, x, y, rad); gr.addColorStop(0, `rgba(255,255,255,${0.75 * fade})`); gr.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = gr; g.beginPath(); g.arc(x, y, rad, 0, Math.PI * 2); g.fill();
+  }
+});
+const softTex = canvasTexture(64, 64, (g, w) => { const gr = g.createRadialGradient(w / 2, w / 2, 0, w / 2, w / 2, w / 2); gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(1, "rgba(255,255,255,0)"); g.fillStyle = gr; g.fillRect(0, 0, w, w); });
+function waterfall(x, zTop, yTop, yPool, width) {
+  const drop = yTop - yPool, landZ = zTop + 0.85;
+  // the falling sheet: leaves the lip, curves outward a little, then drops straight
+  const sheet = (offset, tex, opacity, color) => {
+    const geo = new THREE.PlaneGeometry(width, drop, 6, 24), pos = geo.attributes.position;
+    for (let i = 0; i < pos.count; i++) { const t = (pos.getY(i) + drop / 2) / drop; pos.setZ(i, 0.85 * Math.pow(1 - t, 0.6) + offset); pos.setX(i, pos.getX(i) * (1 - (1 - t) * 0.06)); }
+    geo.computeVertexNormals();
+    const mat = new THREE.MeshStandardMaterial({ color, map: tex || null, transparent: true, opacity, roughness: 0.12, metalness: 0, emissive: 0x2c5560, emissiveIntensity: 0.35, depthWrite: false, side: THREE.DoubleSide });
+    const m = new THREE.Mesh(geo, mat); m.position.set(x, yPool + drop / 2, zTop); m.renderOrder = 2; scene.add(m); return m;
+  };
+  sheet(-0.04, null, 0.55, 0x4f9fb0);                            // the body of the water
+  const a = streakTex(); a.repeat.set(2, 1.2); sheet(0, a, 0.9, 0xe6f7fb);
+  waterAnims.push((dt) => { a.offset.y += dt * 1.6; });
+  if (HIGH) { const b = streakTex(); b.repeat.set(3, 2); sheet(0.05, b, 0.6, 0xffffff); waterAnims.push((dt) => { b.offset.y += dt * 2.3; }); }
+  // foam where it lands: two layers turning opposite ways, gently breathing
+  [[1, 0.9, 0.35], [-1, 0.7, 0.5]].forEach(([dir, op, spd], k) => {
+    const f = new THREE.Mesh(new THREE.CircleGeometry(width * 0.62, 32), new THREE.MeshBasicMaterial({ map: foamTex(), transparent: true, opacity: op, depthWrite: false }));
+    f.rotation.x = -Math.PI / 2; f.position.set(x, yPool + 0.02 + k * 0.01, landZ + 0.6); f.renderOrder = 3; scene.add(f);
+    waterAnims.push((dt, t) => { f.rotation.z += dt * spd * dir; const s = 1 + Math.sin(t * 2.2 + k) * 0.05; f.scale.set(s, s, 1); });
+  });
+  // ripples spreading across the pool
+  for (let i = 0; i < 4; i++) {
+    const r = new THREE.Mesh(new THREE.RingGeometry(0.92, 1, 48), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false }));
+    r.rotation.x = -Math.PI / 2; r.position.set(x, yPool + 0.015, landZ + 0.5); r.renderOrder = 3; scene.add(r);
+    let life = i / 4;
+    waterAnims.push((dt) => { life = (life + dt / 2.6) % 1; const s = 1.5 + life * 4; r.scale.set(s * (width / 4.6), s, 1); r.material.opacity = 0.4 * (1 - life); });
+  }
+  // droplets splashing up from the landing
+  const N = HIGH ? 140 : 50, dg = new THREE.BufferGeometry(), dp = new Float32Array(N * 3), vel = [], age = [];
+  const spawn = (i) => { dp[i * 3] = x + (Math.random() - 0.5) * width * 0.9; dp[i * 3 + 1] = yPool + 0.05; dp[i * 3 + 2] = landZ + Math.random() * 0.4; vel[i] = [(Math.random() - 0.5) * 0.8, 1.2 + Math.random() * 2.4, 0.3 + Math.random() * 1.2]; age[i] = 0; };
+  for (let i = 0; i < N; i++) { spawn(i); age[i] = Math.random(); }
+  dg.setAttribute("position", new THREE.BufferAttribute(dp, 3));
+  const drops = new THREE.Points(dg, new THREE.PointsMaterial({ color: 0xeefaff, size: 0.14, map: softTex, transparent: true, opacity: 0.85, depthWrite: false }));
+  drops.frustumCulled = false; drops.renderOrder = 4; scene.add(drops);
+  waterAnims.push((dt) => {
+    for (let i = 0; i < N; i++) {
+      vel[i][1] -= 9 * dt; dp[i * 3] += vel[i][0] * dt; dp[i * 3 + 1] += vel[i][1] * dt; dp[i * 3 + 2] += vel[i][2] * dt; age[i] += dt;
+      if (dp[i * 3 + 1] < yPool || age[i] > 1.2) spawn(i);
+    }
+    dg.attributes.position.needsUpdate = true;
+  });
+  // a soft mist at the foot of the fall
+  for (let i = 0; i < 4; i++) {
+    const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: softTex, color: 0xffffff, transparent: true, opacity: 0.18, depthWrite: false }));
+    m.scale.set(3, 2, 1); m.position.set(x + (i - 1.5) * 1.3, yPool + 0.9, landZ + 0.6); m.renderOrder = 5; scene.add(m);
+    waterAnims.push((dt, t) => { m.position.y = yPool + 0.9 + Math.sin(t * 0.6 + i) * 0.25; m.material.opacity = 0.14 + Math.sin(t * 0.8 + i * 2) * 0.05; });
+  }
+}
+
 /* ---------------- practice garden: four observation stones and a waterfall wall ---------------- */
 {
   add(new THREE.BoxGeometry(22, 9, 3), MAT.rock, 0, 4.5, -60);
   props("boulder", 7, [[-7.5, -59, 0.4], [7.5, -59.5, 2.5], [-3.6, -58.6, 1.2, 4.5], [3.8, -58.8, 4, 4.8]]);
   props("bamboo", 7, [[-13, -50, 0], [-15, -55, 1], [13, -50, 2], [15, -55, 3], [-11, -57, 4], [11, -57, 5]]);
-  const fall = add(new THREE.BoxGeometry(5, 8, 0.4), MAT.water, 0, 4.4, -58.3, scene, false);
-  fall.material = fall.material.clone(); fall.material.opacity = 0.75;
   add(new THREE.CylinderGeometry(5, 5, 0.4, 24), MAT.water, 0, 0.2, -55.5, scene, false);
+  waterfall(0, -58.35, 9, 0.42, 4.6);
   colliders.push({ x: 0, z: -56, r: 5 });
   blockers.push({ x: 0, z: -60, c: 1, s: 0, hx: 11, hz: 1.6 });
   const four = [["🧍", "กาย", "Body"], ["💗", "ความรู้สึก", "Feelings"], ["🧠", "จิต", "Mind"], ["☸", "ธรรม", "Dhamma"]];
@@ -851,10 +926,40 @@ const dog = { obj: new THREE.Group(), x: 3, z: 90, y: 0, yaw: Math.PI };
   loadProp("dog").then((src) => {
     if (!src) return;
     dog.obj.children.forEach((c) => { c.visible = false; });
-    src.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    src.traverse((o) => {
+      if (!o.isMesh) return;
+      o.castShadow = true; o.receiveShadow = true;
+      // the model has no skeleton, so the walk is done on the graphics card (its shadow walks too)
+      o.material = o.material.clone(); animateDog(o.material);
+      o.customDepthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }); animateDog(o.customDepthMaterial);
+    });
     const m = fitTo(src, 1.7); m.rotation.y = -Math.PI / 2; // the model faces sideways; turn it to walk head-first
     dog.obj.add(m); dog.model = m;
   });
+}
+
+// A trotting walk for the dog model. In the model's own space the head points to +x, it stands
+// from y = -0.63 (paws) to 0.63 (ears), front legs sit near x = 0.6, back legs near x = -0.3 and the
+// tail curls up behind x = -0.55. Diagonal legs swing together; the tail wags, faster when walking.
+const dogAnim = { phase: { value: 0 }, walk: { value: 0 }, time: { value: 0 }, wag: { value: 1 } };
+function animateDog(mat) {
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uPhase = dogAnim.phase; sh.uniforms.uWalk = dogAnim.walk; sh.uniforms.uTime = dogAnim.time; sh.uniforms.uWag = dogAnim.wag;
+    sh.vertexShader = "uniform float uPhase, uWalk, uTime, uWag;\n" + sh.vertexShader.replace("#include <begin_vertex>", `#include <begin_vertex>
+      {
+        const float HIP = -0.1, FEET = -0.634;
+        float below = max(HIP - transformed.y, 0.0);                    // how far under the hip
+        float legW = clamp(below / (HIP - FEET), 0.0, 1.0);
+        float front = step(0.2, transformed.x), left = step(0.0, transformed.z);
+        float off = 3.14159 * abs(front - left);                        // trot: diagonal pairs move together
+        transformed.x += below * 0.5 * sin(uPhase + off) * uWalk;        // swing forward and back
+        transformed.y += 0.07 * legW * legW * max(0.0, cos(uPhase + off)) * uWalk; // lift the paw on the way forward
+        float tailW = clamp((-0.5 - transformed.x) / 0.4, 0.0, 1.0) * smoothstep(-0.15, 0.1, transformed.y);
+        transformed.z += sin(uTime * mix(7.0, 13.0, uWalk)) * mix(0.12, 0.22, uWalk) * tailW * tailW * uWag;
+        float headW = smoothstep(0.35, 0.6, transformed.x) * smoothstep(0.0, 0.3, transformed.y);
+        transformed.y += sin(uPhase * 2.0) * 0.025 * uWalk * headW;
+      }`);
+  };
 }
 
 /* ---------------- input ---------------- */
@@ -1106,6 +1211,7 @@ $("btn-avatar").addEventListener("click", () => openAvatar("build"));
 const clock = new THREE.Clock();
 const tmp = new THREE.Vector3(), head = new THREE.Vector3();
 const camRay = new THREE.Raycaster(), camFwd = new THREE.Vector3();
+let waterClock = 0;
 let walkPhase = 0;
 function resize() { renderer.setSize(innerWidth, innerHeight, false); if (composer) composer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
 addEventListener("resize", resize); resize();
@@ -1164,7 +1270,12 @@ function tick() {
     const bx = player.x + fx2 * 1.4 - rx * 2.6, bz = player.z + fz2 * 1.4 - rz * 2.6;
     const ddx = bx - dog.x, ddz = bz - dog.z, dd = Math.hypot(ddx, ddz);
     dog.moving = dd > 0.4;
-    if (dd > 0.4) { const st = Math.min(dd, dt * (dd > 6 ? 12 : 6)); [dog.x, dog.z] = collide(dog.x + ddx / dd * st, dog.z + ddz / dd * st); dog.yaw = Math.atan2(ddx, ddz); }
+    let dogSpeed = 0;
+    if (dd > 0.4) { const st = Math.min(dd, dt * (dd > 6 ? 12 : 6)); dogSpeed = st / dt; [dog.x, dog.z] = collide(dog.x + ddx / dd * st, dog.z + ddz / dd * st); dog.yaw = Math.atan2(ddx, ddz); }
+    // walk cycle: about one stride per 1.2 m; the legs ease in and out of walking
+    dogAnim.phase.value += dt * dogSpeed * 5.2;
+    dogAnim.walk.value += ((dogSpeed > 0.5 ? 1 : 0) - dogAnim.walk.value) * Math.min(1, dt * 6);
+    dogAnim.time.value += dt; dogAnim.wag.value = settings.calmMotion ? 0.4 : 1;
     dog.obj.position.set(dog.x, groundAt(dog.x, dog.z), dog.z); dog.obj.rotation.y = dog.yaw;
     if (!settings.calmMotion) dog.tail.rotation.y = Math.sin(performance.now() / 160) * 0.6;
   }
@@ -1190,9 +1301,11 @@ function tick() {
   if (settings.calmMotion || hit) camera.position.copy(tmp); else camera.position.lerp(tmp, Math.min(1, dt * 8));
   camera.lookAt(head);
 
+  // running water (slower with calm motion on)
+  { const wdt = dt * (settings.calmMotion ? 0.35 : 1); waterClock += wdt; waterAnims.forEach((f) => f(wdt, waterClock)); }
   // candle flames sway a little (not in calm motion)
   if (!settings.calmMotion) { const t = performance.now() / 1000; flames.forEach((f, i) => { f.scale.y = 1.8 + Math.sin(t * 7 + i * 1.7) * 0.18; }); }
-  if (dog.model && !settings.calmMotion) dog.model.position.y = dog.moving ? Math.abs(Math.sin(performance.now() / 110)) * 0.08 : 0;
+  if (dog.model) dog.model.position.y = Math.abs(Math.sin(dogAnim.phase.value)) * 0.035 * dogAnim.walk.value; // a light bounce in step
 
   camera.getWorldDirection(camFwd);
   sound.update(camera.position, camFwd, insideHall(player.x, player.z) && Math.hypot(camera.position.x - player.x, camera.position.z - player.z) < 14, dt);
