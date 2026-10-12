@@ -1329,7 +1329,7 @@ function almsStep(dt) {
   if (alms.t > ALMS_DUR) {                                               // then the high wai to the monk
     if (!alms.placed && alms.item) scene.remove(alms.item);
     alms.t = -1; alms.item = null; if (alms.m) alms.m.lean.rotation.x = 0;
-    wai.level = "buddha"; wai.dur = WAI_LEVELS.buddha.dur; wai.faceYaw = alms.faceYaw; wai.t = 0;
+    wai.level = "buddha"; wai.dur = WAI_LEVELS.buddha.dur; wai.faceYaw = alms.faceYaw; wai.t = 0; wai.fromAlms = true; // the dog keeps sitting through it
   }
 }
 const ALMS_CHEST = { fwd: 0.42, up: -0.2 };  // where the rice is held, from the upper spine
@@ -1404,7 +1404,7 @@ function waiLevelHere() {
 function startWai() {
   if (wai.t >= 0 && wai.t < wai.dur - 0.6) return;
   const here = waiLevelHere();
-  wai.level = here.level; wai.dur = WAI_LEVELS[here.level].dur;
+  wai.level = here.level; wai.dur = WAI_LEVELS[here.level].dur; wai.fromAlms = false;
   wai.faceYaw = here.face ? Math.atan2(here.face.x - player.x, here.face.z - player.z) : null;
   wai.t = 0;
 }
@@ -2372,10 +2372,19 @@ function frame(dt) {
     // stay ahead-left of the player as seen from the camera, so it never blocks the view
     const fx2 = -Math.sin(camYaw), fz2 = -Math.cos(camYaw), rx = Math.cos(camYaw), rz = -Math.sin(camYaw);
     let bx = player.x + fx2 * 1.4 - rx * 2.6, bz = player.z + fz2 * 1.4 - rz * 2.6;
-    // when he sits, the dog comes to sit at his left side, facing the same way
-    if (sit.on || kraap.t >= 0) { bx = player.x + Math.cos(player.yaw) * 1.5 + Math.sin(player.yaw) * 0.2; bz = player.z - Math.sin(player.yaw) * 1.5 + Math.cos(player.yaw) * 0.2; }
+    // during the ceremonies (sitting, paying respect, Kathina, giving alms and its wai) the dog sits at his left side, facing the same way
+    const ceremony = sit.on || kraap.t >= 0 || alms.t >= 0 || (wai.t >= 0 && wai.fromAlms);
+    if (ceremony) {
+      // beside where he will be for the whole ceremony (the bowing spot, the spot before the monk), so the dog
+      // sits down once and stays down while he steps up or moves back on his knees
+      const k = kraap.t >= 0 ? kraap : null, al = !k && (alms.t >= 0 || wai.fromAlms) ? alms : null;
+      const at = k ? (k.kathin && k.keys ? k.kathin.far : k.spot) : al ? al.spot : null;
+      const ax = at ? at.x : player.x, az = at ? at.z : player.z;
+      const ay = k && k.faceYaw != null ? k.faceYaw : al ? al.faceYaw : player.yaw;
+      bx = ax + Math.cos(ay) * 1.5 + Math.sin(ay) * 0.2; bz = az - Math.sin(ay) * 1.5 + Math.cos(ay) * 0.2;
+    }
     const ddx = bx - dog.x, ddz = bz - dog.z, dd = Math.hypot(ddx, ddz);
-    const wantSit = (sit.on || kraap.t >= 0) && dd < 0.5;
+    const wantSit = ceremony && dd < 0.5;
     dogAnim.sit.value += ((wantSit ? 1 : 0) - dogAnim.sit.value) * Math.min(1, dt * 3);
     const dogFree = dogAnim.sit.value < 0.15; // a sitting dog gets up before it walks
     dog.moving = dd > 0.4 && dogFree;
