@@ -747,7 +747,20 @@ JOURNEY.forEach(([th, en], i) => {
   sign(label, "", "🚪", x, 11, 36, 4.4);
   colliders.push({ x, z: 36, r: 1.3 });
 });
-[-4.5, 4.5].forEach((x) => { const door = add(new THREE.BoxGeometry(3.4, 4.4, 0.3), MAT.wood, x + (x < 0 ? -2.4 : 2.4), 2.2, 34); door.rotation.y = x < 0 ? -1.1 : 1.1; });
+// the two doors: each is half the gateway wide, hinged on its post, so closed they would shut it completely;
+// they stand open, swung in along the sides of the road, and are solid to walk into
+{
+  const HALF = 7 - 0.55, W = HALF - 0.05, OPEN = 1.5; // from the post's inner face to the middle; how far they swing in
+  [-1, 1].forEach((sg) => {
+    const hinge = new THREE.Group(); hinge.position.set(sg * HALF, 0, 36); scene.add(hinge);
+    hinge.rotation.y = sg < 0 ? OPEN : -OPEN;            // swung in, toward the temple
+    add(new THREE.BoxGeometry(W, 5, 0.25), MAT.wood, -sg * W / 2, 2.75, 0, hinge);                 // the leaf
+    [1.1, 2.75, 4.4].forEach((y) => add(new THREE.BoxGeometry(W - 0.2, 0.18, 0.32), MAT.woodDark, -sg * W / 2, y, 0, hinge, false)); // rails
+    add(new THREE.BoxGeometry(W, 0.2, 0.3), MAT.gold, -sg * W / 2, 5.3, 0, hinge, false);           // a gold top rail
+    const th = hinge.rotation.y, c = Math.cos(th), sn = Math.sin(th), ox = -sg * W / 2;
+    blockers.push({ x: hinge.position.x + ox * c, z: 36 - ox * sn, c, s: sn, hx: W / 2, hz: 0.2 });
+  });
+}
 
 /* ---------------- the donation box (for adults) on the front of the "leave any time" post ---------------- */
 // Quiet and optional: walking up to it and pressing E opens a note and a link to the support page.
@@ -803,7 +816,7 @@ ALMS_MONKS.forEach(([name, H], i) => {
 });
 // the rice: a silver bowl of sticky-rice balls on a low table at the roadside, where the giver stands
 {
-  const tx0 = -2.6, tz0 = ALMS_ROW.z0 + 1.5 * ALMS_ROW.dz, gy = groundAt(tx0, tz0);
+  const tx0 = -5.4, tz0 = ALMS_ROW.z0 + 1.0 * ALMS_ROW.dz, gy = groundAt(tx0, tz0); // off the road, clear of the dog's way
   props("table", 0.8, [[tx0, tz0, Math.PI / 2, gy]]);
   add(new THREE.CylinderGeometry(0.42, 0.3, 0.22, 24, 1, true), S(0xd9dde2, { metalness: 0.9, roughness: 0.3, side: THREE.DoubleSide }), tx0, gy + 0.92, tz0, scene, false);
   [[0, 0], [0.15, 0.1], [-0.14, 0.08], [0.05, -0.16], [-0.1, -0.12]].forEach(([dx, dz2], k) => { const b = riceBall(); b.position.set(tx0 + dx, gy + 0.98 + (k ? 0 : 0.06), tz0 + dz2); scene.add(b); });
@@ -902,13 +915,13 @@ kinds.forEach(([name, h], k) => {
 }
 
 /* ---------------- small things that make it feel lived in ---------------- */
-const BELL = [-22, 25];
+const BELL = [-6.8, 24.5]; // beside the entrance road, between two lamp posts: rung without stepping off the road
 props("bell", 4.6, [[BELL[0], BELL[1], 0.9]]); colliders.push({ x: BELL[0], z: BELL[1], r: 1.6 });
 const jars = [[-33, 7], [-19, 21], [-11, 39], [11, 39], [22, 19], [-36, -8]];
 props("jar", 1.1, jars.map(([x, z], i) => [x, z, i]), { extra: true }); jars.forEach(([x, z]) => colliders.push({ x, z, r: 0.7 }));
 const bushes = [[-9, 18], [9, 18], [-19, -5], [19, -5], [-24, -36], [24, -36], [-40, 0], [40, -4], [22, 52], [36, 40], [-8, -52], [8, -52]];
 props("bougainvillea", 2.4, bushes.map(([x, z], i) => [x, z, i * 2]), { extra: true }); bushes.forEach(([x, z]) => colliders.push({ x, z, r: 1.3 }));
-const pots = [[-3.2, 34], [3.2, 34], [-5.2, 15.8], [5.2, 15.8]];
+const pots = [[-4.7, 39.5], [4.7, 39.5], [-5.2, 15.8], [5.2, 15.8]]; // the gate pair stand outside it, clear of the doors
 props("potplant", 1.6, pots.map(([x, z], i) => [x, z, i]), { extra: true }); pots.forEach(([x, z]) => colliders.push({ x, z, r: 0.6 }));
 const blooms = [[-9.5, 12], [9.5, 12]];
 props("lotus", 1, blooms.map(([x, z], i) => [x, z, i]), { extra: true }); blooms.forEach(([x, z]) => colliders.push({ x, z, r: 0.8 }));
@@ -2473,7 +2486,7 @@ function frame(dt) {
   let best = null, bestD = Infinity;
   for (const p of PLACES) { const d = Math.hypot(player.x - p.pos[0], player.z - p.pos[1]); if (d < p.r && d < bestD) { best = p; bestD = d; } }
   for (const s of journeyStones) { const d = Math.hypot(player.x - s.x, player.z - s.z); if (d < 2.6 && d < bestD) { best = { ...PLACES.find((p) => p.id === "journey"), stone: s.i }; bestD = d; } }
-  if (Math.hypot(player.x - BELL[0], player.z - BELL[1]) < 3.6 && 3 < bestD) { best = BELL_PLACE; bestD = 3; }
+  if (Math.hypot(player.x - BELL[0], player.z - BELL[1]) < 4.4 && 3 < bestD) { best = BELL_PLACE; bestD = 3; } // reachable from the road
   { const d = Math.hypot(player.x - DONATE.x, player.z - (DONATE.z + 0.6)); if (d < 2.4 && d < bestD) { best = DONATE_PLACE; bestD = d; } } // only when standing at the box
   { const h = salas.learn; if (h && h.senior && kraap.t < 0) { const sp = kathinSpots(h), d = Math.hypot(player.x - sp.near.x, player.z - sp.near.z); if (d < 1.3 && d < bestD) { best = { ...KATHIN_PLACE, hall: h }; bestD = d; } } }
   for (const m of almsMonks) { const d = Math.hypot(player.x - (m.x + Math.sin(m.yaw) * ALMS_STAND), player.z - (m.z + Math.cos(m.yaw) * ALMS_STAND)); if (d < 1.5 && d < bestD) { best = { ...ALMS_PLACE, monk: m }; bestD = d; } }
