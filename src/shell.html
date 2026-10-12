@@ -98,8 +98,8 @@ a.way { color: var(--ink); text-decoration: none; display: inline-block; }
 .pin-top { top: -14px; }
 .hotspot:hover .pin, .hotspot:focus-visible .pin { background: var(--gold); }
 .world-link { background: var(--leaf); text-decoration: none; }
-/* the 3D way in, on the hero picture: beside the temple's name, over the leaves of the great tree (no painted text there) */
-.hero-3d { position: absolute; left: 30%; top: 11.5%; display: flex; align-items: center; gap: 10px; line-height: 1.2; padding: 6px 16px 6px 6px; background: var(--saffron); color: var(--cream); text-decoration: none; font-family: var(--display); font-size: clamp(.95rem, 1.3vw, 1.25rem); border: 2px solid var(--ink); border-radius: 999px; box-shadow: 0 3px 0 rgba(58, 42, 29, .55), 0 6px 18px rgba(40, 25, 10, .35); }
+/* the 3D way in, on the hero picture: centred, over the leaves of the great tree (no painted text there) */
+.hero-3d { position: absolute; left: 50%; transform: translateX(-50%); top: 13%; white-space: nowrap; display: flex; align-items: center; gap: 10px; line-height: 1.2; padding: 6px 16px 6px 6px; background: var(--saffron); color: var(--cream); text-decoration: none; font-family: var(--display); font-size: clamp(.95rem, 1.3vw, 1.25rem); border: 2px solid var(--ink); border-radius: 999px; box-shadow: 0 3px 0 rgba(58, 42, 29, .55), 0 6px 18px rgba(40, 25, 10, .35); }
 .hero-3d img { width: clamp(48px, 5vw, 84px); height: auto; aspect-ratio: 16 / 10; object-fit: cover; border-radius: 999px; border: 2px solid var(--cream); }
 .hero-3d:hover { background: var(--saffron-deep); }
 .hero-3d:focus-visible { outline: 3px solid var(--cream); outline-offset: 2px; box-shadow: 0 0 0 6px var(--saffron-deep); }
