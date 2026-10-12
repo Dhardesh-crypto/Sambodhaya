@@ -1377,19 +1377,42 @@ function openDialog(title, html) {
 function closeDialog() { $("dlg").hidden = true; if (lastFocus && lastFocus.focus) lastFocus.focus(); else canvas.focus(); }
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
+// Pages opened from inside the 3D temple carry ?from=3d, so the site can offer the way back here;
+// the spot (position, facing and view) is kept for this browser tab only, and restored on return.
+// Leaving the temple and the "no 3D" map are deliberate exits, so they don't carry it.
+const to2d = (hash) => `index.html?from=3d#${hash}`;
+const SPOT_KEY = "sambodhaya-3d-spot";
+function saveSpot() {
+  try { sessionStorage.setItem(SPOT_KEY, JSON.stringify({ x: player.x, z: player.z, yaw: player.yaw, camYaw, camPitch, camDist, t: Date.now() })); } catch (e) {}
+}
+addEventListener("click", (e) => { const a = e.target.closest && e.target.closest('a[href*="from=3d"]'); if (a) saveSpot(); }, true);
+function restoreSpot() {
+  const nav = performance.getEntriesByType && performance.getEntriesByType("navigation")[0];
+  const returning = /[?&]return=1\b/.test(location.search) || (nav && nav.type === "back_forward");
+  if (!returning) return false;
+  let spot = null; try { spot = JSON.parse(sessionStorage.getItem(SPOT_KEY) || "null"); } catch (e) {}
+  if (/[?&]return=1\b/.test(location.search)) { try { history.replaceState(null, "", location.pathname + location.search.replace(/[?&]return=1\b/, "").replace(/^&/, "?")); } catch (e) {} }
+  if (!spot || Date.now() - spot.t > 6 * 3600 * 1000) return false;
+  player.x = spot.x; player.z = spot.z; player.yaw = spot.yaw; player.y = groundAt(spot.x, spot.z);
+  camYaw = spot.camYaw; camPitch = spot.camPitch; camDist = spot.camDist;
+  dog.x = player.x + 1.5; dog.z = player.z + 1.5;
+  player.obj.position.set(player.x, player.y, player.z); player.obj.rotation.y = player.yaw;
+  camera.position.set(player.x + Math.sin(camYaw) * Math.cos(camPitch) * camDist, player.y + 2 + Math.sin(camPitch) * camDist, player.z + Math.cos(camYaw) * Math.cos(camPitch) * camDist);
+  return true;
+}
 function openPlace(p) {
   if (p.id === "bell") { ringBell(); return; }
   if (p.stone != null) {
     const n = p.stone + 1;
     openDialog(`👣 ${n} · ${esc(L === "en" ? JOURNEY[p.stone][1] : JOURNEY[p.stone][0])}`,
       `<p>${p.board ? tx("ป้ายเรื่องที่ " + n + " ในศาลาเรียนรู้ เปิดอ่านเรื่องนี้ได้ พร้อมต้นทางและกระจกอีกบาน", "Story board " + n + " in the Learning Hall. Open the story, with its source and the other mirror.") : tx("หินก้อนที่ " + n + " บนเส้นทางของฉัน เรื่องนี้อ่านได้ในศาลาเรียนรู้ พร้อมต้นทางและกระจกอีกบาน", "Stone " + n + " on My Journey. Read this story in the Learning Hall, with its source and the other mirror.")}</p>
-       <div class="row"><a class="btn" href="index.html#u0${n}">${tx("เปิดเรื่องนี้ →", "Open this story →")}</a><button class="chip" data-close>${tx("เดินต่อ", "Keep walking")}</button></div>`);
+       <div class="row"><a class="btn" href="${to2d("u0" + n)}">${tx("เปิดเรื่องนี้ →", "Open this story →")}</a><button class="chip" data-close>${tx("เดินต่อ", "Keep walking")}</button></div>`);
   } else {
     openDialog(`${p.icon} ${esc(placeName(p))}`,
       `<p>${esc(p.sub[L === "en" ? 1 : 0])}</p>
        ${p.id === "media" ? `<p class="quiet">${tx("ภาพวงล้อสัมโพธายะที่ผนังศาลานี้ เป็นสื่ออธิบายของวัด ยังรอตรวจ", "The Sambodhaya wheel on this hall's wall is the temple's explanatory media, still under review.")}</p>` : ""}
        ${p.id === "exit" ? `<p>${tx("วันนี้พอแล้วก็ได้", "That's enough for today, if you like.")}</p>` : ""}
-       <div class="row"><a class="btn" href="${p.href}">${p.id === "exit" ? tx("ออกจากวัด →", "Leave the temple →") : tx("เข้าไปในศาลา →", "Go inside →")}</a><button class="chip" data-close>${tx("เดินต่อ", "Keep walking")}</button></div>`);
+       <div class="row"><a class="btn" href="${p.id === "exit" ? p.href : to2d(p.href.split("#")[1])}">${p.id === "exit" ? tx("ออกจากวัด →", "Leave the temple →") : tx("เข้าไปในศาลา →", "Go inside →")}</a><button class="chip" data-close>${tx("เดินต่อ", "Keep walking")}</button></div>`);
   }
 }
 function openPlaces(fromDog) {
@@ -1654,6 +1677,7 @@ document.fonts.load("64px Itim").then(() => document.fonts.load("36px Mali")).ca
   signDraws.forEach((d) => d());
 });
 camYaw = 0; camera.position.set(0, 8, 105);
+restoreSpot(); // back from a page of the site: stand where you were
 if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, WAI_LEVELS, boards, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
 Promise.race([Promise.all(propJobs), new Promise((r) => setTimeout(r, 7000))]).then(() => {
   $("loading").hidden = true;

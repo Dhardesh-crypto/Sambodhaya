@@ -87,11 +87,14 @@ function Dog({ say, children }) {
 }
 
 /* ---------- persistent wayfinding: always back to courtyard, help, access, exit ---------- */
+// Opened from the 3D temple (?from=3d)? Then the way back leads there, to the spot you left.
+const FROM_3D = new URLSearchParams(location.search).get("from") === "3d";
 function Wayfinding() {
   const { go, t, view } = useApp();
   return (
     <nav className="wayfinding" aria-label={t(UI("ทางในวัด", "Temple paths"))}>
-      {view !== "gate" && view !== "yard" && <button className="way" onClick={() => go("yard")}><span aria-hidden="true">↩️🌳</span> {t(UI("กลับลานกลาง", "Back to courtyard"))}</button>}
+      {FROM_3D && <a className="way" href="world.html?return=1"><span aria-hidden="true">↩️🏯</span> {t(UI("กลับวัด 3 มิติ", "Back to the 3D temple"))}</a>}
+      {!FROM_3D && view !== "gate" && view !== "yard" && <button className="way" onClick={() => go("yard")}><span aria-hidden="true">↩️🌳</span> {t(UI("กลับลานกลาง", "Back to courtyard"))}</button>}
       <button className="way" onClick={() => go("access")}><span aria-hidden="true">🌍♿</span> {t(UI("ภาษา • การเข้าถึง", "Language • Access"))}</button>
       <button className="way" onClick={() => go("care")}><span aria-hidden="true">🤝</span> {t(UI("ขอความช่วยเหลือ", "Ask for help"))}</button>
       <button className="way exit" onClick={() => go("exit")}><span aria-hidden="true">🚪</span> {t(UI("ออกจากวัด", "Leave the temple"))}</button>
