@@ -1934,8 +1934,9 @@ function setModel(obj, mixerClips) {
     if (!obj.userData.gait) {
       obj.userData.gait = {}; ["walk", "run"].forEach((k) => { if (player.clips[k]) obj.userData.gait[k] = measureGait(obj, player.clips[k]); });
       obj.userData.lift = {}; ["idle", "walk", "run", "sit"].forEach((k) => { if (player.clips[k]) obj.userData.lift[k] = measureLift(obj, player.clips[k]); });
+      obj.userData.seat = player.clips.sit ? measureSeat(obj, player.clips.sit) : 0;
     }
-    player.gait = obj.userData.gait; player.lift = obj.userData.lift;
+    player.gait = obj.userData.gait; player.lift = obj.userData.lift; player.seat = obj.userData.seat || 0;
     player.mixer = new THREE.AnimationMixer(obj);
     playClip("idle");
   }
@@ -1952,6 +1953,24 @@ function measureLift(obj, clip) {
   for (let i = 0; i < N; i++) { mixer.setTime(clip.duration * i / N); obj.updateMatrixWorld(true); sk.computeBoundingBox(); box.copy(sk.boundingBox).applyMatrix4(sk.matrixWorld); low = Math.min(low, box.min.y - obj.getWorldPosition(new THREE.Vector3()).y); }
   mixer.stopAllAction(); mixer.uncacheRoot(obj); obj.position.y = holderY;
   return PAVING - low;
+}
+// Sitting cross-legged, how far his seat is above the lowest point of his legs: on a cushion only the seat rests on
+// it, so he is raised by the cushion's height less this (his crossed legs stay on the floor around it)
+const SEAT_SINK = 0.03; // (the lowest hip-weighted point is a little above the true seat: the shirt and the backs of the thighs)
+function measureSeat(obj, clip) {
+  let sk = null; obj.traverse((o) => { if (!sk && o.isSkinnedMesh) sk = o; });
+  if (!sk) return 0;
+  const hips = sk.skeleton.bones.findIndex((b) => /hips/i.test(b.name)); if (hips < 0) return 0;
+  const g = sk.geometry, pos = g.attributes.position, si = g.attributes.skinIndex, sw = g.attributes.skinWeight;
+  const seatIdx = []; for (let i = 0; i < pos.count; i++) { let w = 0; for (let k = 0; k < 4; k++) if (si.getComponent(i, k) === hips) w += sw.getComponent(i, k); if (w > 0.5) seatIdx.push(i); }
+  const mixer = new THREE.AnimationMixer(obj), act = mixer.clipAction(clip); act.play();
+  const holderY = obj.position.y; obj.position.y = 0;
+  mixer.setTime(clip.duration * 0.98); obj.updateMatrixWorld(true); // settled in the sit
+  const v = new THREE.Vector3(); let low = Infinity, seat = Infinity;
+  for (let i = 0; i < pos.count; i += 3) { sk.getVertexPosition(i, v); v.applyMatrix4(sk.matrixWorld); low = Math.min(low, v.y); }
+  for (const i of seatIdx) { sk.getVertexPosition(i, v); v.applyMatrix4(sk.matrixWorld); seat = Math.min(seat, v.y); }
+  mixer.stopAllAction(); mixer.uncacheRoot(obj); obj.position.y = holderY;
+  return seat < Infinity ? Math.max(0, seat - low) : 0;
 }
 // How fast a walk or run clip carries the character, so the clip can be played at the speed that keeps
 // the feet planted: sample a foot through the clip, count its strides and how far it travels.
@@ -3290,7 +3309,7 @@ function frame(dt) {
     if (player.lift) {
       let lw = 0, lsum = 0;
       for (const k in player.lift) { const a = player.mixer.existingAction(player.clips[k]); const wgt = a ? a.getEffectiveWeight() : 0; lw += wgt; lsum += wgt * player.lift[k]; }
-      const lift = (lw > 0.001 ? lsum / lw : (player.lift[player.current] || 0)) + (sit.spot ? sit.spot.top * sit.w : 0);
+      const lift = (lw > 0.001 ? lsum / lw : (player.lift[player.current] || 0)) + (sit.spot ? Math.max(0, sit.spot.top + SEAT_SINK - (player.seat || 0)) * sit.w : 0);
       player.model.position.y += (lift - player.model.position.y) * Math.min(1, dt * 10);
     }
     const g = player.gait[player.current];
