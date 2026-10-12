@@ -855,6 +855,7 @@ kinds.forEach(([name, h], k) => {
   }) });
 });
 
+const YAKSHA_H = 6.2; // the guardians stand about as tall as the gateway's posts
 /* ---------------- the temple wall (kampaeng kaew): white, with lotus-bud posts ---------------- */
 {
   const R = 76, segs = 72, wallMat = P("beige_wall_001", 3, 1, { color: 0xfffaf2 });
@@ -886,6 +887,15 @@ kinds.forEach(([name, h], k) => {
   add(new THREE.BoxGeometry(10.6, 0.8, 1.6), MAT.lacquer, 0, 6.5, GZ);
   add(new THREE.BoxGeometry(10.7, 0.12, 1.7), MAT.gold, 0, 6.1, GZ, scene, false);
   const gr = gable(11.4, 3, 2.8, MAT.roof); gr.position.set(0, 6.9, GZ); gr.castShadow = true; scene.add(gr);
+  // the two guardian giants (ยักษ์ทวารบาล), as at the gates of Wat Arun: on white pedestals either side of the
+  // gateway, just outside the wall, facing out over the naga bridge to meet those who come. Green on the left as
+  // you arrive, white on the right; friendly rather than fearsome, in the boy's style.
+  const YZ = GZ + 1.5, YX = 7.2;
+  [[-1, "yaksha-green"], [1, "yaksha-white"]].forEach(([sg, name]) => {
+    add(new THREE.BoxGeometry(2.3, 0.7, 1.9), wallMat, sg * YX, 0.35, YZ);
+    add(new THREE.BoxGeometry(2.45, 0.12, 2.05), MAT.gold, sg * YX, 0.72, YZ, scene, false);
+    props(name, YAKSHA_H, [[sg * YX, YZ, MONK_TURN, 0.78]]);
+  });
   [-1, 1].forEach((sg) => {
     const e = gable(11.7, 0.25, 2.95, MAT.roofEdge); e.position.set(0, 6.85, GZ + sg * 1.5); scene.add(e);
     const pnl = gable(6.2, 0.12, 1.55, MAT.gold); pnl.position.set(0, 7.1, GZ + sg * 1.6); scene.add(pnl);
