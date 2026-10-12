@@ -447,7 +447,19 @@ sign(tx("ลานกลาง", "Central Courtyard"), tx("อยากไปไ
    always the highest of all. The platform is not walkable, as lay visitors don't step onto it.
    Returns the local z of the platform's front edge. */
 const buddhaImages = [];
-function shrine(h) {
+// monks (Higgsfield, from artwork in the boy's style): brown temple robes, right shoulder bare, seated cross-legged
+const MONK_H = 0.98, MONK_TURN = -Math.PI / 2;                         // seated height (m); quarter turns if a model faces sideways
+const monkFigures = []; let monkTime = 0;                                     // each breathes slowly (still when calm motion is on)
+function seatMonk(name, g, x, y, z) {
+  propJobs.push(loadProp(name).then((src) => {
+    if (!src) return;                                       // no fallback: an empty seat is better than a block figure
+    const copy = src.clone();
+    copy.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; if (o.material) o.material.envMapIntensity = 1; } });
+    const m = fitTo(copy, MONK_H); m.position.set(x, y, z); m.rotation.y = MONK_TURN; g.add(m);
+    monkFigures.push({ o: m, ph: monkFigures.length * 2.1 });
+  }));
+}
+function shrine(h, monks = []) {
   const { g, FY, W, D } = h;
   const PH = 0.6, PD = 2.8, pz = -D / 2 + 0.2 + PD / 2;     // teachers' platform: height, depth, centre
   const top = FY + PH;
@@ -464,6 +476,7 @@ function shrine(h) {
     add(seatGeo, seatMat, lx, top + 0.1, pz + 0.35, g);
     add(triGeo, backMat, lx, top + 0.03, pz - 0.35, g);
   });
+  monks.forEach(([name, lx]) => seatMonk(name, g, lx, top + 0.17, pz + 0.3));
   // the stepped altar (to mu bucha) in the middle of the platform
   const az = -D / 2 + 1.1;
   const tiers = [[3, 0.55, 1.5], [2.1, 0.55, 1.1], [1.3, 0.5, 0.8]];
@@ -500,7 +513,7 @@ function shrine(h) {
         along the side walls that open the matching lesson ---- */
 {
   const h = salas.learn;
-  shrine(h);
+  shrine(h, [["monk-elder", -3.2], ["monk-young", 3.2]]);
   const spots = [["left", 4.2], ["left", 2.2], ["left", 0.2], ["left", -1.8], ["right", -1.8], ["right", 0.2], ["right", 2.2], ["right", 4.2]];
   spots.forEach(([side, u], i) => {
     const tex = boardTexture({ head: tx("เรื่องที่ ", "Story ") + (i + 1), icon: "👣", title: L === "en" ? JOURNEY[i][1] : JOURNEY[i][0], foot: tx("เดินมาใกล้ ๆ แล้วกด E", "Walk close and press E") });
@@ -548,7 +561,7 @@ function shrine(h) {
 /* ---- Universal Hall: languages and access, with the hall's shrine ---- */
 {
   const h = salas.access, { g, FY, W, D } = h;
-  shrine(h);
+  shrine(h, [["monk-young", -4.6], ["monk-elder", -3.2], ["monk", 3.2]]);
   // the hall's own board moves to the side wall
   wallBoard(h, "left", 0.6, boardTexture({ head: tx("ศาลาสากล", "Universal Hall"), icon: "🌍", title: "ภาษาไทย · English", foot: tx("เลือกภาษา ขนาดตัวอักษร และการเคลื่อนไหวได้ในหน้าเว็บของศาลานี้", "Choose language and motion settings on this hall's web page"), wide: true }), 2.8, 2.33, 2.6);
   props("potplant", 1.6, [[-W / 2 + 1, D / 2 - 1, 2, FY], [W / 2 - 1, D / 2 - 1, 3, FY]], { parent: g });
@@ -1872,6 +1885,8 @@ function tick() {
 }
 // one step of the world: movement, animation, camera and the picture
 function frame(dt) {
+  monkTime += dt;
+  if (!settings.calmMotion) for (const m of monkFigures) { const b = Math.sin(monkTime * 1.25 + m.ph); m.o.scale.set(1 + b * 0.004, 1 + b * 0.008, 1 + b * 0.004); } // slow breathing
   // movement relative to the camera
   let fx = 0, fz = 0;
   if (!dialogOpen()) {
@@ -2037,7 +2052,7 @@ document.fonts.load("64px Itim").then(() => document.fonts.load("36px Mali")).ca
 });
 camYaw = 0; camera.position.set(0, 8, 105);
 restoreSpot(); // back from a page of the site: stand where you were
-if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
+if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
 Promise.race([Promise.all(propJobs), new Promise((r) => setTimeout(r, 7000))]).then(() => {
   $("loading").hidden = true;
   canvas.focus();
