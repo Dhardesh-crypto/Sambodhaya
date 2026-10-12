@@ -938,6 +938,7 @@ function loadBoy() {
     .then(([walk, idle, run]) => {
       if (!walk) return null;
       const obj = walk.scene, holder = new THREE.Group(); holder.add(obj); fitModel(obj);
+      holder.updateMatrixWorld(true); pressHands(holder); // measure the hands in their rest pose
       return { holder, clips: [walk, idle, run].flatMap((g) => (g ? g.animations : [])) };
     });
   return boyReady;
@@ -1033,7 +1034,7 @@ function animateDog(mat) {
 // arms are placed with a two-bone reach solver so the palms meet in front of the chest with the
 // fingertips toward the chin, then the upper body and head bow, hold, and rise again. It sits on top
 // of whatever he is doing (usually standing at ease); walking away ends it gently.
-const wai = { t: -1, dur: 2.9, palm: { Left: [0, 0, -1], Right: [0, 0, -1] } }; // the palm faces along the hand bone's -z
+const wai = { t: -1, dur: 2.9, plane: { normal: new THREE.Vector3(), point: new THREE.Vector3(), on: 0 } };
 const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 function startWai() { if (wai.t < 0 || wai.t > wai.dur - 0.6) wai.t = 0; }
 function waiWeights() {
@@ -1055,6 +1056,100 @@ function aimBone(bone, childPos, target) {
   bone.getWorldPosition(_v1);
   _v2.copy(childPos).sub(_v1).normalize(); _v3.copy(target).sub(_v1).normalize();
   turnBone(bone, _q1.setFromUnitVectors(_v2, _v3));
+}
+const WAI_LEAN = 0.08;  // how much the tops of the hands lean together (radians)
+const WAI_GAP = 0.0;    // the fingertips touch
+// The hand's real shape, from the skinned mesh: the points that follow each hand bone (in world units,
+// in the hand's own axes), the finger axis, and the palm normal. The palm normal is the hand's thinnest
+// direction across the fingers; of its two signs, the palm is the side that faces the body when the
+// arms hang at rest.
+function handShape(model) {
+  if (model.userData.waiHands !== undefined) return model.userData.waiHands;
+  let sk = null; model.traverse((o) => { if (!sk && o.isSkinnedMesh) sk = o; });
+  let result = null;
+  if (sk) {
+    result = {};
+    const g = sk.geometry, pos = g.attributes.position, si = g.attributes.skinIndex, sw = g.attributes.skinWeight, bones = sk.skeleton.bones;
+    for (const side of ["Left", "Right"]) {
+      const bi = bones.findIndex((b) => b.name === side + "Hand"); if (bi < 0) { result = null; break; }
+      const sc = bones[bi].getWorldScale(new THREE.Vector3()).x / model.getWorldScale(new THREE.Vector3()).x;
+      const toLocal = new THREE.Matrix4().multiplyMatrices(sk.skeleton.boneInverses[bi], sk.bindMatrix);
+      const pts = [];
+      for (let i = 0; i < pos.count; i++) {
+        let wgt = 0; for (let k = 0; k < 4; k++) if (si.getComponent(i, k) === bi) wgt += sw.getComponent(i, k);
+        if (wgt > 0.5) pts.push(new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(toLocal).multiplyScalar(sc));
+      }
+      if (pts.length < 20) { result = null; break; }
+      // thinnest direction across the hand (smaller axis of the spread in the x-z plane)
+      let mx = 0, mz = 0; pts.forEach((q) => { mx += q.x; mz += q.z; }); mx /= pts.length; mz /= pts.length;
+      let cxx = 0, czz = 0, cxz = 0; pts.forEach((q) => { const dx = q.x - mx, dz = q.z - mz; cxx += dx * dx; czz += dz * dz; cxz += dx * dz; });
+      const ang = 0.5 * Math.atan2(2 * cxz, cxx - czz) + Math.PI / 2; // the minor axis
+      const palm = new THREE.Vector3(Math.cos(ang), 0, Math.sin(ang));
+      // the palm faces the body when the arms hang at rest
+      const rest = sk.skeleton.boneInverses[bi].clone().invert(), hipsI = bones.findIndex((b) => /hips/i.test(b.name));
+      const handPos = new THREE.Vector3().setFromMatrixPosition(rest);
+      const bodyPos = hipsI >= 0 ? new THREE.Vector3().setFromMatrixPosition(sk.skeleton.boneInverses[hipsI].clone().invert()) : new THREE.Vector3();
+      if (palm.clone().transformDirection(rest).dot(bodyPos.sub(handPos).setY(0)) < 0) palm.negate();
+      const len = Math.max(...pts.map((q) => q.y));
+      result[side] = { points: pts, tips: pts.filter((q) => q.y > 0.9 * len), finger: new THREE.Vector3(0, 1, 0), palm, bone: bi };
+    }
+  }
+  model.userData.waiHands = result;
+  return result;
+}
+// Palms pressed together: during the wai, any vertex of a hand that would pass the plane where the hands
+// meet is put back onto that plane, so the two palms flatten against each other instead of crossing.
+function pressHands(model) {
+  let sk = null; model.traverse((o) => { if (!sk && o.isSkinnedMesh) sk = o; });
+  const shape = handShape(model); if (!sk || !shape) return;
+  const u = { uPress: { value: 0 }, uPlane: { value: new THREE.Vector4() }, uHands: { value: new THREE.Vector2(shape.Left.bone, shape.Right.bone) } };
+  sk.material = sk.material.clone();
+  sk.material.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, u);
+    sh.vertexShader = "uniform float uPress; uniform vec4 uPlane; uniform vec2 uHands;\n" + sh.vertexShader.replace("#include <skinning_vertex>", `#include <skinning_vertex>
+      if (uPress > 0.0) {
+        float wl = dot(skinWeight, vec4(equal(skinIndex, vec4(uHands.x)))), wr = dot(skinWeight, vec4(equal(skinIndex, vec4(uHands.y))));
+        float sgn = wl > 0.5 ? 1.0 : (wr > 0.5 ? -1.0 : 0.0);
+        float past = sgn * (dot(uPlane.xyz, transformed) + uPlane.w);   // how far past the middle this hand's vertex is
+        if (sgn != 0.0 && past > 0.0) transformed -= sgn * uPlane.xyz * past * uPress;
+      }`);
+  };
+  sk.material.customProgramCacheKey = () => "wai-press";
+  sk.userData.press = u;
+}
+const _plane = new THREE.Plane(), _inv = new THREE.Matrix4();
+function updatePress(model) {
+  let sk = null; model.traverse((o) => { if (!sk && o.isSkinnedMesh) sk = o; });
+  if (!sk || !sk.userData.press) return;
+  const u = sk.userData.press;
+  u.uPress.value = wai.t >= 0 ? Math.min(1, wai.plane.on * 1.5) : 0;
+  if (!u.uPress.value) return;
+  // the plane in the mesh's own space (where the skinned vertices are)
+  _plane.setFromNormalAndCoplanarPoint(wai.plane.normal, wai.plane.point).applyMatrix4(_inv.copy(sk.matrixWorld).invert());
+  u.uPlane.value.set(_plane.normal.x, _plane.normal.y, _plane.normal.z, _plane.constant);
+}
+// each bone's local rotation in the rest pose, from the skin's bind matrices
+function restPose(model) {
+  if (model.userData.restPose !== undefined) return model.userData.restPose;
+  let sk = null; model.traverse((o) => { if (!sk && o.isSkinnedMesh) sk = o; });
+  let rest = null;
+  if (sk) {
+    rest = {};
+    const bones = sk.skeleton.bones, inv = sk.skeleton.boneInverses, m = new THREE.Matrix4(), q = new THREE.Quaternion(), pp = new THREE.Vector3(), sc = new THREE.Vector3();
+    bones.forEach((b, i) => {
+      const pi = bones.indexOf(b.parent); if (pi < 0) return;
+      m.copy(inv[pi]).multiply(inv[i].clone().invert()).decompose(pp, q, sc); // parent⁻¹ · bone, both in the rest pose
+      rest[b.name] = q.clone();
+    });
+  }
+  model.userData.restPose = rest;
+  return rest;
+}
+// the rotation that turns local axes (a1, a2) onto world axes (b1, b2); a1 ⟂ a2 and b1 ⟂ b2
+function basisQuat(a1, a2, b1, b2) {
+  const a3 = new THREE.Vector3().crossVectors(a1, a2), b3 = new THREE.Vector3().crossVectors(b1, b2);
+  const La = new THREE.Matrix4().makeBasis(a1, a2, a3), Lb = new THREE.Matrix4().makeBasis(b1, b2, b3);
+  return new THREE.Quaternion().setFromRotationMatrix(Lb.multiply(La.transpose()));
 }
 const waiBones = {};
 const WAI_BONES = ["Spine02", "Spine01", "Spine", "neck", "Head", "LeftArm", "LeftForeArm", "LeftHand", "RightArm", "RightForeArm", "RightHand"];
@@ -1081,6 +1176,9 @@ function poseWai(model, hands, bow) {
   if (!B.Spine || !B.LeftArm || !B.RightArm || !B.Head) return;
   if (hands <= 0 && bow <= 0) { waiEnd(B); return; }
   waiBegin(B);
+  // face straight ahead: ease the neck and head out of the idle's glancing around, back to their rest pose
+  const rest = restPose(model);
+  if (rest) ["neck", "Head"].forEach((n) => { if (B[n] && rest[n]) B[n].quaternion.slerp(rest[n], Math.max(hands, bow)); });
   model.updateMatrixWorld(true);
   const up = new THREE.Vector3(0, 1, 0);
   const side = B.LeftArm.getWorldPosition(new THREE.Vector3()).sub(B.RightArm.getWorldPosition(new THREE.Vector3())).setY(0).normalize(); // toward his left
@@ -1089,16 +1187,31 @@ function poseWai(model, hands, bow) {
   const axis = new THREE.Vector3().crossVectors(up, fwd).normalize();
   [["Spine02", 0.05], ["Spine01", 0.05], ["Spine", 0.05], ["neck", 0.12], ["Head", 0.1]].forEach(([n, a]) => { if (B[n]) turnBone(B[n], _q2.setFromAxisAngle(axis, a * bow)); });
   if (hands <= 0.001) { waiMark(B); return; }
-  // 2) the hands: palms together in front of the chest, wrists below the chin
+  // 2) the hands: a lotus bud. Each hand stands upright with its palm side (where its fingers curl)
+  // turned toward the other hand, tops leaning in a little; the wrists are placed from the real
+  // hand mesh so the fingertips meet exactly at the middle and the hands never pass through each other.
+  const shape = handShape(model); if (!shape) { waiMark(B); return; }
   const spineQ = B.Spine.getWorldQuaternion(new THREE.Quaternion());
   const bodyUp = new THREE.Vector3(0, 1, 0).applyQuaternion(spineQ), bodyFwd = new THREE.Vector3(0, 0, 1).applyQuaternion(spineQ);
   const neck = B.neck.getWorldPosition(new THREE.Vector3());
   const scale = model.getWorldScale(new THREE.Vector3()).y; // world units per model unit (1 for the boy's holder)
-  const centre = neck.clone().addScaledVector(bodyFwd, 0.3 * scale).addScaledVector(bodyUp, -0.2 * scale);
+  const mid = neck.clone().addScaledVector(bodyFwd, 0.3 * scale).addScaledVector(bodyUp, -0.17 * scale); // between the wrists; fingertips reach the chin
+  wai.plane.normal.copy(side).negate(); wai.plane.point.copy(mid); wai.plane.on = hands; // where the hands meet (the left hand's inward direction)
+  const fingersUp = up.clone().addScaledVector(fwd, 0.15).normalize();
   [["Left", 1], ["Right", -1]].forEach(([s, sg]) => {
-    const arm = B[s + "Arm"], fore = B[s + "ForeArm"], hand = B[s + "Hand"]; if (!arm || !fore || !hand) return;
+    const arm = B[s + "Arm"], fore = B[s + "ForeArm"], hand = B[s + "Hand"], hs = shape[s]; if (!arm || !fore || !hand || !hs) return;
     const animQ = [arm.quaternion.clone(), fore.quaternion.clone(), hand.quaternion.clone()];
-    const target = centre.clone().addScaledVector(side, sg * 0.035 * scale);
+    // the hand's final orientation in the world
+    const inward = side.clone().multiplyScalar(-sg);                                    // toward the other hand
+    const P0 = inward.clone().addScaledVector(fingersUp, -inward.dot(fingersUp)).normalize();
+    const F = fingersUp.clone().multiplyScalar(Math.cos(WAI_LEAN)).addScaledVector(P0, Math.sin(WAI_LEAN)).normalize(); // tops lean in
+    const P = P0.clone().addScaledVector(F, -P0.dot(F)).normalize();
+    const Qhand = basisQuat(hs.finger, hs.palm, F, P);
+    // how far this hand's fingertips reach toward the middle in that orientation: the wrist goes that far
+    // out, so the fingertips meet exactly; the fleshier palm that would pass the middle is pressed flat
+    // against it in the shader (see pressHands), as real palms flatten when pressed together
+    let reach = -Infinity; for (const pt of hs.tips) reach = Math.max(reach, _v1.copy(pt).applyQuaternion(Qhand).dot(inward));
+    const target = mid.clone().addScaledVector(inward, -(reach + WAI_GAP) * scale);
     // two-bone reach: elbow placed by the law of cosines, pointing down and a little outward
     const A = arm.getWorldPosition(new THREE.Vector3()), E0 = fore.getWorldPosition(new THREE.Vector3()), W0 = hand.getWorldPosition(new THREE.Vector3());
     const a = A.distanceTo(E0), b = E0.distanceTo(W0);
@@ -1109,14 +1222,7 @@ function poseWai(model, hands, bow) {
     const elbow = A.clone().addScaledVector(toT, x).addScaledVector(pole, h);
     aimBone(arm, E0, elbow);
     aimBone(fore, hand.getWorldPosition(new THREE.Vector3()), target);
-    // fingers point up (tilted slightly forward), palm turned toward the other hand
-    hand.getWorldQuaternion(_q1);
-    const fingers = new THREE.Vector3(0, 1, 0).applyQuaternion(_q1), want = up.clone().addScaledVector(fwd, 0.18).normalize(); // fingertips up toward the chin
-    turnBone(hand, _q2.setFromUnitVectors(fingers, want));
-    hand.getWorldQuaternion(_q1);
-    const palm = new THREE.Vector3(...wai.palm[s]).applyQuaternion(_q1), inward = side.clone().multiplyScalar(-sg);
-    palm.addScaledVector(want, -palm.dot(want)).normalize(); inward.addScaledVector(want, -inward.dot(want)).normalize();
-    turnBone(hand, _q2.setFromUnitVectors(palm, inward));
+    hand.getWorldQuaternion(_q1); turnBone(hand, _q2.copy(Qhand).multiply(_q1.invert())); // set the hand exactly
     // blend from what the animation was doing to the wai
     [arm, fore, hand].forEach((bn, i) => { const solved = bn.quaternion.clone(); bn.quaternion.copy(animQ[i]).slerp(solved, hands); });
     arm.updateMatrixWorld(true);
@@ -1449,7 +1555,7 @@ function tick() {
     if (moving && wai.t < wai.dur - 0.55) wai.t = Math.max(wai.t, wai.dur - 0.55);
     wai.t += dt; if (wai.t > wai.dur) wai.t = -1;
     const [hands, bow] = waiWeights();
-    if (player.mixer) poseWai(player.model, hands, bow); // at the end (weights 0) this hands the bones back
+    if (player.mixer) { poseWai(player.model, hands, bow); player.model.updateMatrixWorld(true); updatePress(player.model); } // at the end (weights 0) this hands the bones back
     else if (limbs) { // the block avatar: arms forward and together, a small bow
       limbs.armL.rotation.x = -1.35 * hands; limbs.armR.rotation.x = -1.35 * hands;
       limbs.armL.rotation.z = 0.42 * hands; limbs.armR.rotation.z = -0.42 * hands; // armL sits at -x: bring both hands to the middle
