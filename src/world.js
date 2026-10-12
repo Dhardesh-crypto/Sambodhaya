@@ -187,6 +187,7 @@ function props(name, h, list, { fallback, shadow = true, parent = scene, extra =
 /* ---------------- ground, plaza and paths ---------------- */
 // the ground: the temple island, a moat around it, and the land beyond
 const MOAT = { r1: 79, r2: 86, bed: -1.5, water: -0.45 };
+const BRIDGE = { zc: (MOAT.r1 + MOAT.r2) / 2, half: (MOAT.r2 - MOAT.r1) / 2 + 2 }; // lands 2 m onto each bank
 {
   // inner island; its texture coordinates are scaled to match the outer land
   const island = new THREE.CylinderGeometry(MOAT.r1, MOAT.r1, 2, 128);
@@ -217,7 +218,10 @@ const path = (x1, z1, x2, z2, w = 5) => {
   const m = add(new THREE.BoxGeometry(w, 0.15, len), P("brick_pavement_02", Math.round(w / 3), Math.round(len / 3), { color: new THREE.Color(1.75, 1.5, 1.2) }), (x1 + x2) / 2, 0.06, (z1 + z2) / 2, scene, false);
   m.rotation.y = Math.atan2(dx, dz);
 };
-path(0, 16, 0, 77.6, 7); path(0, 88.4, 0, 98, 7); path(0, -14, 0, -44); // entrance and Practice Garden; the hall paths are drawn from the halls themselves
+// the roads start inside the plaza circle, so no grass shows where a straight edge meets the curve
+const ROAD = 7;
+// the roads run half a metre onto each end of the bridge, so road and bridge join without a gap
+path(0, 13, 0, BRIDGE.zc - BRIDGE.half + 0.5, ROAD); path(0, BRIDGE.zc + BRIDGE.half - 0.5, 0, 98, ROAD); path(0, -13, 0, -44); // entrance and Practice Garden; the hall paths are drawn from the halls themselves
 
 /* ---------------- the great tree at the centre ---------------- */
 {
@@ -668,7 +672,7 @@ kinds.forEach(([name, h], k) => {
 /* ---------------- the bridge over the moat ---------------- */
 // a gently arched stone bridge with white balustrades and gold lotus-bud posts; you walk over its arch
 {
-  const ZC = (MOAT.r1 + MOAT.r2) / 2, H = (MOAT.r2 - MOAT.r1) / 2 + 2, RISE = 1.1, BW = 6;
+  const ZC = BRIDGE.zc, H = BRIDGE.half, RISE = 1.1, BW = ROAD; // as wide as the road it carries
   const topY = (u) => RISE * (1 - (u / H) ** 2);
   const sh = new THREE.Shape(); const N = 24;
   for (let i = 0; i <= N; i++) { const u = -H + (2 * H * i) / N; i ? sh.lineTo(u, topY(u)) : sh.moveTo(u, topY(u)); }
@@ -929,7 +933,7 @@ function collide(nx, nz) {
   const d = Math.hypot(nx, nz);
   if (d > 73.5) {
     if (nz > 0 && Math.abs(nx) < 4.6) {
-      const half = nz < MOAT.r2 + 2.4 ? 2.3 : 4.2; // through the gateway and between the bridge rails; wider on the landing
+      const half = nz < MOAT.r2 + 2.4 ? 2.8 : 4.2; // through the gateway and between the bridge rails; wider on the landing
       nx = Math.max(-half, Math.min(half, nx)); nz = Math.min(nz, 97);
     } else { nx *= 73.5 / d; nz *= 73.5 / d; }
   }
