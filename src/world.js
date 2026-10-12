@@ -444,6 +444,10 @@ salas.media = hallAt(14, -38, { W: 13, D: 10 });
 salas.access = hallAt(30, -24, { W: 13, D: 10 });
 salas.care = hallAt(34, 6, { W: 10, D: 8, H: 5 });
 salas.rest = hallAt(-28, 14, { W: 8, D: 6, H: 4, walls: false });
+// the temple dog stays out of the Learning Hall (and off its step); while the boy is inside it waits here, facing the door
+const DOG_WAIT = (() => { const h = salas.learn, [x, z] = h.toWorld(2.6, h.D / 2 + 3.0), [cx, cz] = h.toWorld(0, 0); return { x, z, yaw: Math.atan2(cx - x, cz - z) }; })();
+const dogKeepOut = (x, z) => { const h = salas.learn, [cx, cz] = h.toWorld(0, 0), [fx, fz] = h.toWorld(0, 1); const ax = fx - cx, az = fz - cz; // the hall's own axes
+  const lz = (x - cx) * ax + (z - cz) * az, lx = (x - cx) * az - (z - cz) * ax; return Math.abs(lx) < h.W / 2 + 1.3 && Math.abs(lz) < h.D / 2 + 2.0; };
 Object.entries(salas).forEach(([id, h]) => {
   halls[id] = h.g;
   const [sx, sz] = h.toWorld(0, h.D / 2 + 1.7);            // the front step
@@ -3339,14 +3343,18 @@ function frame(dt) {
       const ay = k && k.faceYaw != null ? k.faceYaw : al ? al.faceYaw : fd ? fd.faceYaw : player.yaw;
       bx = ax + Math.cos(ay) * 1.5 + Math.sin(ay) * 0.2; bz = az - Math.sin(ay) * 1.5 + Math.cos(ay) * 0.2;
     }
+    // the Learning Hall, the main hall where the monks sit, is no place for a dog: it waits outside by the steps
+    if (dogKeepOut(dog.x, dog.z)) { dog.x = DOG_WAIT.x; dog.z = DOG_WAIT.z; } // (arrived inside some other way)
+    const waiting = dogKeepOut(bx, bz);
+    if (waiting) { bx = DOG_WAIT.x; bz = DOG_WAIT.z; }
     const ddx = bx - dog.x, ddz = bz - dog.z, dd = Math.hypot(ddx, ddz);
-    const wantSit = ceremony && dd < 0.5;
+    const wantSit = (ceremony || waiting) && dd < 0.5;
     dogAnim.sit.value += ((wantSit ? 1 : 0) - dogAnim.sit.value) * Math.min(1, dt * 3);
     const dogFree = dogAnim.sit.value < 0.15; // a sitting dog gets up before it walks
     dog.moving = dd > 0.4 && dogFree;
     let dogSpeed = 0;
-    if (wantSit) { let dy = player.yaw - dog.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); dog.yaw += dy * Math.min(1, dt * 4); }
-    if (dd > 0.4 && dogFree) { const st = Math.min(dd, dt * (dd > 6 ? 12 : 6)); dogSpeed = dt > 0 ? st / dt : 0; [dog.x, dog.z] = collide(dog.x + ddx / dd * st, dog.z + ddz / dd * st); dog.yaw = Math.atan2(ddx, ddz); }
+    if (wantSit) { let dy = (waiting ? DOG_WAIT.yaw : player.yaw) - dog.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); dog.yaw += dy * Math.min(1, dt * 4); }
+    if (dd > 0.4 && dogFree) { const st = Math.min(dd, dt * (dd > 6 ? 12 : 6)); dogSpeed = dt > 0 ? st / dt : 0; const [nx, nz] = collide(dog.x + ddx / dd * st, dog.z + ddz / dd * st); if (!dogKeepOut(nx, nz)) { dog.x = nx; dog.z = nz; } dog.yaw = Math.atan2(ddx, ddz); }
     // walk cycle: about one stride per 1.2 m; the legs ease in and out of walking
     dogAnim.phase.value = (dogAnim.phase.value + dt * dogSpeed * 5.2) % (Math.PI * 200); // kept small so it stays precise
     if (!Number.isFinite(dogAnim.phase.value)) dogAnim.phase.value = 0;
