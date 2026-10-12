@@ -479,7 +479,8 @@ function shrine(h) {
   arch.scale.y = 1.25;
   add(new THREE.BoxGeometry(3.6, 4.4, 0.05), S(0x9b2a1d, { roughness: 0.9 }), 0, top + 2.3, -D / 2 + 0.24, g, false);
   add(new THREE.BoxGeometry(3.7, 0.12, 0.07), MAT.gold, 0, top + 4.5, -D / 2 + 0.25, g, false);
-  { const [bx, bz] = h.toWorld(0, az - 0.24); buddhaImages.push({ x: bx, z: bz, hall: h }); } // the wai turns toward it
+  { const [bx, bz] = h.toWorld(0, az - 0.24), [sx, sz] = h.toWorld(0, pz + PD / 2 + 1.25);
+    buddhaImages.push({ x: bx, z: bz, hall: h, spot: { x: sx, z: sz } }); } // the wai turns toward it; the kraap is made from the spot
   // the model is built facing +x; a quarter turn makes the image face the entrance
   props("buddha", 1.9, [[0, az - 0.12 * 2, -Math.PI / 2, statueY]], { parent: g, fallback: () => {
     // if the image can't load, a lotus throne stays rather than nothing
@@ -1092,6 +1093,51 @@ function standUp() {
 }
 const toggleSit = () => (sit.on ? standUp() : startSit());
 
+/* ---------------- the kraap (กราบ): paying tribute to the Buddha, three times ---------------- */
+// The five-point prostration (เบญจางคประดิษฐ์), made in front of a Buddha image: he kneels sitting back on
+// his heels with his hands in a wai at the chest, raises them to the high wai, then three times lowers his
+// hands flat onto the floor, a hand's width apart, and bows until his forehead touches the floor between
+// them, coming back up into the high wai each time. Then he lowers his hands and stands. No animation for
+// this exists, so it is posed on his skeleton: the knee, hip and forehead heights come from his measured
+// body, and the bow is solved so the forehead really reaches the floor.
+const kraap = { t: -1, spot: null, faceYaw: null, floorY: 0, touch: null };
+// keyframes: [time, kneel, chest wai, high wai, palms on the floor, bow]
+const KRAAP_KEYS = (() => {
+  const k = [[0, 0, 0, 0, 0, 0], [0.6, 0, 0, 0, 0, 0], [2.0, 1, 1, 0, 0, 0], [2.7, 1, 0, 1, 0, 0], [3.0, 1, 0, 1, 0, 0]];
+  let t = 3.0;
+  for (let i = 0; i < 3; i++) {
+    t += 1.0; k.push([t, 1, 0, 0, 1, 1]);   // down: palms flat, forehead to the floor
+    t += 0.6; k.push([t, 1, 0, 0, 1, 1]);   // rest there
+    t += 1.0; k.push([t, 1, 0, 1, 0, 0]);   // up again into the high wai
+    t += 0.6; k.push([t, 1, 0, 1, 0, 0]);
+  }
+  t += 0.7; k.push([t, 1, 1, 0, 0, 0]);     // hands down to the chest
+  t += 1.5; k.push([t, 0, 0, 0, 0, 0]);     // stand
+  return k;
+})();
+const KRAAP_DUR = KRAAP_KEYS[KRAAP_KEYS.length - 1][0];
+function kraapState(t) {
+  const K = KRAAP_KEYS; let i = 0; while (i < K.length - 2 && t > K[i + 1][0]) i++;
+  const a = K[i], b = K[i + 1], u = smooth(a[0], b[0], t);
+  const v = (j) => a[j] + (b[j] - a[j]) * u;
+  return { kneel: v(1), chest: v(2), high: v(3), floor: v(4), bow: v(5) };
+}
+function startKraap() {
+  if (kraap.t >= 0) return;
+  const here = waiLevelHere();
+  if (here.level !== "buddha" || !here.face || !here.face.spot) {
+    openDialog(tx("🙇 กราบพระ", "🙇 Pay tribute"), `<p>${tx("กราบพระได้ที่หน้าพระพุทธรูป ในศาลาเรียนรู้หรือศาลาสากล", "You can pay tribute in front of a Buddha image, in the Learning Hall or the Universal Hall.")}</p>
+      <div class="row"><button class="chip" data-close>${tx("ตกลง", "OK")}</button></div>`);
+    return;
+  }
+  if (sit.on) { sit.on = false; sit.rise = 0; sit.faceYaw = null; }
+  wai.t = -1;
+  kraap.spot = here.face.spot; kraap.faceYaw = Math.atan2(here.face.x - here.face.spot.x, here.face.z - here.face.spot.z);
+  kraap.floorY = groundAt(here.face.spot.x, here.face.spot.z);
+  kraap.t = 0;
+  if (player.mixer) playClip("idle", 0.4);
+}
+
 /* ---------------- the wai: palms together, a small bow ---------------- */
 // No ready-made animation exists for a Thai wai, so it is posed on the boy's own skeleton: the
 // arms are placed with a two-bone reach solver so the palms meet in front of the chest with the
@@ -1211,7 +1257,7 @@ function updatePress(model) {
   let sk = null; model.traverse((o) => { if (!sk && o.isSkinnedMesh) sk = o; });
   if (!sk || !sk.userData.press) return;
   const u = sk.userData.press;
-  u.uPress.value = wai.t >= 0 || sit.w > 0.01 ? Math.min(1, wai.plane.on * 1.5) : 0;
+  u.uPress.value = wai.t >= 0 || sit.w > 0.01 || kraap.t >= 0 ? Math.min(1, wai.plane.on * 1.5) : 0;
   if (!u.uPress.value) return;
   // the plane in the mesh's own space (where the skinned vertices are)
   _plane.setFromNormalAndCoplanarPoint(wai.plane.normal, wai.plane.point).applyMatrix4(_inv.copy(sk.matrixWorld).invert());
@@ -1225,10 +1271,14 @@ function restPose(model) {
   if (sk) {
     rest = {};
     const bones = sk.skeleton.bones, inv = sk.skeleton.boneInverses, m = new THREE.Matrix4(), q = new THREE.Quaternion(), pp = new THREE.Vector3(), sc = new THREE.Vector3();
+    model.updateMatrixWorld(true);
     bones.forEach((b, i) => {
-      const pi = bones.indexOf(b.parent); if (pi < 0) return;
-      m.copy(inv[pi]).multiply(inv[i].clone().invert()).decompose(pp, q, sc); // parent⁻¹ · bone, both in the rest pose
-      rest[b.name] = q.clone();
+      const pi = bones.indexOf(b.parent);
+      if (pi >= 0) m.copy(inv[pi]).multiply(inv[i].clone().invert()); // parent⁻¹ · bone, both in the rest pose
+      else { // the root bone (the hips): its rest pose in the world, brought into its parent's (the armature's) space
+        m.copy(b.parent.matrixWorld).invert().multiply(sk.matrixWorld).multiply(sk.bindMatrixInverse).multiply(inv[i].clone().invert());
+      }
+      m.decompose(pp, q, sc); rest[b.name] = q.clone();
     });
   }
   model.userData.restPose = rest;
@@ -1241,7 +1291,8 @@ function basisQuat(a1, a2, b1, b2) {
   return new THREE.Quaternion().setFromRotationMatrix(Lb.multiply(La.transpose()));
 }
 const waiBones = {};
-const WAI_BONES = ["Spine02", "Spine01", "Spine", "neck", "Head", "LeftArm", "LeftForeArm", "LeftHand", "RightArm", "RightForeArm", "RightHand"];
+const WAI_BONES = ["Spine02", "Spine01", "Spine", "neck", "Head", "LeftArm", "LeftForeArm", "LeftHand", "RightArm", "RightForeArm", "RightHand",
+  "Hips", "LeftUpLeg", "LeftLeg", "LeftFoot", "RightUpLeg", "RightLeg", "RightFoot"];
 // Some bones (the spine) have no animation track, so nothing resets them each frame: start every
 // frame from each bone's own pose, and hand it back when the wai ends.
 function waiBegin(B) {
@@ -1267,6 +1318,7 @@ function boneMap(model) {
 function poseOverlays(model, hands, bow, sitW) {
   const B = boneMap(model);
   if (!B.Spine || !B.LeftArm || !B.RightArm || !B.Head) return;
+  if (kraap.t >= 0 && kraap.spot) { waiBegin(B); poseKraap(model, B, kraapState(kraap.t)); waiMark(B); return; }
   if (hands <= 0 && bow <= 0 && sitW <= 0.001) { waiEnd(B); return; }
   waiBegin(B);
   if (sitW > 0.001) poseSit(model, B, sitW);
@@ -1274,6 +1326,135 @@ function poseOverlays(model, hands, bow, sitW) {
   waiMark(B);
 }
 function poseWai(model, hands, bow) { poseOverlays(model, hands, bow, sit.w); }
+// one leg: ankle to its target with the knee toward pole, the foot pointing its toes to toe; blend by weight
+function legTo(B, s, ankle, toe, pole, weight) {
+  const up = B[s + "UpLeg"], lo = B[s + "Leg"], ft = B[s + "Foot"], tb = B[s + "ToeBase"]; if (!up || !lo || !ft) return;
+  const animQ = [up.quaternion.clone(), lo.quaternion.clone(), ft.quaternion.clone()];
+  const H = up.getWorldPosition(new THREE.Vector3()), K0 = lo.getWorldPosition(new THREE.Vector3()), A0 = ft.getWorldPosition(new THREE.Vector3());
+  const a = H.distanceTo(K0), b = K0.distanceTo(A0);
+  const toT = ankle.clone().sub(H); const d = Math.min(toT.length(), a + b - 1e-3); toT.normalize();
+  const x = (a * a - b * b + d * d) / (2 * d), h = Math.sqrt(Math.max(0, a * a - x * x));
+  const pl = pole.clone().addScaledVector(toT, -pole.dot(toT)).normalize();
+  aimBone(up, K0, H.clone().addScaledVector(toT, x).addScaledVector(pl, h));
+  aimBone(lo, ft.getWorldPosition(new THREE.Vector3()), ankle);
+  if (tb) aimBone(ft, tb.getWorldPosition(new THREE.Vector3()), toe);
+  [up, lo, ft].forEach((bn, i) => { const solved = bn.quaternion.clone(); bn.quaternion.copy(animQ[i]).slerp(solved, weight); });
+  up.updateMatrixWorld(true);
+}
+const KNEE_UP = 0.07, ANKLE_UP = 0.075, KNEEL_BACK = 0.08; // knee and ankle heights above the floor; ankles behind the hip joints
+const CHEST_TIP = -0.12;                                    // the wai at the chest: fingertips just under the chin
+const FOREHEAD = new THREE.Vector3(0, 0.27, 0.27);          // his forehead, in head space (from his head mesh)
+const BOW_SPLIT = [["Spine02", 0.4], ["Spine01", 0.3], ["Spine", 0.3]], BOW_NECK = 0.25, BOW_HEAD = 0.2; // the forehead leads, not the crown
+function applyBow(B, axis, theta, neckHead, extraHead) {
+  BOW_SPLIT.forEach(([n, f]) => { if (B[n]) turnBone(B[n], _q2.setFromAxisAngle(axis, theta * f)); });
+  if (B.neck) turnBone(B.neck, _q2.setFromAxisAngle(axis, BOW_NECK * neckHead + 0.06 * extraHead));
+  if (B.Head) turnBone(B.Head, _q2.setFromAxisAngle(axis, BOW_HEAD * neckHead + 0.08 * extraHead));
+}
+const foreheadAt = (B) => { const hs = B.Head.getWorldScale(new THREE.Vector3()).y || 1; return FOREHEAD.clone().multiplyScalar(1 / hs).applyMatrix4(B.Head.matrixWorld); };
+const PHI_BOW = 0.75, PELVIS_SHARE = 0.6; // in the bow the thighs pivot around the knees (hips stay low); most of the fold is at the hips, the back stays long
+// The lower body. Kneeling, he sits back on his heels; as he bows, his hips rise and come forward, the thighs
+// pivoting around the knees (which stay on the floor) and the pelvis tilting forward, so the torso can fold
+// down in front of the knees - as in a real kraap.
+function poseLowerBody(model, B, c, kneel, bow, fold = 0) {
+  const thighAngle = Math.asin(Math.min(1, c.span / c.thigh));
+  const phi = thighAngle + (PHI_BOW - thighAngle) * bow;
+  const knee = new THREE.Vector3(c.root.x, c.floor + KNEE_UP * c.scale, c.root.z).addScaledVector(c.fwd, c.span);
+  const hipJoint = knee.clone().addScaledVector(c.up, c.thigh * Math.cos(phi)).addScaledVector(c.fwd, -c.thigh * Math.sin(phi));
+  B.Hips.quaternion.copy(c.hipsQ);
+  // square the hips to the front while kneeling: turn the pelvis so the line between the hip joints runs
+  // straight across his body (no twist or sideways tilt from the standing animation)
+  model.updateMatrixWorld(true);
+  const hipLine = B.LeftUpLeg.getWorldPosition(new THREE.Vector3()).sub(B.RightUpLeg.getWorldPosition(new THREE.Vector3())).normalize();
+  turnBone(B.Hips, new THREE.Quaternion().slerp(new THREE.Quaternion().setFromUnitVectors(hipLine, c.side), kneel));
+  turnBone(B.Hips, _q2.setFromAxisAngle(c.axis, fold * kneel)); // the pelvis folds forward
+  // place the pelvis so the hip joints sit exactly where they should (tilting swings them around the pelvis)
+  B.Hips.position.copy(B.Hips.parent.worldToLocal(c.hipsW.clone().lerp(hipJoint.clone().add(c.hipsAbove), kneel)));
+  model.updateMatrixWorld(true);
+  const jointsAt = B.LeftUpLeg.getWorldPosition(new THREE.Vector3()).add(B.RightUpLeg.getWorldPosition(new THREE.Vector3())).multiplyScalar(0.5);
+  const want = c.joints.clone().lerp(hipJoint, kneel);
+  B.Hips.position.copy(B.Hips.parent.worldToLocal(B.Hips.getWorldPosition(new THREE.Vector3()).add(want.sub(jointsAt))));
+  model.updateMatrixWorld(true);
+  [["Left", 1], ["Right", -1]].forEach(([s]) => {
+    const H = B[s + "UpLeg"].getWorldPosition(new THREE.Vector3());
+    // the ankle stays where it lies when kneeling (behind the knee, the shin flat on the floor)
+    const ankle = new THREE.Vector3(c.root.x, c.floor + ANKLE_UP * c.scale, c.root.z).addScaledVector(c.fwd, c.span - c.shin).addScaledVector(c.side, H.clone().sub(c.root).dot(c.side));
+    const toe = ankle.clone().addScaledVector(c.fwd, -0.24 * c.scale).setY(c.floor + 0.04 * c.scale);
+    legTo(B, s, ankle, toe, c.fwd.clone().addScaledVector(c.up, -0.3), kneel);
+  });
+}
+// how far the spine must bend, with the hips raised as in the bow, for the forehead to touch the floor
+// (found once he is fully kneeling, then kept)
+function kraapTouch(model, B, c) {
+  if (kraap.touch) return kraap.touch;
+  const lower = ["Hips", "LeftUpLeg", "LeftLeg", "LeftFoot", "RightUpLeg", "RightLeg", "RightFoot"], upper = ["Spine02", "Spine01", "Spine", "neck", "Head"];
+  const savedQ = [...lower, ...upper].map((n) => B[n] && B[n].quaternion.clone()), savedP = B.Hips.position.clone();
+  const restore = () => { [...lower, ...upper].forEach((n, i) => { if (B[n]) B[n].quaternion.copy(savedQ[i]); }); B.Hips.position.copy(savedP); model.updateMatrixWorld(true); };
+  const upperQ = upper.map((n) => B[n].quaternion.clone());
+  const reset = () => restore();
+  // scan for the first bend at which the forehead reaches the floor, then refine; if it never quite
+  // does, take the bend that brings it lowest
+  const pose = (th) => { reset(); poseLowerBody(model, B, c, 1, 1, PELVIS_SHARE * th); applyBow(B, c.axis, (1 - PELVIS_SHARE) * th, 1, 0); };
+  const heightAt = (th) => { pose(th); return foreheadAt(B).y - (c.floor + 0.012); };
+  let lo = 0, hi = null, best = 0, bestH = Infinity;
+  for (let th = 0; th <= 2.6; th += 0.05) { const h = heightAt(th); if (h < bestH) { bestH = h; best = th; } if (h <= 0) { hi = th; break; } lo = th; }
+  if (hi != null) { for (let i = 0; i < 14; i++) { const mid = (lo + hi) / 2; if (heightAt(mid) > 0) lo = mid; else hi = mid; } } else hi = best;
+  pose(hi);
+  const joints = B.LeftUpLeg.getWorldPosition(new THREE.Vector3()).add(B.RightUpLeg.getWorldPosition(new THREE.Vector3())).multiplyScalar(0.5);
+  const fh = foreheadAt(B);
+  kraap.touch = { theta: hi, fwd: fh.clone().sub(joints).dot(c.fwd), reached: fh.y - c.floor };
+  restore();
+  return kraap.touch;
+}
+function poseKraap(model, B, st) {
+  const up = new THREE.Vector3(0, 1, 0);
+  const fwd = new THREE.Vector3(Math.sin(player.yaw), 0, Math.cos(player.yaw)), side = new THREE.Vector3(Math.cos(player.yaw), 0, -Math.sin(player.yaw));
+  const axis = new THREE.Vector3().crossVectors(up, fwd).normalize();
+  const scale = model.getWorldScale(new THREE.Vector3()).y;
+  const floor = kraap.floorY + (insideHall(kraap.spot.x, kraap.spot.z) ? 0 : PAVING);
+  const rest = restPose(model);
+  // a straight back and head, facing straight ahead (out of the standing animation's lean and glancing)
+  if (rest) ["Spine02", "Spine01", "Spine", "neck", "Head"].forEach((n) => { if (B[n] && rest[n]) B[n].quaternion.slerp(rest[n], st.kneel); });
+  model.updateMatrixWorld(true);
+  const wp = (n) => B[n].getWorldPosition(new THREE.Vector3());
+  // his measurements, from this frame's standing pose
+  const thigh = wp("LeftUpLeg").distanceTo(wp("LeftLeg")), shin = wp("LeftLeg").distanceTo(wp("LeftFoot"));
+  const joints = wp("LeftUpLeg").add(wp("RightUpLeg")).multiplyScalar(0.5), hipsW = wp("Hips");
+  const span = shin - KNEEL_BACK * scale; // knees this far in front of the hip joints when sitting on the heels
+  const c = { up, fwd, side, axis, scale, floor, thigh, shin, span, root: new THREE.Vector3(player.x, 0, player.z).addScaledVector(fwd, joints.clone().sub(new THREE.Vector3(player.x, 0, player.z)).dot(fwd)),
+    hipsW, joints, hipsQ: B.Hips.quaternion.clone(), hipsAbove: hipsW.clone().sub(joints) };
+  // 1)+2) hips and legs: kneeling, rising as he bows
+  const touch = st.kneel > 0.99 ? kraapTouch(model, B, c) : (kraap.touch || { theta: 1.6, fwd: 1.0 });
+  poseLowerBody(model, B, c, st.kneel, st.bow, PELVIS_SHARE * touch.theta * st.bow);
+  // 3) the bow: the rest of the fold in the back, the neck and head bowing until the forehead touches the floor
+  applyBow(B, axis, (1 - PELVIS_SHARE) * touch.theta * st.bow, st.bow, st.high);
+  model.updateMatrixWorld(true);
+  // 4) the hands: a wai at the chest, the high wai, or palms flat on the floor either side of the forehead
+  const wsum = st.chest + st.high + st.floor; if (wsum < 0.001) return;
+  const shape = handShape(model); if (!shape) return;
+  const chest = st.chest > 0.001 ? waiHands(model, B, CHEST_TIP, side, up, fwd, 0) : null;
+  const high = st.high > 0.001 ? waiHands(model, B, WAI_LEVELS.buddha.tip, side, up, fwd, 0) : null;
+  // palms pressed together while in a wai: the plane follows whichever wai is the main one
+  const mainTip = st.high >= st.chest ? (high ? WAI_LEVELS.buddha.tip : null) : (chest ? CHEST_TIP : null);
+  if (mainTip != null) waiHands(model, B, mainTip, side, up, fwd, st.chest + st.high); else wai.plane.on = 0;
+  const jointsNow = wp("LeftUpLeg").add(wp("RightUpLeg")).multiplyScalar(0.5);
+  [["Left", 1], ["Right", -1]].forEach(([s, sg]) => {
+    const hs = shape[s];
+    // palms flat on the floor: fingers forward, palm down, either side of the forehead
+    const Qf = basisQuat(hs.finger, hs.palm, fwd, up.clone().negate());
+    const palmTop = Math.max(...hs.points.map((q) => q.dot(hs.palm))) * scale;
+    const centroid = hs.points.reduce((acc, q) => acc.add(q), new THREE.Vector3()).multiplyScalar(1 / hs.points.length).applyQuaternion(Qf).multiplyScalar(scale);
+    const palmAt = jointsNow.clone().addScaledVector(fwd, touch.fwd + 0.02 * scale).addScaledVector(side, sg * 0.2 * scale); // level with the forehead, which rests between them
+    const floorT = new THREE.Vector3(palmAt.x - centroid.x, floor + palmTop + 0.003 * scale, palmAt.z - centroid.z);
+    const floorPole = side.clone().multiplyScalar(sg * 0.6).addScaledVector(up, -0.8).addScaledVector(fwd, -0.3);
+    // blend the three hand positions by their weights
+    const target = new THREE.Vector3(), Q = new THREE.Quaternion(), pole = new THREE.Vector3(); let acc = 0;
+    const addIn = (w, t, q, pl) => { if (w <= 0.001 || !t) return; acc += w; target.lerp(t, acc === w ? 1 : w / acc); if (acc === w) Q.copy(q); else Q.slerp(q, w / acc); pole.lerp(pl, acc === w ? 1 : w / acc); };
+    if (chest) addIn(st.chest, chest[s].target, chest[s].Q, chest.pole(sg));
+    if (high) addIn(st.high, high[s].target, high[s].Q, high.pole(sg));
+    addIn(st.floor, floorT, Qf, floorPole);
+    armTo(B, s, target, Q, pole, Math.min(1, wsum));
+  });
+}
 // put one arm's wrist at target with the hand turned to Qhand (world), elbow toward pole; blend by weight
 function armTo(B, s, target, Qhand, pole, weight) {
   const arm = B[s + "Arm"], fore = B[s + "ForeArm"], hand = B[s + "Hand"]; if (!arm || !fore || !hand) return;
@@ -1337,6 +1518,34 @@ function poseSit(model, B, w) {
     armTo(B, s, target, Q, side.clone().multiplyScalar(sg * 0.8).addScaledVector(up, -0.6), w);
   });
 }
+// The wai's hands: a lotus bud. Each hand stands upright with its palm turned toward the other hand, tops
+// leaning in a little; the wrists are placed from the real hand mesh so the fingertips meet exactly at the
+// middle, at the given height on his face (head space), following the head as it bows. The fleshier palms
+// that would pass the middle are pressed flat against it in the shader (see pressHands).
+function waiHands(model, B, tipLevel, side, up, fwd, on) {
+  const shape = handShape(model); if (!shape) return null;
+  const spineQ = B.Spine.getWorldQuaternion(new THREE.Quaternion());
+  const bodyUp = new THREE.Vector3(0, 1, 0).applyQuaternion(spineQ), bodyFwd = new THREE.Vector3(0, 0, 1).applyQuaternion(spineQ);
+  const scale = model.getWorldScale(new THREE.Vector3()).y; // world units per model unit (1 for the boy's holder)
+  const headScale = B.Head.getWorldScale(new THREE.Vector3()).y || 1;
+  const tipAt = new THREE.Vector3(0, tipLevel, 0.36).multiplyScalar(1 / headScale).applyMatrix4(B.Head.matrixWorld);
+  const tipLen = (shape.Left.tipY + shape.Right.tipY) / 2;
+  const fingersUp = up.clone().addScaledVector(fwd, 0.15).normalize();
+  const mid = tipAt.addScaledVector(fingersUp, -tipLen * scale); // between the wrists
+  wai.plane.normal.copy(side).negate(); wai.plane.point.copy(mid); wai.plane.on = on; // where the hands meet
+  const out = { pole: (sg) => new THREE.Vector3().addScaledVector(bodyUp, -1).addScaledVector(side, sg * 0.5).addScaledVector(bodyFwd, -0.15) };
+  [["Left", 1], ["Right", -1]].forEach(([s, sg]) => {
+    const hs = shape[s], inward = side.clone().multiplyScalar(-sg);                       // toward the other hand
+    const P0 = inward.clone().addScaledVector(fingersUp, -inward.dot(fingersUp)).normalize();
+    const F = fingersUp.clone().multiplyScalar(Math.cos(WAI_LEAN)).addScaledVector(P0, Math.sin(WAI_LEAN)).normalize(); // tops lean in
+    const P = P0.clone().addScaledVector(F, -P0.dot(F)).normalize();
+    const Q = basisQuat(hs.finger, hs.palm, F, P);
+    // how far this hand's fingertips reach toward the middle: the wrist goes that far out, so they meet exactly
+    let reach = -Infinity; for (const pt of hs.tips) reach = Math.max(reach, _v1.copy(pt).applyQuaternion(Q).dot(inward));
+    out[s] = { target: mid.clone().addScaledVector(inward, -(reach + WAI_GAP) * scale), Q };
+  });
+  return out;
+}
 // a modest bow, mostly of the head, as in an everyday wai
 function poseWaiCore(model, B, hands, bow) {
   if (hands <= 0 && bow <= 0) return;
@@ -1352,50 +1561,9 @@ function poseWaiCore(model, B, hands, bow) {
   const L = WAI_LEVELS[wai.level] || WAI_LEVELS.peer;
   ["Spine02", "Spine01", "Spine", "neck", "Head"].forEach((n, i) => { if (B[n]) turnBone(B[n], _q2.setFromAxisAngle(axis, L.bow[i] * bow)); });
   if (hands <= 0.001) return;
-  // 2) the hands: a lotus bud. Each hand stands upright with its palm side (where its fingers curl)
-  // turned toward the other hand, tops leaning in a little; the wrists are placed from the real
-  // hand mesh so the fingertips meet exactly at the middle and the hands never pass through each other.
-  const shape = handShape(model); if (!shape) return;
-  const spineQ = B.Spine.getWorldQuaternion(new THREE.Quaternion());
-  const bodyUp = new THREE.Vector3(0, 1, 0).applyQuaternion(spineQ), bodyFwd = new THREE.Vector3(0, 0, 1).applyQuaternion(spineQ);
-  const neck = B.neck.getWorldPosition(new THREE.Vector3());
-  const scale = model.getWorldScale(new THREE.Vector3()).y; // world units per model unit (1 for the boy's holder)
-  // the fingertips go to the level's point on his face (just in front of it), following the head as it bows
-  const headScale = B.Head.getWorldScale(new THREE.Vector3()).y || 1;
-  const tipAt = new THREE.Vector3(0, L.tip, 0.36).multiplyScalar(1 / headScale).applyMatrix4(B.Head.matrixWorld);
-  const tipLen = (shape.Left.tipY + shape.Right.tipY) / 2;
-  const mid = tipAt.addScaledVector(up.clone().addScaledVector(fwd, 0.15).normalize(), -tipLen * scale); // between the wrists
-  wai.plane.normal.copy(side).negate(); wai.plane.point.copy(mid); wai.plane.on = hands; // where the hands meet (the left hand's inward direction)
-  const fingersUp = up.clone().addScaledVector(fwd, 0.15).normalize();
-  [["Left", 1], ["Right", -1]].forEach(([s, sg]) => {
-    const arm = B[s + "Arm"], fore = B[s + "ForeArm"], hand = B[s + "Hand"], hs = shape[s]; if (!arm || !fore || !hand || !hs) return;
-    const animQ = [arm.quaternion.clone(), fore.quaternion.clone(), hand.quaternion.clone()];
-    // the hand's final orientation in the world
-    const inward = side.clone().multiplyScalar(-sg);                                    // toward the other hand
-    const P0 = inward.clone().addScaledVector(fingersUp, -inward.dot(fingersUp)).normalize();
-    const F = fingersUp.clone().multiplyScalar(Math.cos(WAI_LEAN)).addScaledVector(P0, Math.sin(WAI_LEAN)).normalize(); // tops lean in
-    const P = P0.clone().addScaledVector(F, -P0.dot(F)).normalize();
-    const Qhand = basisQuat(hs.finger, hs.palm, F, P);
-    // how far this hand's fingertips reach toward the middle in that orientation: the wrist goes that far
-    // out, so the fingertips meet exactly; the fleshier palm that would pass the middle is pressed flat
-    // against it in the shader (see pressHands), as real palms flatten when pressed together
-    let reach = -Infinity; for (const pt of hs.tips) reach = Math.max(reach, _v1.copy(pt).applyQuaternion(Qhand).dot(inward));
-    const target = mid.clone().addScaledVector(inward, -(reach + WAI_GAP) * scale);
-    // two-bone reach: elbow placed by the law of cosines, pointing down and a little outward
-    const A = arm.getWorldPosition(new THREE.Vector3()), E0 = fore.getWorldPosition(new THREE.Vector3()), W0 = hand.getWorldPosition(new THREE.Vector3());
-    const a = A.distanceTo(E0), b = E0.distanceTo(W0);
-    const toT = target.clone().sub(A); const d = Math.min(toT.length(), a + b - 1e-3); toT.normalize();
-    const x = (a * a - b * b + d * d) / (2 * d), h = Math.sqrt(Math.max(0, a * a - x * x));
-    const pole = new THREE.Vector3().addScaledVector(bodyUp, -1).addScaledVector(side, sg * 0.5).addScaledVector(bodyFwd, -0.15);
-    pole.addScaledVector(toT, -pole.dot(toT)).normalize();
-    const elbow = A.clone().addScaledVector(toT, x).addScaledVector(pole, h);
-    aimBone(arm, E0, elbow);
-    aimBone(fore, hand.getWorldPosition(new THREE.Vector3()), target);
-    hand.getWorldQuaternion(_q1); turnBone(hand, _q2.copy(Qhand).multiply(_q1.invert())); // set the hand exactly
-    // blend from what the animation was doing to the wai
-    [arm, fore, hand].forEach((bn, i) => { const solved = bn.quaternion.clone(); bn.quaternion.copy(animQ[i]).slerp(solved, hands); });
-    arm.updateMatrixWorld(true);
-  });
+  // 2) the hands: a lotus bud (see waiHands), placed with the two-bone reach solver
+  const T = waiHands(model, B, L.tip, side, up, fwd, hands); if (!T) return;
+  [["Left", 1], ["Right", -1]].forEach(([s, sg]) => armTo(B, s, T[s].target, T[s].Q, T.pole(sg), hands));
 }
 
 /* ---------------- input ---------------- */
@@ -1409,6 +1577,7 @@ addEventListener("keydown", (e) => {
   if (e.code === "KeyG") openPlaces(true);
   if (e.code === "KeyQ") startWai();
   if (e.code === "KeyC") toggleSit();
+  if (e.code === "KeyK") startKraap();
   if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) e.preventDefault();
 });
 addEventListener("keyup", (e) => { keys[e.code] = false; });
@@ -1584,7 +1753,7 @@ $("dlg").addEventListener("click", (e) => {
 });
 $("btn-places").addEventListener("click", () => openPlaces(false));
 $("btn-help").addEventListener("click", () => openDialog(tx("❔ วิธีเดินในวัด", "❔ How to walk around"),
-  `<p>${tx("⌨️ W A S D หรือปุ่มลูกศร = เดิน • Shift = วิ่ง • Space = กระโดด • E = เข้าศาลาที่อยู่ใกล้ • G = เรียกหมาวัด • Q = ไหว้ 🙏 • C = นั่งสมาธิ 🧘 (เดินเพื่อลุก)", "⌨️ W A S D or arrow keys = walk • Shift = run • Space = jump • E = visit the nearby hall • G = call the temple dog • Q = wai 🙏 • C = sit 🧘 (walk to stand up)")}</p>
+  `<p>${tx("⌨️ W A S D หรือปุ่มลูกศร = เดิน • Shift = วิ่ง • Space = กระโดด • E = เข้าศาลาที่อยู่ใกล้ • G = เรียกหมาวัด • Q = ไหว้ 🙏 • C = นั่งสมาธิ 🧘 (เดินเพื่อลุก) • K = กราบพระ 🙇 (หน้าพระพุทธรูป)", "⌨️ W A S D or arrow keys = walk • Shift = run • Space = jump • E = visit the nearby hall • G = call the temple dog • Q = wai 🙏 • C = sit 🧘 (walk to stand up) • K = pay tribute 🙇 (before a Buddha image)")}</p>
    <p>${tx("🖱️ ลากเมาส์ = หมุนมุมมอง • ล้อเมาส์ = ซูม • คลิกหมาวัดหรือศาลา = เปิด", "🖱️ Drag = turn the view • Wheel = zoom • Click the dog or a hall = open it")}</p>
    <p>${tx("📱 จอยซ้ายล่าง = เดิน • ลากจอ = หมุนมุมมอง • ปุ่ม E = เข้า", "📱 Bottom-left stick = walk • Drag the screen = turn the view • E button = visit")}</p>
    <p>${tx("🔈 ปุ่มเสียง = เปิดเสียงนก ลม น้ำตก และกระดิ่งชายคา (ปิดอยู่จนกว่าจะกด) • 🔔 เดินไปที่ระฆังแล้วกด E เพื่อตีระฆัง", "🔈 Sound button = birds, breeze, the waterfall and the roof bells (off until you press it) • 🔔 Walk to the bell and press E to strike it")}</p>
@@ -1599,6 +1768,7 @@ qBtn.addEventListener("click", () => { write("world-quality", HIGH ? "light" : "
 // sound button: off every time the page opens; the site-wide "turn off all sound" setting is respected
 $("btn-wai").addEventListener("click", () => { startWai(); canvas.focus(); });
 $("btn-sit").addEventListener("click", () => { toggleSit(); canvas.focus(); });
+$("btn-kraap").addEventListener("click", () => { startKraap(); if ($("dlg").hidden) canvas.focus(); });
 const soundBtn = $("btn-sound");
 const syncSound = () => { soundBtn.setAttribute("aria-pressed", sound.on); soundBtn.classList.toggle("on", sound.on); soundBtn.firstChild.textContent = sound.on ? "🔊 " : "🔈 "; };
 function askSound() {
@@ -1708,7 +1878,13 @@ function frame(dt) {
     if (keys.KeyW || keys.ArrowUp) fz -= 1; if (keys.KeyS || keys.ArrowDown) fz += 1;
     if (keys.KeyA || keys.ArrowLeft) fx -= 1; if (keys.KeyD || keys.ArrowRight) fx += 1;
     fx += joy.x; fz += joy.y;
-    if ((keys.Space) && !sit.on && sit.rise <= 0 && player.y <= groundAt(player.x, player.z) + 0.01) player.vy = 9;
+    if ((keys.Space) && !sit.on && sit.rise <= 0 && kraap.t < 0 && player.y <= groundAt(player.x, player.z) + 0.01) player.vy = 9;
+  }
+  if (kraap.t >= 0) { // paying tribute: stay put (it ends by itself); glide to the spot and face the image first
+    fx = fz = 0;
+    kraap.t += dt; if (kraap.t > KRAAP_DUR) { kraap.t = -1; kraap.touch = null; }
+    if (kraap.spot && kraap.t >= 0 && kraap.t < 0.8) { player.x += (kraap.spot.x - player.x) * Math.min(1, dt * 8); player.z += (kraap.spot.z - player.z) * Math.min(1, dt * 8); }
+    if (kraap.faceYaw != null) { let dy = kraap.faceYaw - player.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); player.yaw += dy * Math.min(1, dt * 8); }
   }
   if (sit.on || sit.rise > 0) { // seated (or getting up): stay put; wanting to walk stands him up
     if (sit.on && Math.hypot(fx, fz) > 0.3) standUp();
@@ -1749,7 +1925,8 @@ function frame(dt) {
       player.model.position.y = -1.05 * sit.w + (sit.spot ? sit.spot.top * sit.w : 0);
     } else if (player.model.position.y < 0) player.model.position.y = 0;
   } else if (player.mixer) {
-    if (sit.on && player.clips.sit) playClip("sit", 1.2);
+    if (kraap.t >= 0) playClip("idle", 0.4);
+    else if (sit.on && player.clips.sit) playClip("sit", 1.2);
     else if (sit.rise > 0) playClip("idle", 1.0);
     else playClip(!moving ? "idle" : player.clips.run && speed > 5 ? "run" : player.clips.walk ? "walk" : "idle");
     // keep the soles (or, seated, the crossed legs) on the ground: each animation has its own lift,
@@ -1800,9 +1977,9 @@ function frame(dt) {
     const fx2 = -Math.sin(camYaw), fz2 = -Math.cos(camYaw), rx = Math.cos(camYaw), rz = -Math.sin(camYaw);
     let bx = player.x + fx2 * 1.4 - rx * 2.6, bz = player.z + fz2 * 1.4 - rz * 2.6;
     // when he sits, the dog comes to sit at his left side, facing the same way
-    if (sit.on) { bx = player.x + Math.cos(player.yaw) * 1.5 + Math.sin(player.yaw) * 0.2; bz = player.z - Math.sin(player.yaw) * 1.5 + Math.cos(player.yaw) * 0.2; }
+    if (sit.on || kraap.t >= 0) { bx = player.x + Math.cos(player.yaw) * 1.5 + Math.sin(player.yaw) * 0.2; bz = player.z - Math.sin(player.yaw) * 1.5 + Math.cos(player.yaw) * 0.2; }
     const ddx = bx - dog.x, ddz = bz - dog.z, dd = Math.hypot(ddx, ddz);
-    const wantSit = sit.on && dd < 0.5;
+    const wantSit = (sit.on || kraap.t >= 0) && dd < 0.5;
     dogAnim.sit.value += ((wantSit ? 1 : 0) - dogAnim.sit.value) * Math.min(1, dt * 3);
     const dogFree = dogAnim.sit.value < 0.15; // a sitting dog gets up before it walks
     dog.moving = dd > 0.4 && dogFree;
@@ -1830,7 +2007,8 @@ function frame(dt) {
   // camera follows
   const cx = player.x + Math.sin(camYaw) * Math.cos(camPitch) * camDist;
   const cz = player.z + Math.cos(camYaw) * Math.cos(camPitch) * camDist;
-  const seatDrop = 1.05 * sit.w; // seated, the camera looks at where his head now is
+  const ks = kraap.t >= 0 ? kraapState(kraap.t) : null;
+  const seatDrop = Math.max(1.05 * sit.w, ks ? 1.0 * ks.kneel + 0.6 * ks.bow : 0); // seated or kneeling, the camera looks at where his head now is
   const cy = player.y + 2 - seatDrop + Math.sin(camPitch) * camDist;
   // don't look through walls or roofs: pull the camera in front of whatever is in the way
   head.set(player.x, player.y + 2.2 - seatDrop, player.z); tmp.set(cx, cy, cz);
@@ -1859,7 +2037,7 @@ document.fonts.load("64px Itim").then(() => document.fonts.load("36px Mali")).ca
 });
 camYaw = 0; camera.position.set(0, 8, 105);
 restoreSpot(); // back from a page of the site: stand where you were
-if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, WAI_LEVELS, sit, startSit, standUp, cushionSpots, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
+if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
 Promise.race([Promise.all(propJobs), new Promise((r) => setTimeout(r, 7000))]).then(() => {
   $("loading").hidden = true;
   canvas.focus();
