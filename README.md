@@ -68,6 +68,9 @@ Nothing is counted or scored, and the dog sits while he makes an offering.
 - footsteps: stone on paths and the plaza, soft on grass, hollow wood inside halls
 - inside a hall the outside world is muffled and quieter
 - the bronze temple bell: a deep strike with a long, beating ring
+- the time of day: birds by day; at night crickets, frogs calling by the ponds and the moat (the bullfrog's deep "oong-aang" and small frogs' rattles), and now and then the tokay gecko's "tuk-kae" from a hall's eaves
+- the temple gong at dawn and dusk: three slow strokes from the Learning Hall when day turns to night or night to day (also when the 🌙 / ☀️ button is pressed), only while the ambience is on
+- water lapping at the banks, louder the closer he is to the moat, coming from the point of the moat nearest him
 
 Asset credits:
 - `assets/tex/`: textures (paving, roof tiles, plaster, wood, grass, mossy rock) and the `belfast_sunset_puresky` sky from [Poly Haven](https://polyhaven.com) (CC0).

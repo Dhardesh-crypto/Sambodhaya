@@ -1432,7 +1432,10 @@ setInterval(() => {
   const c = clockNight(); if (c === night.clockWas) return;
   night.clockWas = c; night.manual = false;                      // the clock has turned: follow it again
   if (night.on !== c) { night.on = c; applyTime(); }
+  dawnDuskGong();
 }, 30000);
+// at dawn and dusk the temple gong sounds from the Learning Hall (only with the ambience on)
+function dawnDuskGong() { const h = salas.learn, [x, z] = h.toWorld(0, h.D / 2 + 1); sound.gong(x, h.FY + 2, z); }
 const nightObjs = new THREE.Group(); nightObjs.visible = false; scene.add(nightObjs);
 {
   // the night sky: a deep gradient, stars and the moon
@@ -1486,6 +1489,7 @@ function applyTime() {
   // the hanging lanterns glow at night
   loadProp("lantern").then((src) => { if (src) src.traverse((o) => { if (o.material && o.material.emissive) { o.material.emissive.set(0xff9a3c); o.material.emissiveIntensity = night.on ? 0.9 : 0; } }); });
   lampLightTimer = 0;
+  sound.setDaylight(n ? 0 : 1);
   const b = $("btn-night"); if (b) { b.setAttribute("aria-pressed", n); b.classList.toggle("on", n); b.firstChild.textContent = n ? "☀️ " : "🌙 "; const lb = b.querySelector(".label"); if (lb) lb.textContent = n ? tx("กลางวัน", "Day") : tx("กลางคืน", "Night"); }
 }
 
@@ -1497,7 +1501,8 @@ const sound = createSound({ high: HIGH });
     const [x, z] = h.toWorld(sx * (h.W / 2 + 1.5), sz * (h.D / 2 + 1.5)); chimes.push([x, h.FY + h.H, z]);
   }));
   const trees = [...edgeTrees.map(([x, z]) => [x, 4, z]), [0, 10, 0], ...bushes.map(([x, z]) => [x, 1, z]), [-13, 4, -50], [13, 4, -50]];
-  sound.places({ waterfalls: [[0, 4.4, -58.3]], chimes, trees });
+  sound.places({ waterfalls: [[0, 4.4, -58.3]], chimes, trees, ponds: ponds.map(({ x, z }) => [x, 0.4, z]), geckos: chimes, moat: (MOAT.r1 + MOAT.r2) / 2 });
+  sound.setDaylight(night.on ? 0 : 1);
 }
 const onPath = (x, z) => {
   if (Math.hypot(x, z) < 16) return true;
@@ -2732,7 +2737,7 @@ soundBtn.addEventListener("click", () => {
   sound.start().then(syncSound);
 });
 syncSound();
-$("btn-night").addEventListener("click", () => { night.on = !night.on; night.manual = true; applyTime(); });
+$("btn-night").addEventListener("click", () => { night.on = !night.on; night.manual = true; applyTime(); dawnDuskGong(); });
 applyTime();
 const calmBtn = $("btn-calm");
 const syncCalm = () => { calmBtn.setAttribute("aria-pressed", settings.calmMotion); calmBtn.classList.toggle("on", settings.calmMotion); };

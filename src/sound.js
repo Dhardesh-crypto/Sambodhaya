@@ -2,6 +2,8 @@
 // Charter rule: nothing plays until the visitor presses something. The ambience starts only
 // from the 🔈 button; the temple bell rings only when it is struck. Every sound sits at a
 // place in the temple, so it comes from where its source is.
+// The ambience follows the time of day: birds by day; crickets, frogs and the tokay gecko by night;
+// the gong at dawn and dusk.
 
 export function createSound({ high = true } = {}) {
   let ctx = null, master = null, outdoor = null, outdoorFilter = null, on = false;
@@ -10,6 +12,9 @@ export function createSound({ high = true } = {}) {
   let nextBird = 0, nextChime = 0, nextKoel = 0;
   let listener = { x: 0, y: 2, z: 0 };
   let chimeSpots = [], treeSpots = [], indoorNow = false;
+  // the time of day: 1 is full day, 0 full night (birds by day; crickets, frogs and the gecko by night)
+  let daylight = 1, nightGain = null, nextFrog = 0, nextGecko = 0;
+  let pondSpots = [], geckoSpots = [], moatR = 0, moatGain = null, moatPan = null;
 
   /* ---------- building blocks ---------- */
   function noiseBuffer(kind, seconds = 4) {
@@ -90,6 +95,70 @@ export function createSound({ high = true } = {}) {
     }
   }
 
+  /* ---------- the night ---------- */
+  // crickets: a high tone chopped into fast pulses, grouped into chirps; three voices spread left to right
+  function crickets() {
+    nightGain = ctx.createGain(); nightGain.gain.value = 0; nightGain.connect(outdoor);
+    const lfo = (f, type, depth, param) => { const o = ctx.createOscillator(), g = ctx.createGain(); o.type = type; o.frequency.value = f; g.gain.value = depth; o.connect(g); g.connect(param); o.start(); };
+    [[4300, 31, 2.1, -0.7], [4750, 27, 1.4, 0.6], [3900, 35, 2.9, 0.1]].slice(0, high ? 3 : 2).forEach(([f, pulse, chirp, pan]) => {
+      const o = ctx.createOscillator(), a = ctx.createGain(), b = ctx.createGain(), v = ctx.createGain(), p = ctx.createStereoPanner();
+      o.frequency.value = f; a.gain.value = 0.5; b.gain.value = 0.5; v.gain.value = 0.018; p.pan.value = pan;
+      lfo(pulse, "square", 0.5, a.gain); lfo(chirp, "square", 0.5, b.gain);
+      o.connect(a); a.connect(b); b.connect(v); v.connect(p); p.connect(nightGain); o.start();
+    });
+  }
+  // frogs by the water: the deep "oong-aang" of the bullfrog (อึ่งอ่าง) or a small frog's rattling "krrk"
+  function frog(x, y, z) {
+    const out = placed(x, y, z, 3, 50, 1.3); let t = ctx.currentTime + 0.02;
+    const voice = (f0, f1, d, q, centre, peak) => {
+      const o = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+      o.type = "sawtooth"; o.frequency.setValueAtTime(f0, t); o.frequency.linearRampToValueAtTime(f1, t + d);
+      f.type = "bandpass"; f.frequency.value = centre; f.Q.value = q;
+      o.connect(f); f.connect(g); g.connect(out); env(g, t, 0.03, peak, d); o.start(t); o.stop(t + d + 0.1);
+    };
+    if (Math.random() < 0.5) { voice(150, 175, 0.3, 3, 420, 1.4); t += 0.42; voice(190, 160, 0.38, 3, 520, 1.6); }
+    else for (let i = 0, n = 4 + Math.floor(Math.random() * 5); i < n; i++) { voice(520, 470, 0.035, 3, 1000, 1.2); t += 0.06; }
+  }
+  // the tokay gecko (ตุ๊กแก): a rattle, then "tuk-kae" called five to eight times, slowing and fading
+  function gecko(x, y, z) {
+    const out = placed(x, y, z, 4, 60, 1.1); let t = ctx.currentTime + 0.05;
+    const syl = (f0, f1, d, peak) => {
+      const o = ctx.createOscillator(), r = ctx.createGain(), f = ctx.createBiquadFilter(), g = ctx.createGain(), l = ctx.createOscillator(), lg = ctx.createGain();
+      o.type = "sawtooth"; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + d);
+      l.type = "square"; l.frequency.value = 45; lg.gain.value = 0.5; r.gain.value = 0.5; l.connect(lg); lg.connect(r.gain); // a croaky roughness
+      f.type = "bandpass"; f.frequency.value = (f0 + f1) * 1.6; f.Q.value = 2.5;
+      o.connect(r); r.connect(f); f.connect(g); g.connect(out); env(g, t, 0.01, peak, d);
+      o.start(t); l.start(t); o.stop(t + d + 0.05); l.stop(t + d + 0.05);
+    };
+    syl(260, 230, 0.5, 0.25); t += 1.0;                                  // the opening rattle
+    const n = 5 + Math.floor(Math.random() * 4);
+    for (let i = 0; i < n; i++) { const k = 1 - i / (n * 1.6); syl(420, 380, 0.1, 1.8 * k); t += 0.2; syl(330, 230, 0.32, 2.0 * k); t += 0.75 + i * 0.07; }
+  }
+  // the temple gong (ฆ้อง) struck at dawn and dusk: three strokes, a deep hum with a slow beat
+  function gong(x, y, z) {
+    const out = placed(x, y, z, 8, 150, 0.7), f = 110;
+    [0, 3.2, 6.1].forEach((dt, k) => {
+      const t = ctx.currentTime + 0.05 + dt, soft = 1 - k * 0.2;
+      [[1, 0.6, 8], [1.006, 0.35, 8], [2.02, 0.12, 4], [2.83, 0.16, 3.5], [4.1, 0.06, 2], [5.6, 0.03, 1.2]].forEach(([r, a, d]) => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.frequency.setValueAtTime(f * r * 1.01, t); o.frequency.exponentialRampToValueAtTime(f * r, t + 0.4); // the pitch settles after the stroke
+        o.connect(g); g.connect(out); env(g, t, 0.008, a * 0.45 * soft, d); o.start(t); o.stop(t + d + 0.1);
+      });
+      const s = ctx.createBufferSource(), sf = ctx.createBiquadFilter(), sg = ctx.createGain(); // the padded mallet
+      s.buffer = noiseBuffer("white", 0.2); sf.type = "lowpass"; sf.frequency.value = 400;
+      s.connect(sf); sf.connect(sg); sg.connect(out); env(sg, t, 0.003, 0.5 * soft, 0.1); s.start(t);
+    });
+  }
+  // water lapping at the moat's banks: one sound that follows him to the nearest point of the moat
+  function moatWater() {
+    moatPan = placed(0, 0, 0, 5, 60, 1.4);
+    const a = loopNoise(noiseBuffer("pink")), f = ctx.createBiquadFilter(), lap = ctx.createGain(), l = ctx.createOscillator(), lg = ctx.createGain();
+    f.type = "lowpass"; f.frequency.value = 1100;
+    l.frequency.value = 0.35; lg.gain.value = 0.35; lap.gain.value = 0.65; l.connect(lg); lg.connect(lap.gain); l.start(); // slow swells
+    moatGain = ctx.createGain(); moatGain.gain.value = 0;
+    a.connect(f); f.connect(lap); lap.connect(moatGain); moatGain.connect(moatPan);
+  }
+
   /* ---------- footsteps ---------- */
   let stepBuf = null;
   function step(surface) {
@@ -122,6 +191,7 @@ export function createSound({ high = true } = {}) {
     // leaves: pink noise, high-passed, swelling with each gust
     const leaves = loopNoise(pink), lf = ctx.createBiquadFilter(); lf.type = "highpass"; lf.frequency.value = 2600;
     leafGain = ctx.createGain(); leafGain.gain.value = 0.015; leaves.connect(lf); lf.connect(leafGain); leafGain.connect(outdoor);
+    crickets(); if (moatR) moatWater();
   }
   function addWaterfall(x, y, z) {
     if (!ctx) { sources.push(["fall", x, y, z]); return; }
@@ -133,9 +203,14 @@ export function createSound({ high = true } = {}) {
 
   return {
     get on() { return on; },
-    places({ waterfalls = [], chimes = [], trees = [] }) {
-      chimeSpots = chimes; treeSpots = trees; waterfalls.forEach(([x, y, z]) => sources.push(["fall", x, y, z]));
+    places({ waterfalls = [], chimes = [], trees = [], ponds = [], geckos = [], moat = 0 }) {
+      chimeSpots = chimes; treeSpots = trees; pondSpots = ponds; geckoSpots = geckos; moatR = moat;
+      waterfalls.forEach(([x, y, z]) => sources.push(["fall", x, y, z]));
     },
+    // how much daylight there is (1 day, 0 night); it may change gradually at dawn and dusk
+    setDaylight(d) { daylight = Math.max(0, Math.min(1, d)); },
+    // the gong at dawn and dusk: only when the visitor has the ambience on
+    gong(x, y, z) { if (ctx && on) gong(x, y, z); },
     async start() {
       if (!ctx) { build(); sources.forEach(([k, x, y, z]) => k === "fall" && addWaterfall(x, y, z)); }
       await ctx.resume();
@@ -192,12 +267,31 @@ export function createSound({ high = true } = {}) {
         const c = near(chimeSpots, 35); if (c.length) { const [x, y, z] = c[Math.floor(Math.random() * c.length)]; chime(x, y, z, 0.6 + gust * 0.6); }
         nextChime = now + 0.6 + Math.random() * (3.5 - gust * 2.5);
       }
+      const dark = 1 - daylight;
+      nightGain.gain.setTargetAtTime(dark * dark, t, 1.5);
+      if (moatGain) { // louder the closer he is to the water, from the point of the moat nearest him
+        const r = Math.hypot(cam.x, cam.z) || 1, d = Math.abs(r - moatR), k = moatR / r;
+        moatPan.positionX.setTargetAtTime(cam.x * k, t, 0.1); moatPan.positionZ.setTargetAtTime(cam.z * k, t, 0.1); moatPan.positionY.value = -0.4;
+        moatGain.gain.setTargetAtTime(0.32 * Math.max(0, 1 - d / 22), t, 0.3);
+      }
+      if (now > nextFrog) {
+        if (nextFrog && dark > 0.4) {
+          const water = [...near(pondSpots, 40)];
+          const r = Math.hypot(cam.x, cam.z); if (moatR && Math.abs(r - moatR) < 30) { const a = Math.atan2(cam.z, cam.x) + (Math.random() - 0.5) * 0.5, rr = moatR + (Math.random() - 0.5) * 6; water.push([Math.cos(a) * rr, -0.3, Math.sin(a) * rr]); }
+          if (water.length) { const [x, y, z] = water[Math.floor(Math.random() * water.length)]; frog(x + (Math.random() - 0.5) * 3, y, z + (Math.random() - 0.5) * 3); }
+        }
+        nextFrog = now + 1.2 + Math.random() * 4;
+      }
+      if (now > nextGecko) {
+        if (nextGecko && dark > 0.6 && geckoSpots.length) { const g = near(geckoSpots, 40), [x, y, z] = (g.length ? g : geckoSpots)[Math.floor(Math.random() * (g.length || geckoSpots.length))]; gecko(x, y, z); }
+        nextGecko = now + 35 + Math.random() * 55;
+      }
       if (now > nextBird) {
-        const tr = near(treeSpots, 45); if (tr.length && !indoor) { const [x, y, z] = tr[Math.floor(Math.random() * tr.length)]; twitter(x, y + 4 + Math.random() * 3, z); }
+        const tr = near(treeSpots, 45); if (tr.length && !indoor && Math.random() < daylight) { const [x, y, z] = tr[Math.floor(Math.random() * tr.length)]; twitter(x, y + 4 + Math.random() * 3, z); }
         nextBird = now + (high ? 2.5 : 4) + Math.random() * 6;
       }
       if (now > nextKoel) {
-        if (nextKoel && treeSpots.length) { const [x, y, z] = treeSpots[Math.floor(Math.random() * treeSpots.length)]; koel(x, y + 6, z); }
+        if (nextKoel && treeSpots.length && daylight > 0.5) { const [x, y, z] = treeSpots[Math.floor(Math.random() * treeSpots.length)]; koel(x, y + 6, z); }
         nextKoel = now + 25 + Math.random() * 40;
       }
     },
