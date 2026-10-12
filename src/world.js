@@ -1716,77 +1716,123 @@ setTimeout(() => {
   });
 }, 1500);
 
-/* ---------------- day and night ---------------- */
+/* ---------------- day and night, with dawn and dusk ---------------- */
 // Night: a dark blue sky with stars and a moon, soft moonlight instead of the sun, every lamp post lit (a warm
 // glow at its head and a pool of light on the ground), the halls lit from inside and their lanterns glowing.
-// Real lights are costly, so only a few follow the visitor to the lamp posts nearest him; the rest of the lamps
-// are glow alone. It follows the clock of the visitor's device: day from 6:00 to 18:00, night otherwise, changing
-// over by itself; the 🌙 button switches by hand for this visit, until the clock's next change (6:00 or 18:00).
-const clockNight = () => { const h = new Date().getHours(); return h < 6 || h >= 18; };
-const night = { on: clockNight(), manual: false, clockWas: clockNight() };
+// Day turns to night through a golden dusk, and night to day through a golden dawn: the light warms and lowers,
+// the stars come out, and the lamp posts come on one by one. Real lights are costly, so only a few follow the
+// visitor to the lamp posts nearest him; the rest of the lamps are glow alone. It follows the clock of the
+// visitor's device: day from 6:00 to 18:00 and night otherwise, each change taking the hour around 6:00 and 18:00;
+// the 🌙 button switches by hand for this visit (an eight-second dusk or dawn), until the clock's next change.
+const DAWN = 6 * 60, DUSK = 18 * 60, TWILIGHT = 30; // minutes
+const smoothT = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+const clockDay = () => { const n = new Date(), m = n.getHours() * 60 + n.getMinutes() + n.getSeconds() / 60; return smoothT(DAWN - TWILIGHT, DAWN + TWILIGHT, m) * (1 - smoothT(DUSK - TWILIGHT, DUSK + TWILIGHT, m)); };
+const clockNight = () => clockDay() < 0.5;
+// night.d: how much daylight there is now, 1 full day, 0 full night (in between: dawn or dusk)
+const night = { on: clockNight(), manual: false, clockWas: clockNight(), d: clockDay() };
 setInterval(() => {
   const c = clockNight(); if (c === night.clockWas) return;
-  night.clockWas = c; night.manual = false;                      // the clock has turned: follow it again
-  if (night.on !== c) { night.on = c; applyTime(); }
+  night.clockWas = c; night.manual = false;                      // the clock has turned (6:00 or 18:00): follow it again
   dawnDuskGong();
 }, 30000);
 // at dawn and dusk the temple gong sounds from the Learning Hall (only with the ambience on)
 function dawnDuskGong() { const h = salas.learn, [x, z] = h.toWorld(0, h.D / 2 + 1); sound.gong(x, h.FY + 2, z); }
+// every frame: move toward the light the clock (or the button) asks for
+function timeStep(dt) {
+  const want = night.manual ? (night.on ? 0 : 1) : clockDay();
+  if (!night.manual && night.on !== want < 0.5) { night.on = want < 0.5; nightButton(); }
+  if (Math.abs(want - night.d) < 1e-4) return;
+  const rate = night.manual ? dt / 8 : dt / 2;
+  night.d += Math.max(-rate, Math.min(rate, want - night.d));
+  applyTime();
+}
 const nightObjs = new THREE.Group(); nightObjs.visible = false; scene.add(nightObjs);
+const nightSky = []; // the night sky's materials, faded in at dusk
+const lampGlows = []; // each lamp post's glow, with the point in the dusk at which it comes on
+const duskGlow = { mat: null, mesh: null };
 {
   // the night sky: a deep gradient, stars and the moon
   const g = new THREE.SphereGeometry(295, 32, 16), c = [], pos = g.attributes.position;
   const top = new THREE.Color(0x060b1c), low = new THREE.Color(0x1d2a4a);
   for (let i = 0; i < pos.count; i++) { const y = Math.max(0, pos.getY(i) / 295); const col = low.clone().lerp(top, Math.min(1, y * 1.6)); c.push(col.r, col.g, col.b); }
   g.setAttribute("color", new THREE.Float32BufferAttribute(c, 3));
-  nightObjs.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false })));
+  const skyMat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, transparent: true, depthWrite: false });
+  const skyM = new THREE.Mesh(g, skyMat); skyM.renderOrder = -3; nightObjs.add(skyM); // drawn first, then the stars and moon over it
   const sp = []; let sd = 11; const r = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
   for (let i = 0; i < 900; i++) { const a = r() * Math.PI * 2, y = 0.08 + r() * 0.92, h = Math.sqrt(1 - y * y); sp.push(Math.cos(a) * h * 285, y * 285, Math.sin(a) * h * 285); }
   const sg = new THREE.BufferGeometry(); sg.setAttribute("position", new THREE.Float32BufferAttribute(sp, 3));
-  nightObjs.add(new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xfff6e0, size: 1.6, sizeAttenuation: false, fog: false })));
-  const moon = new THREE.Mesh(new THREE.CircleGeometry(9, 32), new THREE.MeshBasicMaterial({ color: 0xfff3d6, fog: false }));
-  moon.position.set(-120, 150, -170); moon.lookAt(0, 0, 0); nightObjs.add(moon);
+  const starMat = new THREE.PointsMaterial({ color: 0xfff6e0, size: 1.6, sizeAttenuation: false, fog: false, transparent: true, depthWrite: false });
+  const stars = new THREE.Points(sg, starMat); stars.renderOrder = -2; nightObjs.add(stars);
+  const moonMat = new THREE.MeshBasicMaterial({ color: 0xfff3d6, fog: false, transparent: true, depthWrite: false });
+  const moon = new THREE.Mesh(new THREE.CircleGeometry(9, 32), moonMat);
+  moon.position.set(-120, 150, -170); moon.lookAt(0, 0, 0); moon.renderOrder = -1; nightObjs.add(moon);
+  nightSky.push([skyMat, 0.0, 0.75], [starMat, 0.0, 0.35], [moonMat, 0.0, 0.55]); // [material, fully shown below, gone above] in daylight
+  // the golden glow of dawn and dusk: warm at the horizon, fading upward (shown only in the twilight)
+  const gg = new THREE.SphereGeometry(290, 32, 16), gc = [], ga = [], gp = gg.attributes.position;
+  for (let i = 0; i < gp.count; i++) { const y = Math.max(0, gp.getY(i) / 290); const col = new THREE.Color(0xffa04a).lerp(new THREE.Color(0xff6f6a), Math.min(1, y * 2)); gc.push(col.r, col.g, col.b); ga.push(Math.max(0, 1 - y * 2.2)); }
+  gg.setAttribute("color", new THREE.Float32BufferAttribute(gc, 3));
+  const glowSky = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, side: THREE.BackSide, vertexColors: true, uniforms: { uOn: { value: 0 } },
+    vertexShader: "attribute float alpha; varying vec3 vC; varying float vA; void main() { vC = color; vA = alpha; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
+    fragmentShader: "uniform float uOn; varying vec3 vC; varying float vA; void main() { gl_FragColor = vec4(vC, vA * uOn); }" });
+  gg.setAttribute("alpha", new THREE.Float32BufferAttribute(ga, 1));
+  const glowM = new THREE.Mesh(gg, glowSky); glowM.renderOrder = -0.5; scene.add(glowM); duskGlow.mat = glowSky; duskGlow.mesh = glowM;
   // each lamp post: a glow at its head and a soft pool of light on the ground
-  const glowMat = new THREE.MeshBasicMaterial({ color: 0xffd38a });
   const poolTex = canvasTexture(128, 128, (cx, w, h) => { const gr = cx.createRadialGradient(64, 64, 0, 64, 64, 64); gr.addColorStop(0, "rgba(255,196,120,0.75)"); gr.addColorStop(0.45, "rgba(255,170,90,0.28)"); gr.addColorStop(1, "rgba(255,160,80,0)"); cx.fillStyle = gr; cx.fillRect(0, 0, w, h); });
   poolTex.wrapS = poolTex.wrapT = THREE.ClampToEdgeWrapping;
-  const poolMat = new THREE.MeshBasicMaterial({ map: poolTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
   const head = new THREE.SphereGeometry(0.3, 14, 10), pool = new THREE.PlaneGeometry(7, 7);
-  lanternSpots.forEach(([x, z]) => {
-    const gy = groundAt(x, z);
-    const h = new THREE.Mesh(head, glowMat); h.position.set(x, gy + LAMP_HEAD, z); nightObjs.add(h);
-    const p = new THREE.Mesh(pool, poolMat); p.rotation.x = -Math.PI / 2; p.position.set(x, gy + 0.07, z); p.renderOrder = 1; nightObjs.add(p);
+  // they come on one by one at dusk, from the middle of the temple out to the gate and down the road
+  const order = lanternSpots.map((p, i) => [i, Math.hypot(p[0], p[1])]).sort((a, b) => a[1] - b[1]).map(([i]) => i);
+  lanternSpots.forEach(([x, z], i) => {
+    const gy = groundAt(x, z), rank = order.indexOf(i);
+    const glowMat = new THREE.MeshBasicMaterial({ color: 0xffd38a, transparent: true });
+    const poolMat = new THREE.MeshBasicMaterial({ map: poolTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
+    const h = new THREE.Mesh(head, glowMat); h.position.set(x, gy + LAMP_HEAD, z); scene.add(h);
+    const p = new THREE.Mesh(pool, poolMat); p.rotation.x = -Math.PI / 2; p.position.set(x, gy + 0.07, z); p.renderOrder = 1; scene.add(p);
+    lampGlows.push({ x, z, h, p, at: 0.68 - 0.36 * rank / Math.max(1, lanternSpots.length - 1), on: 0 });
   });
 }
-// a few real lights go to the lamp posts nearest him
+// a few real lights go to the lit lamp posts nearest him
 const lampLights = []; if (HIGH) for (let i = 0; i < 3; i++) { const l = new THREE.PointLight(0xffc27a, 0, 11, 2); scene.add(l); lampLights.push(l); }
 let lampLightTimer = 0;
 function placeLampLights(dt) {
-  if (!night.on || !lampLights.length) return;
+  if (night.d > 0.7 || !lampLights.length) return;
   lampLightTimer -= dt; if (lampLightTimer > 0) return; lampLightTimer = 0.25;
-  const near = lanternSpots.map(([x, z]) => [x, z, Math.hypot(x - player.x, z - player.z)]).sort((a, b) => a[2] - b[2]);
-  lampLights.forEach((l, i) => { const q = near[i]; l.position.set(q[0], groundAt(q[0], q[1]) + LAMP_HEAD - 0.2, q[1]); });
+  const near = lampGlows.filter((q) => q.on > 0).map((q) => [q, Math.hypot(q.x - player.x, q.z - player.z)]).sort((a, b) => a[1] - b[1]);
+  lampLights.forEach((l, i) => { const q = near[i] && near[i][0]; if (!q) { l.intensity = 0; return; } l.position.set(q.x, groundAt(q.x, q.z) + LAMP_HEAD - 0.2, q.z); l.intensity = 26 * q.on; });
 }
-// switch everything between day and night
+const lanternMats = [];
+loadProp("lantern").then((src) => { if (src) src.traverse((o) => { if (o.material && o.material.emissive) { o.material.emissive.set(0xff9a3c); lanternMats.push(o.material); } }); applyTime(); });
+function nightButton() {
+  const b = $("btn-night"), n = night.on; if (!b) return;
+  b.setAttribute("aria-pressed", n); b.classList.toggle("on", n); b.firstChild.textContent = n ? "☀️ " : "🌙 ";
+  const lb = b.querySelector(".label"); if (lb) lb.textContent = n ? tx("กลางวัน", "Day") : tx("กลางคืน", "Night");
+}
+// light the temple for how much daylight there is: day, golden dusk or dawn, night
 function applyTime() {
-  const n = night.on;
-  nightObjs.visible = n;
-  if (skyDome) skyDome.visible = !n && !skyHdr;
-  scene.background = n ? null : skyHdr;
-  scene.environmentIntensity = n ? 0.08 : 0.75;
-  hemi.color.set(n ? 0x8fa6d8 : 0xfff2d6); hemi.groundColor.set(n ? 0x1c2433 : 0x6f8f4a); hemi.intensity = n ? 0.32 : (skyHdr ? 0.45 : 0.9);
-  sun.color.set(n ? 0xa9bcff : 0xffd4a0); sun.intensity = n ? 0.45 : 2.3;
-  scene.fog.color.set(n ? 0x0c1428 : 0xf3d2a4); scene.fog.near = n ? 60 : 90; scene.fog.far = n ? 230 : 290;
-  hallLamps.forEach((l) => { l.light.intensity = n ? l.night : l.day; });
-  lampLights.forEach((l) => { l.intensity = n ? 26 : 0; });
-  if (bloom) { bloom.strength = n ? 0.75 : 0.3; bloom.threshold = n ? 0.85 : 1.05; }
-  renderer.toneMappingExposure = n ? 1.05 : 0.95;
-  signMats.forEach((m) => m.color.set(n ? 0x6d6d72 : 0xffffff)); // the signs are unlit: softer at night, readable without glare
-  // the hanging lanterns glow at night
-  loadProp("lantern").then((src) => { if (src) src.traverse((o) => { if (o.material && o.material.emissive) { o.material.emissive.set(0xff9a3c); o.material.emissiveIntensity = night.on ? 0.9 : 0; } }); });
+  const d = night.d, k = 1 - d;
+  const gold = Math.pow(Math.max(0, 1 - Math.abs(2 * d - 1)), 0.8);          // strongest halfway
+  const mix = (day, nite) => nite + (day - nite) * d;
+  const tone = (day, nite, golden, amt) => new THREE.Color(nite).lerp(new THREE.Color(day), d).lerp(new THREE.Color(golden), gold * amt);
+  nightObjs.visible = d < 0.999;
+  nightSky.forEach(([m, lo, hi]) => { m.opacity = 1 - smoothT(lo, hi, d); });
+  if (duskGlow.mat) { duskGlow.mat.uniforms.uOn.value = 0.85 * gold; duskGlow.mesh.visible = gold > 0.001; }
+  if (skyDome) skyDome.visible = d > 0.001 && !skyHdr;
+  scene.background = d > 0.001 ? skyHdr : null;
+  scene.backgroundIntensity = 0.9 * (0.45 + 0.55 * d);
+  scene.environmentIntensity = mix(0.75, 0.08) * (1 - gold * 0.25);
+  hemi.color.copy(tone(0xfff2d6, 0x8fa6d8, 0xffb070, 0.8)); hemi.groundColor.copy(tone(0x6f8f4a, 0x1c2433, 0x7a5a3a, 0.5)); hemi.intensity = mix(skyHdr ? 0.45 : 0.9, 0.32);
+  sun.color.copy(tone(0xffd4a0, 0xa9bcff, 0xff7a30, 0.95)); sun.intensity = mix(2.3, 0.45) + gold * 0.5;
+  scene.fog.color.copy(tone(0xf3d2a4, 0x0c1428, 0xe8915a, 0.85)); scene.fog.near = mix(90, 60); scene.fog.far = mix(290, 230);
+  hallLamps.forEach((l) => { l.light.intensity = l.night + (l.day - l.night) * smoothT(0.3, 0.75, d); }); // the halls light up as dusk deepens
+  lampGlows.forEach((q) => { q.on = smoothT(q.at + 0.03, q.at - 0.03, d); q.h.material.opacity = q.on; q.p.material.opacity = q.on; q.h.visible = q.p.visible = q.on > 0.001; });
+  if (d > 0.7) lampLights.forEach((l) => { l.intensity = 0; });
+  if (bloom) { bloom.strength = mix(0.3, 0.75); bloom.threshold = mix(1.05, 0.85); }
+  renderer.toneMappingExposure = mix(0.95, 1.05);
+  signMats.forEach((m) => m.color.copy(new THREE.Color(0x6d6d72).lerp(new THREE.Color(0xffffff), d))); // the signs are unlit: softer at night, readable without glare
+  lanternMats.forEach((m) => { m.emissiveIntensity = 0.9 * smoothT(0.75, 0.3, d); }); // the hanging lanterns glow at night
   lampLightTimer = 0;
-  sound.setDaylight(n ? 0 : 1);
-  const b = $("btn-night"); if (b) { b.setAttribute("aria-pressed", n); b.classList.toggle("on", n); b.firstChild.textContent = n ? "☀️ " : "🌙 "; const lb = b.querySelector(".label"); if (lb) lb.textContent = n ? tx("กลางวัน", "Day") : tx("กลางคืน", "Night"); }
+  sound.setDaylight(d);
+  nightButton();
 }
 
 /* ---------------- sound: off until the visitor turns it on (charter: no autoplay) ---------------- */
@@ -1798,7 +1844,7 @@ const sound = createSound({ high: HIGH });
   }));
   const trees = [...edgeTrees.map(([x, z]) => [x, 4, z]), [0, 10, 0], ...bushes.map(([x, z]) => [x, 1, z]), [-13, 4, -50], [13, 4, -50]];
   sound.places({ waterfalls: [[0, 4.4, -58.3]], chimes, trees, ponds: ponds.map(({ x, z }) => [x, 0.4, z]), geckos: chimes, moat: (MOAT.r1 + MOAT.r2) / 2 });
-  sound.setDaylight(night.on ? 0 : 1);
+  sound.setDaylight(night.d);
 }
 const onPath = (x, z) => {
   if (Math.hypot(x, z) < 16) return true;
@@ -3048,7 +3094,7 @@ soundBtn.addEventListener("click", () => {
   sound.start().then(syncSound);
 });
 syncSound();
-$("btn-night").addEventListener("click", () => { night.on = !night.on; night.manual = true; applyTime(); dawnDuskGong(); });
+$("btn-night").addEventListener("click", () => { night.on = !night.on; night.manual = true; nightButton(); dawnDuskGong(); });
 applyTime();
 const calmBtn = $("btn-calm");
 const syncCalm = () => { calmBtn.setAttribute("aria-pressed", settings.calmMotion); calmBtn.classList.toggle("on", settings.calmMotion); };
@@ -3140,7 +3186,7 @@ function tick() {
 }
 // one step of the world: movement, animation, camera and the picture
 function frame(dt) {
-  placeLampLights(dt);
+  timeStep(dt); placeLampLights(dt);
   feedStep(dt); fishStep(dt); meritStep(dt); lifeStep(dt);
   if (broom.held && (alms.t >= 0 || kraap.t >= 0 || feed.t >= 0 || shoes.t >= 0 || sit.on || merit.t >= 0)) putBroomBack(); // hands needed elsewhere
   monkTime += dt;
