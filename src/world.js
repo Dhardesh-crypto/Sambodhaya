@@ -210,12 +210,13 @@ const BRIDGE = { zc: (MOAT.r1 + MOAT.r2) / 2, half: (MOAT.r2 - MOAT.r1) / 2 + 2 
     add(new THREE.CylinderGeometry(0.6, 0.6, 0.04, 10), MAT.pad, Math.cos(a) * r, MOAT.water + 0.03, Math.sin(a) * r, scene, false);
   }
 }
-add(new THREE.CylinderGeometry(16, 16, 0.2, 64), P("brick_pavement_02", 11, 11, { color: new THREE.Color(1.75, 1.5, 1.2) }), 0, 0.05, 0, scene, false);
+// paving is laid flush: its surface is only a few centimetres above the grass, where feet walk
+add(new THREE.CylinderGeometry(16, 16, 0.2, 64), P("brick_pavement_02", 11, 11, { color: new THREE.Color(1.75, 1.5, 1.2) }), 0, -0.06, 0, scene, false);
 const paths = []; // for footsteps: stone on paths, grass elsewhere
 const path = (x1, z1, x2, z2, w = 5) => {
   paths.push({ x1, z1, x2, z2, w });
   const dx = x2 - x1, dz = z2 - z1, len = Math.hypot(dx, dz);
-  const m = add(new THREE.BoxGeometry(w, 0.15, len), P("brick_pavement_02", Math.round(w / 3), Math.round(len / 3), { color: new THREE.Color(1.75, 1.5, 1.2) }), (x1 + x2) / 2, 0.06, (z1 + z2) / 2, scene, false);
+  const m = add(new THREE.BoxGeometry(w, 0.15, len), P("brick_pavement_02", Math.round(w / 3), Math.round(len / 3), { color: new THREE.Color(1.75, 1.5, 1.2) }), (x1 + x2) / 2, -0.05, (z1 + z2) / 2, scene, false);
   m.rotation.y = Math.atan2(dx, dz);
 };
 // the roads start inside the plaza circle, so no grass shows where a straight edge meets the curve
@@ -304,6 +305,7 @@ function sala({ x, z, rot = 0, W = 13, D = 10, H = 5.6, walls = true }) {
   add(new THREE.BoxGeometry(W + 1.6, FY - 0.02, D + 1.6), MAT.stoneDark, 0, (FY - 0.02) / 2, 0, g, false);
   add(new THREE.BoxGeometry(W + 0.4, 0.06, D + 0.4), MAT.floor, 0, FY, 0, g, false);
   add(new THREE.BoxGeometry(Math.min(5, W - 2), 0.18, 1), MAT.stoneDark, 0, 0.09, D / 2 + 1.2, g, false);
+  { const [sx, sz] = toWorld(0, D / 2 + 1.2); floors.push({ x: sx, z: sz, c, s, hx: Math.min(5, W - 2) / 2, hz: 0.5, y: 0.18 }); } // the step you step up onto
   floors.push({ x, z, c, s, hx: W / 2 + 0.8, hz: D / 2 + 0.8, y: FY + 0.03, hall: true });
   const colGeo = new THREE.CylinderGeometry(0.28, 0.32, H, 16), capGeo = new THREE.CylinderGeometry(0.42, 0.3, 0.45, 16), footGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.25, 16);
   const column = (lx, lz, solid) => {
@@ -667,7 +669,8 @@ function waterfall(x, zTop, yTop, yPool, width) {
 const journeyStones = [];
 JOURNEY.forEach(([th, en], i) => {
   const x = 17 + i * 3.1, z = 45 - Math.sin(i * 0.55) * 6;
-  add(new THREE.CylinderGeometry(1.5, 1.6, 0.35, 28), MAT.rock, x, 0.18, z, scene, false);
+  add(new THREE.CylinderGeometry(1.5, 1.6, 0.35, 28), MAT.rock, x, 0.175, z, scene, false);
+  floors.push({ x, z, c: 1, s: 0, hx: 1.1, hz: 1.1, y: 0.35 }); // stand on the stone, not in it
   sign(`${i + 1}`, L === "en" ? en : th, "👣", x, 2.2, z, 3.4);
   journeyStones.push({ x, z, i });
 });
@@ -867,7 +870,7 @@ function setModel(obj, mixerClips) {
   if (player.model) player.obj.remove(player.model);
   if (player.vrm) { VRMUtils.deepDispose(player.vrm.scene); player.vrm = null; }
   player.model = obj; player.obj.add(obj);
-  player.mixer = null; player.clips = {}; player.current = null; player.action = null;
+  player.mixer = null; player.clips = {}; player.current = null; player.action = null; player.lift = null;
   player.gait = {};
   if (mixerClips && mixerClips.length) {
     const find = (re) => mixerClips.find((c) => re.test(c.name));
@@ -876,9 +879,23 @@ function setModel(obj, mixerClips) {
     player.clips.run = find(/run|jog|sprint/i);
     if (player.clips.run === player.clips.walk) delete player.clips.run;
     ["walk", "run"].forEach((k) => { if (player.clips[k]) player.gait[k] = measureGait(obj, player.clips[k]); });
+    player.lift = {}; ["idle", "walk", "run"].forEach((k) => { if (player.clips[k]) player.lift[k] = measureLift(obj, player.clips[k]); });
     player.mixer = new THREE.AnimationMixer(obj);
     playClip("idle");
   }
+}
+// How far a clip lowers the feet below where they were measured standing (e.g. bent knees when idle):
+// returns how much to lift the character so the lowest sole rests on the paving surface.
+const PAVING = 0.025;
+function measureLift(obj, clip) {
+  let sk = null; obj.traverse((o) => { if (!sk && o.isSkinnedMesh) sk = o; });
+  if (!sk) return 0;
+  const mixer = new THREE.AnimationMixer(obj), act = mixer.clipAction(clip); act.play();
+  const holderY = obj.position.y; obj.position.y = 0;
+  let low = Infinity; const box = new THREE.Box3(), N = 24;
+  for (let i = 0; i < N; i++) { mixer.setTime(clip.duration * i / N); obj.updateMatrixWorld(true); sk.computeBoundingBox(); box.copy(sk.boundingBox).applyMatrix4(sk.matrixWorld); low = Math.min(low, box.min.y - obj.getWorldPosition(new THREE.Vector3()).y); }
+  mixer.stopAllAction(); mixer.uncacheRoot(obj); obj.position.y = holderY;
+  return PAVING - low;
 }
 // How fast a walk or run clip carries the character, so the clip can be played at the speed that keeps
 // the feet planted: sample a foot through the clip, count its strides and how far it travels.
@@ -1308,6 +1325,9 @@ function tick() {
     limbs.legL.rotation.x = sw; limbs.legR.rotation.x = -sw; limbs.armL.rotation.x = -sw * 0.8; limbs.armR.rotation.x = sw * 0.8;
   } else if (player.mixer) {
     playClip(!moving ? "idle" : player.clips.run && speed > 5 ? "run" : player.clips.walk ? "walk" : "idle");
+    // keep the soles on the paving: each animation has its own lift, eased when switching
+    const lift = player.lift && player.lift[player.current];
+    if (lift != null) player.model.position.y += (lift - player.model.position.y) * Math.min(1, dt * 8);
     const g = player.gait[player.current];
     if (g && player.action) player.action.timeScale = Math.min(2.6, Math.max(0.4, speed / g.speed)); // feet keep pace with the ground
     player.mixer.update(dt);
