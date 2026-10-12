@@ -895,6 +895,23 @@ kinds.forEach(([name, h], k) => {
 }
 
 /* ---------------- the bridge over the moat ---------------- */
+// a gently arched stone bridge whose railings are nagas (ราวนาค): each handrail is the serpent's golden scaled
+// body, rising at both ends of the bridge into a rearing many-headed naga that guards the way; you walk over its arch
+const nagaHeads = [], NAGA_H = 2.0, NAGA_BACK = 1.05; // the serpent's height; how far its middle sits back from the pedestal
+// gold scales with a green-and-red glass inlay, drawn once and repeated along the body
+const nagaScales = (() => {
+  const t = canvasTexture(128, 128, (c, w, h) => {
+    c.fillStyle = "#c9932a"; c.fillRect(0, 0, w, h);
+    for (let row = 0; row < 5; row++) for (let col = -1; col < 5; col++) {
+      const cx = col * 32 + (row % 2) * 16 + 16, cy = row * 28 + 14;
+      c.beginPath(); c.arc(cx, cy, 17, 0, Math.PI); c.fillStyle = (row + col) % 3 === 0 ? "#2f8a5a" : "#e2b347"; c.fill();
+      c.lineWidth = 3; c.strokeStyle = "#7d5512"; c.stroke();
+      if ((row * 3 + col) % 5 === 0) { c.beginPath(); c.arc(cx, cy + 6, 4, 0, Math.PI * 2); c.fillStyle = "#b8302a"; c.fill(); }
+    }
+  });
+  t.repeat.set(26, 3);
+  return new THREE.MeshStandardMaterial({ map: t, metalness: 0.55, roughness: 0.35 });
+})();
 // a gently arched stone bridge with white balustrades and gold lotus-bud posts; you walk over its arch
 {
   const ZC = BRIDGE.zc, H = BRIDGE.half, RISE = 1.1, BW = ROAD; // as wide as the road it carries
@@ -910,18 +927,35 @@ kinds.forEach(([name, h], k) => {
   const white = S(0xfbf6ec, { roughness: 0.8 });
   [-1, 1].forEach((sg) => {
     const x = sg * (BW / 2 - 0.2);
-    for (let i = 0; i <= 8; i++) {
-      const u = -H + 0.4 + (2 * H - 0.8) * i / 8, end = i === 0 || i === 8;
-      const h = end ? 1.5 : 0.95;
-      add(new THREE.BoxGeometry(0.28, h, 0.28), white, x, topY(u) + h / 2, ZC - u);
-      if (end) { const b = add(new THREE.SphereGeometry(0.24, 12, 8), MAT.gold, x, topY(u) + h + 0.2, ZC - u); b.scale.y = 1.4; }
-      else add(new THREE.BoxGeometry(0.34, 0.08, 0.34), MAT.gold, x, topY(u) + h, ZC - u, scene, false);
+    // white balusters carry the serpent's body
+    for (let i = 1; i <= 7; i++) {
+      const u = -H + 0.4 + (2 * H - 0.8) * i / 8;
+      add(new THREE.BoxGeometry(0.28, 0.95, 0.28), white, x, topY(u) + 0.475, ZC - u);
+      add(new THREE.BoxGeometry(0.34, 0.08, 0.34), MAT.gold, x, topY(u) + 0.95, ZC - u, scene, false);
     }
-    [0.85, 0.4].forEach((yy, k) => {
-      const pts = []; for (let i = 0; i <= 20; i++) { const u = -H + 0.4 + (2 * H - 0.8) * i / 20; pts.push(new THREE.Vector3(x, topY(u) + yy, ZC - u)); }
-      add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, k ? 0.05 : 0.08, 8), k ? white : MAT.lacquer, 0, 0, 0, scene, true);
+    const low = []; for (let i = 0; i <= 20; i++) { const u = -H + 0.4 + (2 * H - 0.8) * i / 20; low.push(new THREE.Vector3(x, topY(u) + 0.4, ZC - u)); }
+    add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(low), 40, 0.05, 8), white, 0, 0, 0, scene, true);
+    // the naga's body is the handrail: scaled and golden, gently undulating, with a crest of gold fins along its back;
+    // at each end it rises into a rearing head (the model, on a white pedestal, looks out along the road)
+    const U0 = -H + 0.55, U1 = H - 0.55, body = [];
+    for (let i = 0; i <= 48; i++) { const u = U0 + (U1 - U0) * i / 48; body.push(new THREE.Vector3(x, topY(u) + 1.02 + Math.sin(i / 48 * Math.PI * 6) * 0.07, ZC - u)); }
+    const curve = new THREE.CatmullRomCurve3(body);
+    add(new THREE.TubeGeometry(curve, 160, 0.17, 12), nagaScales, 0, 0, 0, scene, true);
+    for (let i = 1; i < 44; i++) {
+      const t = i / 44, pnt = curve.getPointAt(t), tan = curve.getTangentAt(t);
+      const fin = add(new THREE.ConeGeometry(0.07, 0.24, 4), MAT.gold, pnt.x, pnt.y + 0.18, pnt.z, scene, false);
+      fin.rotation.x = -Math.atan2(tan.y, -tan.z) * 0.6 - 0.35 * Math.sign(-tan.z || 1); fin.scale.set(1, 1, 0.35); // flame-like, leaning back
+    }
+    [[-H + 0.35, 1], [H - 0.35, -1]].forEach(([u, out]) => {   // out: +1 looks toward +z (the outer bank), -1 toward the temple
+      const y = topY(u);
+      add(new THREE.BoxGeometry(0.75, 0.55, 1.0), white, x, y + 0.275, ZC - u, scene, true);
+      add(new THREE.BoxGeometry(0.85, 0.08, 1.1), MAT.gold, x, y + 0.56, ZC - u, scene, false);
+      // the model is a whole serpent in profile, its hood at one end: hood over the pedestal, looking out along the
+      // road, and its body lying back along the handrail
+      nagaHeads.push([x, ZC - u - out * NAGA_BACK, out > 0 ? -Math.PI / 2 : Math.PI / 2, y + 0.6]);
     });
   });
+  props("naga", NAGA_H, nagaHeads, { fallback: () => nagaHeads.forEach(([hx, hz, , hy]) => add(new THREE.ConeGeometry(0.35, 1.6, 8), MAT.gold, hx, hy + 0.8, hz)) });
 }
 
 /* ---------------- small things that make it feel lived in ---------------- */
