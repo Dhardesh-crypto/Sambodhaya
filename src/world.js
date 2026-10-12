@@ -1184,8 +1184,15 @@ function fishStep(dt) {
 // Night: a dark blue sky with stars and a moon, soft moonlight instead of the sun, every lamp post lit (a warm
 // glow at its head and a pool of light on the ground), the halls lit from inside and their lanterns glowing.
 // Real lights are costly, so only a few follow the visitor to the lamp posts nearest him; the rest of the lamps
-// are glow alone. Chosen with the 🌙 button and remembered on this device only.
-const night = { on: read("world-night", false) === true };
+// are glow alone. It follows the clock of the visitor's device: day from 6:00 to 18:00, night otherwise, changing
+// over by itself; the 🌙 button switches by hand for this visit, until the clock's next change (6:00 or 18:00).
+const clockNight = () => { const h = new Date().getHours(); return h < 6 || h >= 18; };
+const night = { on: clockNight(), manual: false, clockWas: clockNight() };
+setInterval(() => {
+  const c = clockNight(); if (c === night.clockWas) return;
+  night.clockWas = c; night.manual = false;                      // the clock has turned: follow it again
+  if (night.on !== c) { night.on = c; applyTime(); }
+}, 30000);
 const nightObjs = new THREE.Group(); nightObjs.visible = false; scene.add(nightObjs);
 {
   // the night sky: a deep gradient, stars and the moon
@@ -2481,7 +2488,7 @@ soundBtn.addEventListener("click", () => {
   sound.start().then(syncSound);
 });
 syncSound();
-$("btn-night").addEventListener("click", () => { night.on = !night.on; write("world-night", night.on); applyTime(); });
+$("btn-night").addEventListener("click", () => { night.on = !night.on; night.manual = true; applyTime(); });
 applyTime();
 const calmBtn = $("btn-calm");
 const syncCalm = () => { calmBtn.setAttribute("aria-pressed", settings.calmMotion); calmBtn.classList.toggle("on", settings.calmMotion); };
