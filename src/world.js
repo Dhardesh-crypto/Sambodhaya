@@ -733,6 +733,44 @@ const DONATE = { x: 7, z: 36.95 };
   colliders.push({ x: DONATE.x, z: DONATE.z, r: 0.6 });
 }
 
+/* ---------------- the alms round (ตักบาตร) on the road outside the gate ---------------- */
+// Four monks stand in a row on the entrance road, most senior first, nearest the gate. On an alms round the
+// robe covers both shoulders (ห่มคลุม), unlike the bare right shoulder inside the temple. Standing in front of
+// one and pressing E, the boy offers a ball of sticky rice: he raises it to his forehead, places it in the
+// bowl with both hands, then gives the high wai. Nothing is counted; the rice simply stays in the bowl.
+const ALMS_ROW = { x: 1.6, z0: 44, dz: 3.4, yaw: -Math.PI / 2 };   // across the road, facing the far side
+const ALMS_MONKS = [["alms-elder", 3.3], ["alms-monk", 3.3], ["alms-young", 3.35], ["alms-novice", 2.95]]; // model, standing height
+// each model's bowl, as fractions of its height in its own front-facing space: centre forward, rim height, radius (measured from the side)
+const ALMS_BOWL = { "alms-elder": [0.10, 0.674, 0.067], "alms-monk": [0.10, 0.674, 0.067], "alms-young": [0.10, 0.674, 0.067], "alms-novice": [0.10, 0.674, 0.067] };
+const almsMonks = [];
+const RICE_R = 0.1, riceGeo = new THREE.SphereGeometry(RICE_R, 16, 12), riceMat = S(0xf7f1e1, { roughness: 0.95 });
+const riceBall = () => { const m = new THREE.Mesh(riceGeo, riceMat); m.scale.y = 0.85; m.castShadow = true; return m; };
+ALMS_MONKS.forEach(([name, H], i) => {
+  const x = ALMS_ROW.x, z = ALMS_ROW.z0 + i * ALMS_ROW.dz, yaw = ALMS_ROW.yaw;
+  const pivot = new THREE.Group(); pivot.position.set(x, groundAt(x, z), z); pivot.rotation.y = yaw; scene.add(pivot);
+  const lean = new THREE.Group(); pivot.add(lean);                   // a slight bow toward the giver as he receives
+  const [bf, by, br] = ALMS_BOWL[name];
+  const m = { name, x, z, yaw, pivot, lean, bowl: { f: bf * H, y: by * H, r: br * H }, rice: [] };
+  almsMonks.push(m); colliders.push({ x, z, r: 0.75 });
+  propJobs.push(loadProp(name).then((src) => {
+    if (!src) { pivot.visible = false; almsMonks.splice(almsMonks.indexOf(m), 1); return; }
+    const copy = src.clone();
+    copy.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; if (o.material) o.material.envMapIntensity = 1; } });
+    const fig = fitTo(copy, H); fig.rotation.y = MONK_TURN; lean.add(fig);
+    monkFigures.push({ o: fig, ph: monkFigures.length * 2.1 });
+  }));
+});
+// the rice: a silver bowl of sticky-rice balls on a low table at the roadside, where the giver stands
+{
+  const tx0 = -2.6, tz0 = ALMS_ROW.z0 + 1.5 * ALMS_ROW.dz, gy = groundAt(tx0, tz0);
+  props("table", 0.8, [[tx0, tz0, Math.PI / 2, gy]]);
+  add(new THREE.CylinderGeometry(0.42, 0.3, 0.22, 24, 1, true), S(0xd9dde2, { metalness: 0.9, roughness: 0.3, side: THREE.DoubleSide }), tx0, gy + 0.92, tz0, scene, false);
+  [[0, 0], [0.15, 0.1], [-0.14, 0.08], [0.05, -0.16], [-0.1, -0.12]].forEach(([dx, dz2], k) => { const b = riceBall(); b.position.set(tx0 + dx, gy + 0.98 + (k ? 0 : 0.06), tz0 + dz2); scene.add(b); });
+  colliders.push({ x: tx0, z: tz0, r: 0.9 });
+}
+const ALMS_PLACE = { id: "alms", icon: "🍚", th: "ใส่บาตร", en: "Give alms", sub: ["ถวายข้าวเหนียว แล้วไหว้พระ", "Offer sticky rice, then wai"] };
+const ALMS_STAND = 1.25; // how far in front of the monk the giver stands
+
 /* ---------------- scattered trees around the edge ---------------- */
 const edgeTrees = [];
 for (let i = 0; i < 40; i++) {
@@ -1151,6 +1189,91 @@ function startKraap() {
   if (player.mixer) playClip("idle", 0.4);
 }
 
+/* ---------------- giving alms (ตักบาตร) ---------------- */
+// He steps up to the monk and faces him, holds the rice ball in both hands, raises it to his forehead,
+// places it in the bowl (bending a little, his eyes on the bowl), lowers his hands and then gives the high wai.
+// The monk leans in slightly to receive. Posed on the skeleton, like the wai.
+const alms = { t: -1, m: null, spot: null, faceYaw: 0, item: null, placed: false };
+const ALMS_DUR = 4.0, ALMS_RELEASE = 3.05;
+function almsState(t) {
+  return {
+    hold: smooth(0.4, 1.0, t) * (1 - smooth(3.3, 3.9, t)),   // the rice in both hands
+    raise: smooth(1.0, 1.6, t) * (1 - smooth(2.3, 3.0, t)),  // up to the forehead
+    place: smooth(2.3, 3.0, t) * (1 - smooth(3.3, 3.9, t)),  // into the bowl
+  };
+}
+function startAlms(m) {
+  if (alms.t >= 0 || kraap.t >= 0 || !m) return;
+  if (sit.on) { sit.on = false; sit.rise = 0; sit.faceYaw = null; }
+  wai.t = -1;
+  alms.m = m; alms.spot = { x: m.x + Math.sin(m.yaw) * ALMS_STAND, z: m.z + Math.cos(m.yaw) * ALMS_STAND };
+  alms.faceYaw = m.yaw + Math.PI;
+  alms.item = riceBall(); alms.item.visible = false; scene.add(alms.item); alms.placed = false;
+  alms.t = 0;
+  if (player.mixer) playClip("idle", 0.4);
+}
+function almsStep(dt) {
+  alms.t += dt;
+  const st = almsState(alms.t);
+  if (alms.m) alms.m.lean.rotation.x = 0.07 * st.place;                    // the monk leans in to receive
+  if (alms.t >= ALMS_RELEASE && !alms.placed && alms.item) {             // let go: the rice stays in the bowl
+    const m = alms.m, k = m.rice.length;
+    m.lean.add(alms.item);
+    const a = k * 2.4, d = k ? m.bowl.r * 0.45 : 0;
+    alms.item.position.set(Math.sin(a) * d, m.bowl.y - RICE_R * 0.35 + Math.min(k, 3) * 0.02, m.bowl.f + Math.cos(a) * d);
+    alms.item.visible = true; alms.item.scale.set(1, 0.85, 1);
+    m.rice.push(alms.item); if (m.rice.length > 4) m.lean.remove(m.rice.shift()); // a full bowl stays a full bowl
+    alms.placed = true;
+  }
+  if (alms.t > ALMS_DUR) {                                               // then the high wai to the monk
+    if (!alms.placed && alms.item) scene.remove(alms.item);
+    alms.t = -1; alms.item = null; if (alms.m) alms.m.lean.rotation.x = 0;
+    wai.level = "buddha"; wai.dur = WAI_LEVELS.buddha.dur; wai.faceYaw = alms.faceYaw; wai.t = 0;
+  }
+}
+const ALMS_CHEST = { fwd: 0.42, up: -0.2 };  // where the rice is held, from the upper spine
+const ALMS_GRIP = 0.026;                       // the palms press into the soft rice a little (measured gap otherwise ~2.5 cm)
+const ALMS_BROW = { up: 0.2, fwd: 0.26 };      // raised to the forehead: above and in front of the head bone, square to the body
+function poseAlms(model, B, st) {
+  // square to the monk: the idle stands with the hips turned; they turn to face him, and the idle's
+  // twist of the shoulders and glance of the head ease out
+  const rest = restPose(model), w = Math.max(st.hold, st.place);
+  const up = new THREE.Vector3(0, 1, 0), fwd = new THREE.Vector3(Math.sin(player.yaw), 0, Math.cos(player.yaw));
+  const side = new THREE.Vector3().crossVectors(up, fwd), axis = side.clone();  // toward his left; the bow turns about it
+  if (B.Hips && B.LeftUpLeg && B.RightUpLeg) {
+    model.updateMatrixWorld(true);
+    const hipLine = B.LeftUpLeg.getWorldPosition(new THREE.Vector3()).sub(B.RightUpLeg.getWorldPosition(new THREE.Vector3())).setY(0).normalize();
+    turnBone(B.Hips, _q2.slerpQuaternions(_q1.identity(), new THREE.Quaternion().setFromUnitVectors(hipLine, side), w));
+  }
+  if (rest) ["Spine", "Spine01", "Spine02", "neck", "Head"].forEach((n) => { if (B[n] && rest[n]) B[n].quaternion.slerp(rest[n], w); });
+  model.updateMatrixWorld(true);
+  // the head meets the raised rice; bending a little and looking down into the bowl to place it
+  const bow = Math.max(0.3 * st.raise, st.place);
+  [["Spine02", 0.06], ["Spine01", 0.06], ["Spine", 0.05], ["neck", 0.14], ["Head", 0.14]].forEach(([n, a]) => { if (B[n]) turnBone(B[n], _q2.setFromAxisAngle(axis, a * bow)); });
+  model.updateMatrixWorld(true);
+  const shape = handShape(model); if (!shape || !alms.m) return;
+  const scale = model.getWorldScale(new THREE.Vector3()).y;
+  const chest = B.Spine02.getWorldPosition(new THREE.Vector3()).addScaledVector(fwd, ALMS_CHEST.fwd).addScaledVector(up, ALMS_CHEST.up);
+  const brow = B.Head.getWorldPosition(new THREE.Vector3()).addScaledVector(up, ALMS_BROW.up).addScaledVector(fwd, ALMS_BROW.fwd + RICE_R);
+  const m = alms.m; m.lean.updateMatrixWorld(true);
+  const bowl = m.lean.localToWorld(new THREE.Vector3(0, m.bowl.y + RICE_R * 0.8, m.bowl.f));
+  const item = chest.clone().lerp(brow, st.raise).lerp(bowl, st.place);
+  if (!alms.placed && alms.item) { alms.item.position.copy(item); alms.item.visible = st.hold > 0.3; }
+  // both hands cup the rice from either side: palms toward each other, fingers forward and a little down
+  const F = fwd.clone().addScaledVector(up, -0.35 + 0.6 * st.raise).normalize();
+  [["Left", 1], ["Right", -1]].forEach(([s, sg]) => {
+    const hs = shape[s], inward = side.clone().multiplyScalar(-sg);
+    const P = inward.clone().addScaledVector(F, -inward.dot(F)).normalize();
+    const Q = basisQuat(hs.finger, hs.palm, F, P);
+    let reach = -Infinity, along = 0;
+    for (const pt of hs.points) { _v1.copy(pt).applyQuaternion(Q); reach = Math.max(reach, _v1.dot(inward)); along += _v1.dot(F); }
+    along /= hs.points.length;
+    const target = item.clone().addScaledVector(inward, -(RICE_R - ALMS_GRIP + reach * scale)).addScaledVector(F, -along * scale);
+    const pole = new THREE.Vector3().addScaledVector(up, -1).addScaledVector(side, sg * 0.6).addScaledVector(fwd, -0.2);
+    armTo(B, s, target, Q, pole, st.hold);
+  });
+}
+
 /* ---------------- the wai: palms together, a small bow ---------------- */
 // No ready-made animation exists for a Thai wai, so it is posed on the boy's own skeleton: the
 // arms are placed with a two-bone reach solver so the palms meet in front of the chest with the
@@ -1332,6 +1455,7 @@ function poseOverlays(model, hands, bow, sitW) {
   const B = boneMap(model);
   if (!B.Spine || !B.LeftArm || !B.RightArm || !B.Head) return;
   if (kraap.t >= 0 && kraap.spot) { waiBegin(B); poseKraap(model, B, kraapState(kraap.t)); waiMark(B); return; }
+  if (alms.t >= 0 && alms.m) { waiBegin(B); poseAlms(model, B, almsState(alms.t)); waiMark(B); return; }
   if (hands <= 0 && bow <= 0 && sitW <= 0.001) { waiEnd(B); return; }
   waiBegin(B);
   if (sitW > 0.001) poseSit(model, B, sitW);
@@ -1676,7 +1800,7 @@ function showPrompt(p) {
   if (!p) { el.hidden = true; return; }
   $("prompt-name").textContent = p.icon + " " + placeName(p);
   $("prompt-sub").textContent = p.stone != null ? (p.board ? tx("ป้ายเรื่องที่ ", "Story board ") : tx("เรื่องที่ ", "Story ")) + (p.stone + 1) : p.sub[L === "en" ? 1 : 0];
-  $("prompt-go").textContent = p.id === "bell" ? tx("ตี", "Strike") : p.id === "donate" ? tx("เปิด", "Open") : tx("เข้า", "Visit");
+  $("prompt-go").textContent = p.id === "bell" ? tx("ตี", "Strike") : p.id === "donate" ? tx("เปิด", "Open") : p.id === "alms" ? tx("ใส่บาตร", "Offer") : tx("เข้า", "Visit");
   el.hidden = false;
 }
 $("prompt-go").addEventListener("click", () => near && openPlace(near));
@@ -1729,6 +1853,7 @@ function restoreSpot() {
 function openPlace(p) {
   if (p.id === "bell") { ringBell(); return; }
   if (p.id === "donate") { openDonate(); return; }
+  if (p.id === "alms") { startAlms(p.monk); return; }
   if (p.stone != null) {
     const n = p.stone + 1;
     openDialog(`👣 ${n} · ${esc(L === "en" ? JOURNEY[p.stone][1] : JOURNEY[p.stone][0])}`,
@@ -1766,7 +1891,7 @@ $("dlg").addEventListener("click", (e) => {
 });
 $("btn-places").addEventListener("click", () => openPlaces(false));
 $("btn-help").addEventListener("click", () => openDialog(tx("❔ วิธีเดินในวัด", "❔ How to walk around"),
-  `<p>${tx("⌨️ W A S D หรือปุ่มลูกศร = เดิน • Shift = วิ่ง • Space = กระโดด • E = เข้าศาลาที่อยู่ใกล้ • G = เรียกหมาวัด • Q = ไหว้ 🙏 • C = นั่งสมาธิ 🧘 (เดินเพื่อลุก) • K = กราบพระ 🙇 (หน้าพระพุทธรูป)", "⌨️ W A S D or arrow keys = walk • Shift = run • Space = jump • E = visit the nearby hall • G = call the temple dog • Q = wai 🙏 • C = sit 🧘 (walk to stand up) • K = pay tribute 🙇 (before a Buddha image)")}</p>
+  `<p>${tx("⌨️ W A S D หรือปุ่มลูกศร = เดิน • Shift = วิ่ง • Space = กระโดด • E = เข้าศาลาที่อยู่ใกล้ • G = เรียกหมาวัด • Q = ไหว้ 🙏 • C = นั่งสมาธิ 🧘 (เดินเพื่อลุก) • K = กราบพระ 🙇 (หน้าพระพุทธรูป) • ใส่บาตร 🍚: ยืนหน้าพระที่ถนนหน้าประตูวัด แล้วกด E", "⌨️ W A S D or arrow keys = walk • Shift = run • Space = jump • E = visit the nearby hall • G = call the temple dog • Q = wai 🙏 • C = sit 🧘 (walk to stand up) • K = pay tribute 🙇 (before a Buddha image) • give alms 🍚: stand before a monk on the road outside the gate and press E")}</p>
    <p>${tx("🖱️ ลากเมาส์ = หมุนมุมมอง • ล้อเมาส์ = ซูม • คลิกหมาวัดหรือศาลา = เปิด", "🖱️ Drag = turn the view • Wheel = zoom • Click the dog or a hall = open it")}</p>
    <p>${tx("📱 จอยซ้ายล่าง = เดิน • ลากจอ = หมุนมุมมอง • ปุ่ม E = เข้า", "📱 Bottom-left stick = walk • Drag the screen = turn the view • E button = visit")}</p>
    <p>${tx("🔈 ปุ่มเสียง = เปิดเสียงนก ลม น้ำตก และกระดิ่งชายคา (ปิดอยู่จนกว่าจะกด) • 🔔 เดินไปที่ระฆังแล้วกด E เพื่อตีระฆัง", "🔈 Sound button = birds, breeze, the waterfall and the roof bells (off until you press it) • 🔔 Walk to the bell and press E to strike it")}</p>
@@ -1879,8 +2004,9 @@ let walkPhase = 0;
 function resize() { renderer.setSize(innerWidth, innerHeight, false); if (composer) composer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
 addEventListener("resize", resize); resize();
 
+let debugPause = false; // ?debug only: time stands still (the picture still redraws) while a test poses a moment
 function tick() {
-  frame(Math.min(clock.getDelta(), 0.05));
+  frame(debugPause ? 0 : Math.min(clock.getDelta(), 0.05));
   requestAnimationFrame(tick);
 }
 // one step of the world: movement, animation, camera and the picture
@@ -1893,13 +2019,19 @@ function frame(dt) {
     if (keys.KeyW || keys.ArrowUp) fz -= 1; if (keys.KeyS || keys.ArrowDown) fz += 1;
     if (keys.KeyA || keys.ArrowLeft) fx -= 1; if (keys.KeyD || keys.ArrowRight) fx += 1;
     fx += joy.x; fz += joy.y;
-    if ((keys.Space) && !sit.on && sit.rise <= 0 && kraap.t < 0 && player.y <= groundAt(player.x, player.z) + 0.01) player.vy = 9;
+    if ((keys.Space) && !sit.on && sit.rise <= 0 && kraap.t < 0 && alms.t < 0 && player.y <= groundAt(player.x, player.z) + 0.01) player.vy = 9;
   }
   if (kraap.t >= 0) { // paying tribute: stay put (it ends by itself); glide to the spot and face the image first
     fx = fz = 0;
     kraap.t += dt; if (kraap.t > KRAAP_DUR) { kraap.t = -1; kraap.touch = null; }
     if (kraap.spot && kraap.t >= 0 && kraap.t < 0.8) { player.x += (kraap.spot.x - player.x) * Math.min(1, dt * 8); player.z += (kraap.spot.z - player.z) * Math.min(1, dt * 8); }
     if (kraap.faceYaw != null) { let dy = kraap.faceYaw - player.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); player.yaw += dy * Math.min(1, dt * 8); }
+  }
+  if (alms.t >= 0) { // giving alms: stay put (it ends by itself); step up to the monk and face him first
+    fx = fz = 0;
+    if (alms.t < 0.8) { player.x += (alms.spot.x - player.x) * Math.min(1, dt * 8); player.z += (alms.spot.z - player.z) * Math.min(1, dt * 8); }
+    let dy = alms.faceYaw - player.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); player.yaw += dy * Math.min(1, dt * 8);
+    almsStep(dt);
   }
   if (sit.on || sit.rise > 0) { // seated (or getting up): stay put; wanting to walk stands him up
     if (sit.on && Math.hypot(fx, fz) > 0.3) standUp();
@@ -1940,7 +2072,7 @@ function frame(dt) {
       player.model.position.y = -1.05 * sit.w + (sit.spot ? sit.spot.top * sit.w : 0);
     } else if (player.model.position.y < 0) player.model.position.y = 0;
   } else if (player.mixer) {
-    if (kraap.t >= 0) playClip("idle", 0.4);
+    if (kraap.t >= 0 || alms.t >= 0) playClip("idle", 0.4);
     else if (sit.on && player.clips.sit) playClip("sit", 1.2);
     else if (sit.rise > 0) playClip("idle", 1.0);
     else playClip(!moving ? "idle" : player.clips.run && speed > 5 ? "run" : player.clips.walk ? "walk" : "idle");
@@ -2016,8 +2148,9 @@ function frame(dt) {
   for (const s of journeyStones) { const d = Math.hypot(player.x - s.x, player.z - s.z); if (d < 2.6 && d < bestD) { best = { ...PLACES.find((p) => p.id === "journey"), stone: s.i }; bestD = d; } }
   if (Math.hypot(player.x - BELL[0], player.z - BELL[1]) < 3.6 && 3 < bestD) { best = BELL_PLACE; bestD = 3; }
   { const d = Math.hypot(player.x - DONATE.x, player.z - (DONATE.z + 0.6)); if (d < 2.4 && d < bestD) { best = DONATE_PLACE; bestD = d; } } // only when standing at the box
+  for (const m of almsMonks) { const d = Math.hypot(player.x - (m.x + Math.sin(m.yaw) * ALMS_STAND), player.z - (m.z + Math.cos(m.yaw) * ALMS_STAND)); if (d < 1.5 && d < bestD) { best = { ...ALMS_PLACE, monk: m }; bestD = d; } }
   for (const s of boards) { const d = Math.hypot(player.x - s.x, player.z - s.z); if (d < 1.9 && d < bestD) { best = { ...PLACES.find((p) => p.id === "learn"), stone: s.i, board: true }; bestD = d; } }
-  if ((best && best.id) !== (near && near.id) || (best && best.stone) !== (near && near.stone)) { near = best; showPrompt(near); }
+  if ((best && best.id) !== (near && near.id) || (best && best.stone) !== (near && near.stone) || (best && best.monk) !== (near && near.monk)) { near = best; showPrompt(near); }
 
   // camera follows
   const cx = player.x + Math.sin(camYaw) * Math.cos(camPitch) * camDist;
@@ -2052,7 +2185,7 @@ document.fonts.load("64px Itim").then(() => document.fonts.load("36px Mali")).ca
 });
 camYaw = 0; camera.position.set(0, 8, 105);
 restoreSpot(); // back from a page of the site: stand where you were
-if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
+if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, alms, startAlms, almsState, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
 Promise.race([Promise.all(propJobs), new Promise((r) => setTimeout(r, 7000))]).then(() => {
   $("loading").hidden = true;
   canvas.focus();
