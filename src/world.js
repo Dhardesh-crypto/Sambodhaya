@@ -141,8 +141,10 @@ function props(name, h, list, { fallback, shadow = true, parent = scene, extra =
   if (extra && !HIGH) return Promise.resolve(); // purely decorative: skipped in light mode
   const job = loadProp(name).then((src) => {
     if (!src) { if (fallback) fallback(); return; }
-    src.traverse((o) => { if (o.isMesh) { o.castShadow = shadow; o.receiveShadow = true; if (o.material) o.material.envMapIntensity = 1; } });
-    const base = fitTo(src, h);
+    // work on a copy: the same model may be placed again elsewhere at another size
+    const copy = src.clone();
+    copy.traverse((o) => { if (o.isMesh) { o.castShadow = shadow; o.receiveShadow = true; if (o.material) o.material.envMapIntensity = 1; } });
+    const base = fitTo(copy, h);
     list.forEach(([x, z, r = 0, y = 0]) => { const c = base.clone(); c.position.set(x, y, z); c.rotation.y = r; parent.add(c); });
   });
   propJobs.push(job); return job;
@@ -398,78 +400,13 @@ PLACES.forEach((p) => {
 });
 sign(tx("ลานกลาง", "Central Courtyard"), tx("อยากไปไหนวันนี้?", "Where would you like to go today?"), "🌳", 0, 21, 0, 8);
 
-/* ---- Learning Hall: eight story boards (U01–U08, approved titles) open the matching lesson.
-        At the front of the hall stands a Dhamma wheel, not a statue. ---- */
-{
-  const h = salas.learn, { g, FY, D } = h;
-  add(new THREE.BoxGeometry(4.4, 1, 1.8), MAT.lacquer, 0, FY + 0.5, -D / 2 + 1.2, g);
-  add(new THREE.BoxGeometry(4.5, 0.1, 1.9), MAT.gold, 0, FY + 1.02, -D / 2 + 1.2, g, false);
-  add(new THREE.BoxGeometry(2.6, 0.8, 1.1), MAT.lacquer, 0, FY + 1.45, -D / 2 + 0.9, g);
-  add(new THREE.BoxGeometry(2.7, 0.08, 1.2), MAT.gold, 0, FY + 1.87, -D / 2 + 0.9, g, false);
-  h.block(0, -D / 2 + 1.2, 2.4, 1.1);
-  const wheel = new THREE.Group(); wheel.position.set(0, FY + 3.25, -D / 2 + 0.85); g.add(wheel);
-  wheel.add(new THREE.Mesh(new THREE.TorusGeometry(1.05, 0.08, 12, 48), MAT.gold));
-  wheel.add(new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.06, 10, 24), MAT.gold));
-  for (let i = 0; i < 8; i++) { const sp = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.8, 6), MAT.gold); const a = i * Math.PI / 4; sp.position.set(Math.cos(a) * 0.66, Math.sin(a) * 0.66, 0); sp.rotation.z = a - Math.PI / 2; wheel.add(sp); }
-  for (let i = 0; i < 8; i++) { const k = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), MAT.gold); const a = i * Math.PI / 4 + Math.PI / 8; k.position.set(Math.cos(a) * 1.18, Math.sin(a) * 1.18, 0); wheel.add(k); }
-  add(new THREE.CylinderGeometry(0.08, 0.12, 1.1, 8), MAT.gold, 0, FY + 2.15, -D / 2 + 0.85, g, false);
-  wheel.traverse((o) => { o.castShadow = true; });
-  add(new THREE.BoxGeometry(3.2, 3.6, 0.05), S(0x9b2a1d, { roughness: 0.9 }), 0, FY + 3.4, -D / 2 + 0.24, g, false);
-  add(new THREE.BoxGeometry(3.3, 0.12, 0.07), MAT.gold, 0, FY + 5.2, -D / 2 + 0.25, g, false);
-  [-1.6, -1.1, 1.1, 1.6].forEach((x) => candle(g, x, FY + 1.05, -D / 2 + 1.9));
-  const altarLight = new THREE.PointLight(0xffb066, 18, 9, 2); altarLight.position.set(0, FY + 2.6, -D / 2 + 2.6); g.add(altarLight);
-  const spots = [["left", 2.6], ["left", -0.1], ["left", -2.8], ["back", -3.9], ["back", 3.9], ["right", -2.8], ["right", -0.1], ["right", 2.6]];
-  spots.forEach(([side, u], i) => {
-    const tex = boardTexture({ head: tx("เรื่องที่ ", "Story ") + (i + 1), icon: "👣", title: L === "en" ? JOURNEY[i][1] : JOURNEY[i][0], foot: tx("เดินมาใกล้ ๆ แล้วกด E", "Walk close and press E") });
-    boards.push({ ...wallBoard(h, side, u, tex), i });
-  });
-  for (let r = 0; r < 3; r++) for (let c = -2; c <= 2; c++) if (c !== 0) cushion(h, c * 1.5, -1.2 + r * 1.6);
-  props("candles", 0.9, [[-1.6, -D / 2 + 0.95, 0, FY + 1.9], [1.6, -D / 2 + 0.95, 0, FY + 1.9]], { parent: g });
-  props("lotus", 0.7, [[0, -D / 2 + 2.05, 0, FY + 1.05]], { parent: g });
-  props("table", 0.8, [[-4.6, 3.4, Math.PI / 2, FY]], { parent: g });
-  hangLanterns(h, [[-3.5, 1], [3.5, 1], [0, 3.2]]);
-}
-
-/* ---- Evidence Library: shelves of palm-leaf manuscripts, reading tables ---- */
-{
-  const h = salas.library, { g, FY, W, D } = h;
-  // the shelf model is built facing +x: a quarter turn makes it face into the room
-  const Q = -Math.PI / 2;
-  props("bookshelf", 2.7, [[-4, -D / 2 + 0.75, Q, FY], [4, -D / 2 + 0.75, Q, FY], [-W / 2 + 0.75, -1.5, Q + Math.PI / 2, FY], [W / 2 - 0.75, -1.5, Q - Math.PI / 2, FY], [-W / 2 + 0.75, 1.8, Q + Math.PI / 2, FY], [W / 2 - 0.75, 1.8, Q - Math.PI / 2, FY]], { parent: g });
-  h.block(-4, -D / 2 + 0.75, 1.3, 0.6); h.block(4, -D / 2 + 0.75, 1.3, 0.6);
-  h.block(-W / 2 + 0.75, 0.15, 0.6, 2.9); h.block(W / 2 - 0.75, 0.15, 0.6, 2.9);
-  wallBoard(h, "back", 0, boardTexture({ head: tx("หอหลักฐาน", "Evidence Library"), icon: "📚", title: tx("ดูต้นทาง หลักฐาน และสถานะการตรวจ", "Sources, evidence and checking status"), foot: tx("📜 ต้นทาง · 📝 คำแปล · 💡 คำอธิบาย · 🕯️ ยังรอตรวจ", "📜 source · 📝 translation · 💡 explanation · 🕯️ under review"), wide: true }), 3, 2.5, 2.7);
-  props("table", 0.8, [[-1.8, 1, 0, FY], [1.8, 1, 0, FY]], { parent: g });
-  [[-1.8, 2.2], [1.8, 2.2], [-1.8, -0.2], [1.8, -0.2]].forEach(([lx, lz]) => cushion(h, lx, lz));
-  h.post(-1.8, 1, 0.8); h.post(1.8, 1, 0.8);
-  hangLanterns(h, [[-3, 0], [3, 0]]);
-}
-
-/* ---- Media Hall: the Sambodhaya wheel (image used unchanged) on the back wall, benches to sit and look ---- */
-{
-  const h = salas.media, { g, FY, D } = h;
-  new THREE.TextureLoader().load("img/sambodhaya-wheel.png", (t) => {
-    t.colorSpace = THREE.SRGBColorSpace;
-    const board = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 4.2), new THREE.MeshBasicMaterial({ map: t, toneMapped: false }));
-    const frame = new THREE.Mesh(new THREE.BoxGeometry(5, 4.6, 0.15), MAT.gold);
-    const gp = new THREE.Group(); gp.add(frame); board.position.z = 0.08; gp.add(board);
-    gp.position.set(0, FY + 2.95, -D / 2 + 0.3); g.add(gp);
-  });
-  wallBoard(h, "left", -1, boardTexture({ icon: "📖", title: tx("อ่าน", "Read") }), 1.5, 1.9);
-  wallBoard(h, "left", 2, boardTexture({ icon: "🎧", title: tx("ฟัง", "Listen") }), 1.5, 1.9);
-  wallBoard(h, "right", -1, boardTexture({ icon: "🎬", title: tx("ดู", "Watch") }), 1.5, 1.9);
-  wallBoard(h, "right", 2, boardTexture({ icon: "🕯️", title: tx("ยังรอตรวจ", "Under review"), foot: tx("ภาพวงล้อเป็นสื่ออธิบายของวัด", "The wheel is the temple's explanatory media") }), 1.5, 1.9);
-  props("bench", 1.1, [[-1.9, 0, Math.PI, FY], [1.9, 0, Math.PI, FY], [-1.9, 2.4, Math.PI, FY], [1.9, 2.4, Math.PI, FY]], { parent: g });
-  [[-1.9, 0], [1.9, 0], [-1.9, 2.4], [1.9, 2.4]].forEach(([lx, lz]) => h.block(lx, lz, 1.1, 0.4));
-  hangLanterns(h, [[-3, 1], [3, 1]]);
-}
-
-/* ---- Universal Hall: languages and access, with the hall's shrine ----
+/* ---- The shrine, shared by the Learning Hall and the Universal Hall ----
    Seating follows temple custom: visitors and students sit on the floor; teachers and monks sit on a
    raised platform along the back wall; the Buddha image sits on a stepped altar on that platform,
-   always the highest of all. The platform is not walkable, as lay visitors don't step onto it. */
-{
-  const h = salas.access, { g, FY, W, D } = h;
+   always the highest of all. The platform is not walkable, as lay visitors don't step onto it.
+   Returns the local z of the platform's front edge. */
+function shrine(h) {
+  const { g, FY, W, D } = h;
   const PH = 0.6, PD = 2.8, pz = -D / 2 + 0.2 + PD / 2;     // teachers' platform: height, depth, centre
   const top = FY + PH;
   add(new THREE.BoxGeometry(W - 0.8, PH, PD), MAT.lacquer, 0, FY + PH / 2, pz, g);
@@ -512,6 +449,62 @@ sign(tx("ลานกลาง", "Central Courtyard"), tx("อยากไปไ
   props("vase", 0.7, [[-0.75, az - 0.1, 0, top + 1.13], [0.75, az - 0.1, 0, top + 1.13]], { parent: g });
   props("lotus", 0.45, [[0, az + 0.55, 0, top + 0.58]], { parent: g });
   const shrineLight = new THREE.PointLight(0xffc27a, 10, 7, 2); shrineLight.position.set(0, top + 2.4, az + 1.6); g.add(shrineLight);
+  return pz + PD / 2;
+}
+
+/* ---- Learning Hall: the shrine at the back, and eight story boards (U01–U08, approved titles)
+        along the side walls that open the matching lesson ---- */
+{
+  const h = salas.learn;
+  shrine(h);
+  const spots = [["left", 4.2], ["left", 2.2], ["left", 0.2], ["left", -1.8], ["right", -1.8], ["right", 0.2], ["right", 2.2], ["right", 4.2]];
+  spots.forEach(([side, u], i) => {
+    const tex = boardTexture({ head: tx("เรื่องที่ ", "Story ") + (i + 1), icon: "👣", title: L === "en" ? JOURNEY[i][1] : JOURNEY[i][0], foot: tx("เดินมาใกล้ ๆ แล้วกด E", "Walk close and press E") });
+    boards.push({ ...wallBoard(h, side, u, tex), i });
+  });
+  // students and visitors sit on the floor, facing the platform
+  for (let r = 0; r < 3; r++) for (let c = -2; c <= 2; c++) if (c !== 0) cushion(h, c * 1.5, -0.9 + r * 1.6);
+  hangLanterns(h, [[-3.5, 1.2], [3.5, 1.2], [0, 3.4]]);
+}
+
+/* ---- Evidence Library: shelves of palm-leaf manuscripts, reading tables ---- */
+{
+  const h = salas.library, { g, FY, W, D } = h;
+  // the shelf model is built facing +x: a quarter turn makes it face into the room
+  const Q = -Math.PI / 2;
+  props("bookshelf", 2.7, [[-4, -D / 2 + 0.75, Q, FY], [4, -D / 2 + 0.75, Q, FY], [-W / 2 + 0.75, -1.5, Q + Math.PI / 2, FY], [W / 2 - 0.75, -1.5, Q - Math.PI / 2, FY], [-W / 2 + 0.75, 1.8, Q + Math.PI / 2, FY], [W / 2 - 0.75, 1.8, Q - Math.PI / 2, FY]], { parent: g });
+  h.block(-4, -D / 2 + 0.75, 1.3, 0.6); h.block(4, -D / 2 + 0.75, 1.3, 0.6);
+  h.block(-W / 2 + 0.75, 0.15, 0.6, 2.9); h.block(W / 2 - 0.75, 0.15, 0.6, 2.9);
+  wallBoard(h, "back", 0, boardTexture({ head: tx("หอหลักฐาน", "Evidence Library"), icon: "📚", title: tx("ดูต้นทาง หลักฐาน และสถานะการตรวจ", "Sources, evidence and checking status"), foot: tx("📜 ต้นทาง · 📝 คำแปล · 💡 คำอธิบาย · 🕯️ ยังรอตรวจ", "📜 source · 📝 translation · 💡 explanation · 🕯️ under review"), wide: true }), 3, 2.5, 2.7);
+  props("table", 0.8, [[-1.8, 1, 0, FY], [1.8, 1, 0, FY]], { parent: g });
+  [[-1.8, 2.2], [1.8, 2.2], [-1.8, -0.2], [1.8, -0.2]].forEach(([lx, lz]) => cushion(h, lx, lz));
+  h.post(-1.8, 1, 0.8); h.post(1.8, 1, 0.8);
+  hangLanterns(h, [[-3, 0], [3, 0]]);
+}
+
+/* ---- Media Hall: the Sambodhaya wheel (image used unchanged) on the back wall, benches to sit and look ---- */
+{
+  const h = salas.media, { g, FY, D } = h;
+  new THREE.TextureLoader().load("img/sambodhaya-wheel.png", (t) => {
+    t.colorSpace = THREE.SRGBColorSpace;
+    const board = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 4.2), new THREE.MeshBasicMaterial({ map: t, toneMapped: false }));
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(5, 4.6, 0.15), MAT.gold);
+    const gp = new THREE.Group(); gp.add(frame); board.position.z = 0.08; gp.add(board);
+    gp.position.set(0, FY + 2.95, -D / 2 + 0.3); g.add(gp);
+  });
+  wallBoard(h, "left", -1, boardTexture({ icon: "📖", title: tx("อ่าน", "Read") }), 1.5, 1.9);
+  wallBoard(h, "left", 2, boardTexture({ icon: "🎧", title: tx("ฟัง", "Listen") }), 1.5, 1.9);
+  wallBoard(h, "right", -1, boardTexture({ icon: "🎬", title: tx("ดู", "Watch") }), 1.5, 1.9);
+  wallBoard(h, "right", 2, boardTexture({ icon: "🕯️", title: tx("ยังรอตรวจ", "Under review"), foot: tx("ภาพวงล้อเป็นสื่ออธิบายของวัด", "The wheel is the temple's explanatory media") }), 1.5, 1.9);
+  props("bench", 1.1, [[-1.9, 0, Math.PI, FY], [1.9, 0, Math.PI, FY], [-1.9, 2.4, Math.PI, FY], [1.9, 2.4, Math.PI, FY]], { parent: g });
+  [[-1.9, 0], [1.9, 0], [-1.9, 2.4], [1.9, 2.4]].forEach(([lx, lz]) => h.block(lx, lz, 1.1, 0.4));
+  hangLanterns(h, [[-3, 1], [3, 1]]);
+}
+
+/* ---- Universal Hall: languages and access, with the hall's shrine ---- */
+{
+  const h = salas.access, { g, FY, W, D } = h;
+  shrine(h);
   // the hall's own board moves to the side wall
   wallBoard(h, "left", 0.6, boardTexture({ head: tx("ศาลาสากล", "Universal Hall"), icon: "🌍", title: "ภาษาไทย · English", foot: tx("เลือกภาษา ขนาดตัวอักษร และการเคลื่อนไหวได้ในหน้าเว็บของศาลานี้", "Choose language and motion settings on this hall's web page"), wide: true }), 2.8, 2.33, 2.6);
   props("potplant", 1.6, [[-W / 2 + 1, D / 2 - 1, 2, FY], [W / 2 - 1, D / 2 - 1, 3, FY]], { parent: g });
