@@ -394,7 +394,11 @@ function wallBoard(h, side, u, tex, w = 1.7, ht = 2.12, y = 2.6) {
 }
 const cushGeo = new THREE.CylinderGeometry(0.42, 0.46, 0.2, 24), rimGeo = new THREE.TorusGeometry(0.44, 0.035, 8, 32);
 const cushMat = S(0x9b2a1d, { roughness: 0.95 });
-function cushion(h, lx, lz) { add(cushGeo, cushMat, lx, h.FY + 0.1, lz, h.g); const r = add(rimGeo, MAT.gold, lx, h.FY + 0.19, lz, h.g, false); r.rotation.x = Math.PI / 2; }
+const cushionSpots = []; // where you can sit down: on a cushion, facing the front of the hall (the altar and the teachers)
+function cushion(h, lx, lz) {
+  add(cushGeo, cushMat, lx, h.FY + 0.1, lz, h.g); const r = add(rimGeo, MAT.gold, lx, h.FY + 0.19, lz, h.g, false); r.rotation.x = Math.PI / 2;
+  const [x, z] = h.toWorld(lx, lz); cushionSpots.push({ x, z, top: 0.2, yaw: h.g.rotation.y + Math.PI });
+}
 // candles with soft flames (they glow; no sound); every flame sways a little unless calm motion is on
 const flameMat = new THREE.MeshStandardMaterial({ color: 0xffd27a, emissive: 0xffa53a, emissiveIntensity: 3 });
 const waxMat = S(0xfff6e4, { roughness: 0.7 });
@@ -905,8 +909,9 @@ function setModel(obj, mixerClips) {
     player.clips.walk = find(/walk/i) || find(/run|jog|move/i);
     player.clips.run = find(/run|jog|sprint/i);
     if (player.clips.run === player.clips.walk) delete player.clips.run;
+    const sitClip = find(/sit|cross.?legged|meditat/i); if (sitClip) player.clips.sit = sitClip;
     ["walk", "run"].forEach((k) => { if (player.clips[k]) player.gait[k] = measureGait(obj, player.clips[k]); });
-    player.lift = {}; ["idle", "walk", "run"].forEach((k) => { if (player.clips[k]) player.lift[k] = measureLift(obj, player.clips[k]); });
+    player.lift = {}; ["idle", "walk", "run", "sit"].forEach((k) => { if (player.clips[k]) player.lift[k] = measureLift(obj, player.clips[k]); });
     player.mixer = new THREE.AnimationMixer(obj);
     playClip("idle");
   }
@@ -940,11 +945,11 @@ function measureGait(obj, clip) {
   const s = new THREE.Vector3(); obj.getWorldScale(s);
   return { speed: Math.max(0.5, (2 * range * cycles) / clip.duration * (s.z || 1)), steps: (2 * cycles) / clip.duration };
 }
-function playClip(name) {
+function playClip(name, fade = 0.25) {
   if (!player.mixer || !player.clips[name] || player.current === name) return;
   const a = player.mixer.clipAction(player.clips[name]), prev = player.action;
   a.reset().setEffectiveWeight(1).play();
-  if (prev && prev !== a) prev.crossFadeTo(a, 0.25, false); else a.fadeIn(0.2);
+  if (prev && prev !== a) prev.crossFadeTo(a, fade, false); else a.fadeIn(fade);
   player.action = a; player.current = name;
 }
 function fitModel(obj, height = 2.9) {
@@ -961,12 +966,12 @@ const boyLoader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 let boyReady = null;
 function loadBoy() {
   // boy.glb holds the model and its walk; the other two files hold only an animation for the same skeleton
-  if (!boyReady) boyReady = Promise.all(["boy", "boy-idle", "boy-run"].map((n) => new Promise((res) => boyLoader.load(`assets/models/${n}.glb`, res, undefined, () => res(null)))))
-    .then(([walk, idle, run]) => {
+  if (!boyReady) boyReady = Promise.all(["boy", "boy-idle", "boy-run", "boy-sit"].map((n) => new Promise((res) => boyLoader.load(`assets/models/${n}.glb`, res, undefined, () => res(null)))))
+    .then(([walk, idle, run, sitting]) => {
       if (!walk) return null;
       const obj = walk.scene, holder = new THREE.Group(); holder.add(obj); fitModel(obj);
       holder.updateMatrixWorld(true); pressHands(holder); // measure the hands in their rest pose
-      return { holder, clips: [walk, idle, run].flatMap((g) => (g ? g.animations : [])) };
+      return { holder, clips: [walk, idle, run, sitting].flatMap((g) => (g ? g.animations : [])) };
     });
   return boyReady;
 }
@@ -1035,11 +1040,11 @@ const dog = { obj: new THREE.Group(), x: 3, z: 90, y: 0, yaw: Math.PI };
 // A trotting walk for the dog model. In the model's own space the head points to +x, it stands
 // from y = -0.63 (paws) to 0.63 (ears), front legs sit near x = 0.6, back legs near x = -0.3 and the
 // tail curls up behind x = -0.55. Diagonal legs swing together; the tail wags, faster when walking.
-const dogAnim = { phase: { value: 0 }, walk: { value: 0 }, time: { value: 0 }, wag: { value: 1 } };
+const dogAnim = { phase: { value: 0 }, walk: { value: 0 }, time: { value: 0 }, wag: { value: 1 }, sit: { value: 0 } };
 function animateDog(mat) {
   mat.onBeforeCompile = (sh) => {
-    sh.uniforms.uPhase = dogAnim.phase; sh.uniforms.uWalk = dogAnim.walk; sh.uniforms.uTime = dogAnim.time; sh.uniforms.uWag = dogAnim.wag;
-    sh.vertexShader = "uniform float uPhase, uWalk, uTime, uWag;\n" + sh.vertexShader.replace("#include <begin_vertex>", `#include <begin_vertex>
+    sh.uniforms.uPhase = dogAnim.phase; sh.uniforms.uWalk = dogAnim.walk; sh.uniforms.uTime = dogAnim.time; sh.uniforms.uWag = dogAnim.wag; sh.uniforms.uSit = dogAnim.sit;
+    sh.vertexShader = "uniform float uPhase, uWalk, uTime, uWag, uSit;\n" + sh.vertexShader.replace("#include <begin_vertex>", `#include <begin_vertex>
       {
         const float HIP = -0.1, FEET = -0.634;
         float below = max(HIP - transformed.y, 0.0);                    // how far under the hip
@@ -1052,9 +1057,40 @@ function animateDog(mat) {
         transformed.z += sin(uTime * mix(7.0, 13.0, uWalk)) * mix(0.12, 0.22, uWalk) * tailW * tailW * uWag;
         float headW = smoothstep(0.35, 0.6, transformed.x) * smoothstep(0.0, 0.3, transformed.y);
         transformed.y += sin(uPhase * 2.0) * 0.025 * uWalk * headW;
+        // sitting: the body tips back around the front paws so the haunches come down to the ground;
+        // the front legs stay upright (less tip toward the paws) and the hind legs fold flat on the ground
+        if (uSit > 0.0) {
+          float th = 0.5 * uSit * (1.0 - front * legW);
+          vec2 dv = vec2(transformed.x - 0.6, transformed.y - FEET);
+          float cs = cos(th), sn = sin(th);
+          transformed.x = 0.6 + dv.x * cs - dv.y * sn;
+          transformed.y = max(FEET + 0.01, FEET + dv.x * sn + dv.y * cs);
+        }
       }`);
   };
 }
+
+/* ---------------- sitting: cross-legged, for meditation and for listening to a teacher ---------------- */
+// He lowers himself into a cross-legged sit (ขัดสมาธิ) with his hands resting in his lap, palms up, the
+// right hand on the left. Near a cushion in a hall he sits on it, facing the front (the altar and the
+// teachers' platform); before a Buddha image he faces the image. The temple dog comes and sits beside
+// him. Walking (or the button again) stands him up; a wai while sitting is fine.
+const sit = { on: false, w: 0, rise: 0, spot: null, faceYaw: null };
+function startSit() {
+  if (sit.on || player.y > groundAt(player.x, player.z) + 0.05) return;
+  let best = null, bd = 1.6;
+  for (const c of cushionSpots) { const d = Math.hypot(c.x - player.x, c.z - player.z); if (d < bd) { bd = d; best = c; } }
+  sit.spot = best; sit.on = true; sit.rise = 0;
+  if (best) sit.faceYaw = best.yaw;
+  else { const here = waiLevelHere(); sit.faceYaw = here.face ? Math.atan2(here.face.x - player.x, here.face.z - player.z) : null; }
+  if (player.mixer && player.clips.sit) playClip("sit", 1.2);
+}
+function standUp() {
+  if (!sit.on) return;
+  sit.on = false; sit.rise = 1.1; sit.faceYaw = null;
+  if (player.mixer) playClip("idle", 1.0);
+}
+const toggleSit = () => (sit.on ? standUp() : startSit());
 
 /* ---------------- the wai: palms together, a small bow ---------------- */
 // No ready-made animation exists for a Thai wai, so it is posed on the boy's own skeleton: the
@@ -1175,7 +1211,7 @@ function updatePress(model) {
   let sk = null; model.traverse((o) => { if (!sk && o.isSkinnedMesh) sk = o; });
   if (!sk || !sk.userData.press) return;
   const u = sk.userData.press;
-  u.uPress.value = wai.t >= 0 ? Math.min(1, wai.plane.on * 1.5) : 0;
+  u.uPress.value = wai.t >= 0 || sit.w > 0.01 ? Math.min(1, wai.plane.on * 1.5) : 0;
   if (!u.uPress.value) return;
   // the plane in the mesh's own space (where the skinned vertices are)
   _plane.setFromNormalAndCoplanarPoint(wai.plane.normal, wai.plane.point).applyMatrix4(_inv.copy(sk.matrixWorld).invert());
@@ -1219,16 +1255,91 @@ function waiEnd(B) {
   WAI_BONES.forEach((n) => { const b = B[n]; if (!b) return; if (b.userData.waiSet && b.quaternion.equals(b.userData.waiSet)) b.quaternion.copy(b.userData.waiBase); b.userData.waiSet = null; });
 }
 function waiMark(B) { WAI_BONES.forEach((n) => { const b = B[n]; if (b) b.userData.waiSet = b.quaternion.clone(); }); }
-// a modest bow, mostly of the head, as in an everyday wai
-function poseWai(model, hands, bow) {
+function boneMap(model) {
   if (!waiBones.model || waiBones.model !== model) {
     Object.keys(waiBones).forEach((k) => delete waiBones[k]); waiBones.model = model;
     model.traverse((o) => { if (o.isBone) waiBones[o.name] = o; });
   }
-  const B = waiBones;
+  return waiBones;
+}
+// Layers on top of the animation: sitting (hands in the lap, eyes lowered), then the wai. Each frame starts
+// from the animation's pose; when both are done, the bones are handed back.
+function poseOverlays(model, hands, bow, sitW) {
+  const B = boneMap(model);
   if (!B.Spine || !B.LeftArm || !B.RightArm || !B.Head) return;
-  if (hands <= 0 && bow <= 0) { waiEnd(B); return; }
+  if (hands <= 0 && bow <= 0 && sitW <= 0.001) { waiEnd(B); return; }
   waiBegin(B);
+  if (sitW > 0.001) poseSit(model, B, sitW);
+  poseWaiCore(model, B, hands, bow);
+  waiMark(B);
+}
+function poseWai(model, hands, bow) { poseOverlays(model, hands, bow, sit.w); }
+// put one arm's wrist at target with the hand turned to Qhand (world), elbow toward pole; blend by weight
+function armTo(B, s, target, Qhand, pole, weight) {
+  const arm = B[s + "Arm"], fore = B[s + "ForeArm"], hand = B[s + "Hand"]; if (!arm || !fore || !hand) return;
+  const animQ = [arm.quaternion.clone(), fore.quaternion.clone(), hand.quaternion.clone()];
+  const A = arm.getWorldPosition(new THREE.Vector3()), E0 = fore.getWorldPosition(new THREE.Vector3()), W0 = hand.getWorldPosition(new THREE.Vector3());
+  const a = A.distanceTo(E0), b = E0.distanceTo(W0);
+  const toT = target.clone().sub(A); const d = Math.min(toT.length(), a + b - 1e-3); toT.normalize();
+  const x = (a * a - b * b + d * d) / (2 * d), h = Math.sqrt(Math.max(0, a * a - x * x));
+  const pl = pole.clone().addScaledVector(toT, -pole.dot(toT)).normalize();
+  aimBone(arm, E0, A.clone().addScaledVector(toT, x).addScaledVector(pl, h));
+  aimBone(fore, hand.getWorldPosition(new THREE.Vector3()), target);
+  hand.getWorldQuaternion(_q1); turnBone(hand, _q2.copy(Qhand).multiply(_q1.invert()));
+  [arm, fore, hand].forEach((bn, i) => { const solved = bn.quaternion.clone(); bn.quaternion.copy(animQ[i]).slerp(solved, weight); });
+  arm.updateMatrixWorld(true);
+}
+// Seated meditation: face forward with the eyes lowered, hands resting in the lap with the palms up and
+// the right hand lying on the left. The left hand's back rests on the lap (measured from his seated legs);
+// the right hand nests on it, and where the two thick cartoon hands meet they are pressed flat against
+// each other in the shader (the same as the wai's palms), so they lie together without passing through.
+const SIT_NEST = 0.55; // how much of the stacked thickness the right hand sinks onto the left (pressed flat)
+function lapSurface(model, B) {
+  if (model.userData.lapSurface != null) return model.userData.lapSurface;
+  if (sit.w < 0.98) return 0.12; // measured once he is fully seated
+  let sk = null; model.traverse((o) => { if (!sk && o.isSkinnedMesh) sk = o; }); if (!sk) return 0.12;
+  const bones = sk.skeleton.bones, legs = new Set(["LeftUpLeg", "LeftLeg", "LeftFoot", "LeftToeBase", "RightUpLeg", "RightLeg", "RightFoot", "RightToeBase"].map((n) => bones.findIndex((b) => b.name === n)));
+  const si = sk.geometry.attributes.skinIndex, sw = sk.geometry.attributes.skinWeight, n = sk.geometry.attributes.position.count;
+  const c = lapCentre(B), v = new THREE.Vector3(); let top = -Infinity;
+  model.updateMatrixWorld(true);
+  for (let i = 0; i < n; i++) {
+    let wl = 0; for (let k = 0; k < 4; k++) if (legs.has(si.getComponent(i, k))) wl += sw.getComponent(i, k);
+    if (wl < 0.6) continue;
+    sk.getVertexPosition(i, v); v.applyMatrix4(sk.matrixWorld);
+    if (Math.hypot(v.x - c.x, v.z - c.z) < 0.09) top = Math.max(top, v.y);
+  }
+  model.userData.lapSurface = top > -Infinity ? (top - c.y) / model.getWorldScale(new THREE.Vector3()).y : 0.12;
+  return model.userData.lapSurface;
+}
+const lapCentre = (B) => B.Hips.getWorldPosition(new THREE.Vector3()).lerp(B.LeftLeg.getWorldPosition(new THREE.Vector3()).add(B.RightLeg.getWorldPosition(new THREE.Vector3())).multiplyScalar(0.5), 0.5);
+function poseSit(model, B, w) {
+  const rest = restPose(model);
+  if (rest) ["neck", "Head"].forEach((n) => { if (B[n] && rest[n]) B[n].quaternion.slerp(rest[n], w); });
+  model.updateMatrixWorld(true);
+  const up = new THREE.Vector3(0, 1, 0);
+  const side = B.LeftArm.getWorldPosition(new THREE.Vector3()).sub(B.RightArm.getWorldPosition(new THREE.Vector3())).setY(0).normalize();
+  const fwd = new THREE.Vector3().crossVectors(side, up).normalize(), axis = new THREE.Vector3().crossVectors(up, fwd).normalize();
+  [["neck", 0.08], ["Head", 0.1]].forEach(([n, a]) => { if (B[n]) turnBone(B[n], _q2.setFromAxisAngle(axis, a * w)); }); // eyes lowered
+  const shape = handShape(model); if (!shape || !B.Hips || !B.LeftLeg || !B.RightLeg) return;
+  const scale = model.getWorldScale(new THREE.Vector3()).y;
+  const c = lapCentre(B);
+  const pd = (hs) => hs.points.map((q) => q.dot(hs.palm));
+  const leftBack = -Math.min(...pd(shape.Left)) * scale, leftPalm = Math.max(...pd(shape.Left)) * scale, rightBack = -Math.min(...pd(shape.Right)) * scale;
+  const leftAxisY = c.y + lapSurface(model, B) * scale + leftBack + 0.004 * scale;       // the left hand's back rests on the lap
+  const full = leftPalm + rightBack, rightAxisY = leftAxisY + full * (1 - SIT_NEST);       // the right hand lies on it
+  const contactY = leftAxisY + leftPalm - full * SIT_NEST / 2;                               // where the two meet
+  if (!(wai.t >= 0 && waiWeights()[0] > 0.5)) { wai.plane.normal.copy(up); wai.plane.point.set(c.x, contactY, c.z); wai.plane.on = w; }
+  [["Left", 1, leftAxisY], ["Right", -1, rightAxisY]].forEach(([s, sg, ay]) => {
+    const hs = shape[s];
+    const F = side.clone().multiplyScalar(-sg), Q = basisQuat(hs.finger, hs.palm, F, up); // fingers across, palm up
+    const centroid = hs.points.reduce((acc, q) => acc.add(q), new THREE.Vector3()).multiplyScalar(1 / hs.points.length).applyQuaternion(Q).multiplyScalar(scale);
+    const target = new THREE.Vector3(c.x - centroid.x, ay, c.z - centroid.z); // palms over each other, at their own height
+    armTo(B, s, target, Q, side.clone().multiplyScalar(sg * 0.8).addScaledVector(up, -0.6), w);
+  });
+}
+// a modest bow, mostly of the head, as in an everyday wai
+function poseWaiCore(model, B, hands, bow) {
+  if (hands <= 0 && bow <= 0) return;
   // face straight ahead: ease the neck and head out of the idle's glancing around, back to their rest pose
   const rest = restPose(model);
   if (rest) ["neck", "Head"].forEach((n) => { if (B[n] && rest[n]) B[n].quaternion.slerp(rest[n], Math.max(hands, bow)); });
@@ -1240,11 +1351,11 @@ function poseWai(model, hands, bow) {
   const axis = new THREE.Vector3().crossVectors(up, fwd).normalize();
   const L = WAI_LEVELS[wai.level] || WAI_LEVELS.peer;
   ["Spine02", "Spine01", "Spine", "neck", "Head"].forEach((n, i) => { if (B[n]) turnBone(B[n], _q2.setFromAxisAngle(axis, L.bow[i] * bow)); });
-  if (hands <= 0.001) { waiMark(B); return; }
+  if (hands <= 0.001) return;
   // 2) the hands: a lotus bud. Each hand stands upright with its palm side (where its fingers curl)
   // turned toward the other hand, tops leaning in a little; the wrists are placed from the real
   // hand mesh so the fingertips meet exactly at the middle and the hands never pass through each other.
-  const shape = handShape(model); if (!shape) { waiMark(B); return; }
+  const shape = handShape(model); if (!shape) return;
   const spineQ = B.Spine.getWorldQuaternion(new THREE.Quaternion());
   const bodyUp = new THREE.Vector3(0, 1, 0).applyQuaternion(spineQ), bodyFwd = new THREE.Vector3(0, 0, 1).applyQuaternion(spineQ);
   const neck = B.neck.getWorldPosition(new THREE.Vector3());
@@ -1285,7 +1396,6 @@ function poseWai(model, hands, bow) {
     [arm, fore, hand].forEach((bn, i) => { const solved = bn.quaternion.clone(); bn.quaternion.copy(animQ[i]).slerp(solved, hands); });
     arm.updateMatrixWorld(true);
   });
-  waiMark(B);
 }
 
 /* ---------------- input ---------------- */
@@ -1298,6 +1408,7 @@ addEventListener("keydown", (e) => {
   if (e.code === "KeyE" || e.code === "Enter") { if (near) openPlace(near); }
   if (e.code === "KeyG") openPlaces(true);
   if (e.code === "KeyQ") startWai();
+  if (e.code === "KeyC") toggleSit();
   if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) e.preventDefault();
 });
 addEventListener("keyup", (e) => { keys[e.code] = false; });
@@ -1336,6 +1447,7 @@ if (stick) {
   document.getElementById("t-jump").addEventListener("click", () => { if (player.y <= groundAt(player.x, player.z) + 0.01) player.vy = 9; });
   document.getElementById("t-act").addEventListener("click", () => { if (near) openPlace(near); else openPlaces(true); });
   document.getElementById("t-wai").addEventListener("click", startWai);
+  document.getElementById("t-sit").addEventListener("click", toggleSit);
 }
 
 // click on the dog or a hall
@@ -1472,7 +1584,7 @@ $("dlg").addEventListener("click", (e) => {
 });
 $("btn-places").addEventListener("click", () => openPlaces(false));
 $("btn-help").addEventListener("click", () => openDialog(tx("❔ วิธีเดินในวัด", "❔ How to walk around"),
-  `<p>${tx("⌨️ W A S D หรือปุ่มลูกศร = เดิน • Shift = วิ่ง • Space = กระโดด • E = เข้าศาลาที่อยู่ใกล้ • G = เรียกหมาวัด • Q = ไหว้ 🙏", "⌨️ W A S D or arrow keys = walk • Shift = run • Space = jump • E = visit the nearby hall • G = call the temple dog • Q = wai 🙏")}</p>
+  `<p>${tx("⌨️ W A S D หรือปุ่มลูกศร = เดิน • Shift = วิ่ง • Space = กระโดด • E = เข้าศาลาที่อยู่ใกล้ • G = เรียกหมาวัด • Q = ไหว้ 🙏 • C = นั่งสมาธิ 🧘 (เดินเพื่อลุก)", "⌨️ W A S D or arrow keys = walk • Shift = run • Space = jump • E = visit the nearby hall • G = call the temple dog • Q = wai 🙏 • C = sit 🧘 (walk to stand up)")}</p>
    <p>${tx("🖱️ ลากเมาส์ = หมุนมุมมอง • ล้อเมาส์ = ซูม • คลิกหมาวัดหรือศาลา = เปิด", "🖱️ Drag = turn the view • Wheel = zoom • Click the dog or a hall = open it")}</p>
    <p>${tx("📱 จอยซ้ายล่าง = เดิน • ลากจอ = หมุนมุมมอง • ปุ่ม E = เข้า", "📱 Bottom-left stick = walk • Drag the screen = turn the view • E button = visit")}</p>
    <p>${tx("🔈 ปุ่มเสียง = เปิดเสียงนก ลม น้ำตก และกระดิ่งชายคา (ปิดอยู่จนกว่าจะกด) • 🔔 เดินไปที่ระฆังแล้วกด E เพื่อตีระฆัง", "🔈 Sound button = birds, breeze, the waterfall and the roof bells (off until you press it) • 🔔 Walk to the bell and press E to strike it")}</p>
@@ -1486,6 +1598,7 @@ qBtn.title = tx("สลับภาพสวย / ภาพเบา (สำห�
 qBtn.addEventListener("click", () => { write("world-quality", HIGH ? "light" : "high"); location.reload(); });
 // sound button: off every time the page opens; the site-wide "turn off all sound" setting is respected
 $("btn-wai").addEventListener("click", () => { startWai(); canvas.focus(); });
+$("btn-sit").addEventListener("click", () => { toggleSit(); canvas.focus(); });
 const soundBtn = $("btn-sound");
 const syncSound = () => { soundBtn.setAttribute("aria-pressed", sound.on); soundBtn.classList.toggle("on", sound.on); soundBtn.firstChild.textContent = sound.on ? "🔊 " : "🔈 "; };
 function askSound() {
@@ -1584,15 +1697,26 @@ function resize() { renderer.setSize(innerWidth, innerHeight, false); if (compos
 addEventListener("resize", resize); resize();
 
 function tick() {
-  const dt = Math.min(clock.getDelta(), 0.05);
+  frame(Math.min(clock.getDelta(), 0.05));
+  requestAnimationFrame(tick);
+}
+// one step of the world: movement, animation, camera and the picture
+function frame(dt) {
   // movement relative to the camera
   let fx = 0, fz = 0;
   if (!dialogOpen()) {
     if (keys.KeyW || keys.ArrowUp) fz -= 1; if (keys.KeyS || keys.ArrowDown) fz += 1;
     if (keys.KeyA || keys.ArrowLeft) fx -= 1; if (keys.KeyD || keys.ArrowRight) fx += 1;
     fx += joy.x; fz += joy.y;
-    if ((keys.Space) && player.y <= groundAt(player.x, player.z) + 0.01) player.vy = 9;
+    if ((keys.Space) && !sit.on && sit.rise <= 0 && player.y <= groundAt(player.x, player.z) + 0.01) player.vy = 9;
   }
+  if (sit.on || sit.rise > 0) { // seated (or getting up): stay put; wanting to walk stands him up
+    if (sit.on && Math.hypot(fx, fz) > 0.3) standUp();
+    fx = fz = 0;
+    if (sit.on && sit.spot) { player.x += (sit.spot.x - player.x) * Math.min(1, dt * 5); player.z += (sit.spot.z - player.z) * Math.min(1, dt * 5); } // settle onto the cushion
+    if (sit.faceYaw != null) { let dy = sit.faceYaw - player.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); player.yaw += dy * Math.min(1, dt * 5); }
+  }
+  sit.w += ((sit.on ? 1 : 0) - sit.w) * Math.min(1, dt * 2.4); sit.rise = Math.max(0, sit.rise - dt);
   const mag = Math.min(1, Math.hypot(fx, fz));
   // a calm walk, like the boy in the film; Shift (or the touch stick pushed to its edge) runs
   const running = keys.ShiftLeft || keys.ShiftRight || Math.hypot(joy.x, joy.y) > 0.92;
@@ -1619,11 +1743,23 @@ function tick() {
   if (limbs) {
     const sw = moving ? Math.sin(walkPhase) * 0.7 : 0;
     limbs.legL.rotation.x = sw; limbs.legR.rotation.x = -sw; limbs.armL.rotation.x = -sw * 0.8; limbs.armR.rotation.x = sw * 0.8;
+    if (sit.w > 0.01) { // the block avatar sits on the ground, legs forward, hands on the knees
+      limbs.legL.rotation.x = limbs.legR.rotation.x = -1.45 * sit.w;
+      limbs.armL.rotation.x = limbs.armR.rotation.x = -0.75 * sit.w;
+      player.model.position.y = -1.05 * sit.w + (sit.spot ? sit.spot.top * sit.w : 0);
+    } else if (player.model.position.y < 0) player.model.position.y = 0;
   } else if (player.mixer) {
-    playClip(!moving ? "idle" : player.clips.run && speed > 5 ? "run" : player.clips.walk ? "walk" : "idle");
-    // keep the soles on the paving: each animation has its own lift, eased when switching
-    const lift = player.lift && player.lift[player.current];
-    if (lift != null) player.model.position.y += (lift - player.model.position.y) * Math.min(1, dt * 8);
+    if (sit.on && player.clips.sit) playClip("sit", 1.2);
+    else if (sit.rise > 0) playClip("idle", 1.0);
+    else playClip(!moving ? "idle" : player.clips.run && speed > 5 ? "run" : player.clips.walk ? "walk" : "idle");
+    // keep the soles (or, seated, the crossed legs) on the ground: each animation has its own lift,
+    // blended by how much of each animation is showing; on a cushion, its height is added
+    if (player.lift) {
+      let lw = 0, lsum = 0;
+      for (const k in player.lift) { const a = player.mixer.existingAction(player.clips[k]); const wgt = a ? a.getEffectiveWeight() : 0; lw += wgt; lsum += wgt * player.lift[k]; }
+      const lift = (lw > 0.001 ? lsum / lw : (player.lift[player.current] || 0)) + (sit.spot ? sit.spot.top * sit.w : 0);
+      player.model.position.y += (lift - player.model.position.y) * Math.min(1, dt * 10);
+    }
     const g = player.gait[player.current];
     if (g && player.action) player.action.timeScale = Math.min(2.6, Math.max(0.4, speed / g.speed)); // feet keep pace with the ground
     player.mixer.update(dt);
@@ -1647,23 +1783,32 @@ function tick() {
     if (wai.faceYaw != null) { let dy = wai.faceYaw - player.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); player.yaw += dy * Math.min(1, dt * 6); player.obj.rotation.y = player.yaw; }
     wai.t += dt; if (wai.t > wai.dur) wai.t = -1;
     const [hands, bow] = waiWeights();
-    if (player.mixer) { poseWai(player.model, hands, bow); player.model.updateMatrixWorld(true); updatePress(player.model); } // at the end (weights 0) this hands the bones back
-    else if (limbs) { // the block avatar: arms forward and together, a small bow
+    if (limbs) { // the block avatar: arms forward and together, a small bow
       limbs.armL.rotation.x = -1.35 * hands; limbs.armR.rotation.x = -1.35 * hands;
       limbs.armL.rotation.z = 0.42 * hands; limbs.armR.rotation.z = -0.42 * hands; // armL sits at -x: bring both hands to the middle
       player.model.rotation.x = 0.3 * bow;
     }
   } else if (limbs && player.model.rotation.x) { player.model.rotation.x = 0; limbs.armL.rotation.z = 0; limbs.armR.rotation.z = 0; }
+  if (player.mixer) { // sitting and the wai, layered on the animation (with nothing to do, this hands the bones back)
+    const [hands, bow] = waiWeights();
+    poseOverlays(player.model, hands, bow, sit.w); player.model.updateMatrixWorld(true); updatePress(player.model);
+  }
 
   // the dog follows a little behind
   if (dog.obj.visible) {
     // stay ahead-left of the player as seen from the camera, so it never blocks the view
     const fx2 = -Math.sin(camYaw), fz2 = -Math.cos(camYaw), rx = Math.cos(camYaw), rz = -Math.sin(camYaw);
-    const bx = player.x + fx2 * 1.4 - rx * 2.6, bz = player.z + fz2 * 1.4 - rz * 2.6;
+    let bx = player.x + fx2 * 1.4 - rx * 2.6, bz = player.z + fz2 * 1.4 - rz * 2.6;
+    // when he sits, the dog comes to sit at his left side, facing the same way
+    if (sit.on) { bx = player.x + Math.cos(player.yaw) * 1.5 + Math.sin(player.yaw) * 0.2; bz = player.z - Math.sin(player.yaw) * 1.5 + Math.cos(player.yaw) * 0.2; }
     const ddx = bx - dog.x, ddz = bz - dog.z, dd = Math.hypot(ddx, ddz);
-    dog.moving = dd > 0.4;
+    const wantSit = sit.on && dd < 0.5;
+    dogAnim.sit.value += ((wantSit ? 1 : 0) - dogAnim.sit.value) * Math.min(1, dt * 3);
+    const dogFree = dogAnim.sit.value < 0.15; // a sitting dog gets up before it walks
+    dog.moving = dd > 0.4 && dogFree;
     let dogSpeed = 0;
-    if (dd > 0.4) { const st = Math.min(dd, dt * (dd > 6 ? 12 : 6)); dogSpeed = dt > 0 ? st / dt : 0; [dog.x, dog.z] = collide(dog.x + ddx / dd * st, dog.z + ddz / dd * st); dog.yaw = Math.atan2(ddx, ddz); }
+    if (wantSit) { let dy = player.yaw - dog.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); dog.yaw += dy * Math.min(1, dt * 4); }
+    if (dd > 0.4 && dogFree) { const st = Math.min(dd, dt * (dd > 6 ? 12 : 6)); dogSpeed = dt > 0 ? st / dt : 0; [dog.x, dog.z] = collide(dog.x + ddx / dd * st, dog.z + ddz / dd * st); dog.yaw = Math.atan2(ddx, ddz); }
     // walk cycle: about one stride per 1.2 m; the legs ease in and out of walking
     dogAnim.phase.value = (dogAnim.phase.value + dt * dogSpeed * 5.2) % (Math.PI * 200); // kept small so it stays precise
     if (!Number.isFinite(dogAnim.phase.value)) dogAnim.phase.value = 0;
@@ -1685,9 +1830,10 @@ function tick() {
   // camera follows
   const cx = player.x + Math.sin(camYaw) * Math.cos(camPitch) * camDist;
   const cz = player.z + Math.cos(camYaw) * Math.cos(camPitch) * camDist;
-  const cy = player.y + 2 + Math.sin(camPitch) * camDist;
+  const seatDrop = 1.05 * sit.w; // seated, the camera looks at where his head now is
+  const cy = player.y + 2 - seatDrop + Math.sin(camPitch) * camDist;
   // don't look through walls or roofs: pull the camera in front of whatever is in the way
-  head.set(player.x, player.y + 2.2, player.z); tmp.set(cx, cy, cz);
+  head.set(player.x, player.y + 2.2 - seatDrop, player.z); tmp.set(cx, cy, cz);
   const want = tmp.clone().sub(head), dist = want.length(); want.normalize();
   camRay.set(head, want); camRay.far = dist;
   const hit = camRay.intersectObjects(camBlock, false)[0];
@@ -1705,7 +1851,6 @@ function tick() {
   sound.update(camera.position, camFwd, insideHall(player.x, player.z) && Math.hypot(camera.position.x - player.x, camera.position.z - player.z) < 14, dt);
 
   if (composer) composer.render(); else renderer.render(scene, camera);
-  requestAnimationFrame(tick);
 }
 
 document.fonts.load("64px Itim").then(() => document.fonts.load("36px Mali")).catch(() => {}).finally(() => {
@@ -1714,7 +1859,7 @@ document.fonts.load("64px Itim").then(() => document.fonts.load("36px Mali")).ca
 });
 camYaw = 0; camera.position.set(0, 8, 105);
 restoreSpot(); // back from a page of the site: stand where you were
-if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, WAI_LEVELS, boards, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
+if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, WAI_LEVELS, sit, startSit, standUp, cushionSpots, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
 Promise.race([Promise.all(propJobs), new Promise((r) => setTimeout(r, 7000))]).then(() => {
   $("loading").hidden = true;
   canvas.focus();
