@@ -71,13 +71,15 @@ sun.shadow.mapSize.set(HIGH ? 4096 : 1024, HIGH ? 4096 : 1024);
 sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.04;
 Object.assign(sun.shadow.camera, { left: -75, right: 75, top: 75, bottom: -75, near: 1, far: 200 });
 scene.add(sun);
+const hallLamps = []; // the lights inside the halls: brighter at night
+let skyDome = null, skyHdr = null; // the painted dome (until the real sky loads) and the real sunset sky
 
 // post-processing (high quality only): a soft glow on lanterns and candles
-let composer = null;
+let composer = null, bloom = null;
 if (HIGH) {
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
-  composer.addPass(new UnrealBloomPass(new THREE.Vector2(256, 256), 0.3, 0.45, 1.05));
+  bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.3, 0.45, 1.05); composer.addPass(bloom);
   composer.addPass(new OutputPass());
 }
 
@@ -163,7 +165,7 @@ function props(name, h, list, { fallback, shadow = true, parent = scene, extra =
   for (let i = 0; i < pos.count; i++) { const y = pos.getY(i) / 300; const col = y > 0.15 ? mid.clone().lerp(top, Math.min(1, (y - 0.15) / 0.6)) : low.clone().lerp(mid, (y + 0.2) / 0.35); c.push(col.r, col.g, col.b); }
   g.setAttribute("color", new THREE.Float32BufferAttribute(c, 3));
   const dome = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false }));
-  scene.add(dome);
+  scene.add(dome); skyDome = dome;
   // a real sunset sky (CC0 HDRI) lights every surface; the painted dome stays only if it can't load
   new RGBELoader().load("assets/tex/belfast_sunset_puresky_1k.hdr", (hdr) => {
     const pm = new THREE.PMREMGenerator(renderer);
@@ -173,6 +175,7 @@ function props(name, h, list, { fallback, shadow = true, parent = scene, extra =
     scene.background = hdr; scene.backgroundIntensity = 0.9;
     scene.backgroundRotation.y = SKY_TURN; scene.environmentRotation.y = SKY_TURN;
     dome.visible = false; hemi.intensity = 0.45; pm.dispose();
+    skyHdr = hdr; applyTime(); // (keeps night if it is night)
   });
   // soft rolling hills fading into the haze
   const hillGeo = new THREE.SphereGeometry(1, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2);
@@ -242,6 +245,7 @@ path(0, 13, 0, BRIDGE.zc - BRIDGE.half + 0.5, ROAD); path(0, BRIDGE.zc + BRIDGE.
 
 /* ---------------- lanterns ---------------- */
 // the pair by the gate stand just outside it, in front of the gate posts, so the doors can swing shut
+const LAMP_HEAD = 3.45; // height of a lamp post's lantern (it glows at night)
 const lanternSpots = [[-5, 20], [5, 20], [-4.7, 39.5], [4.7, 39.5], [-5, 50], [5, 50], [-5, 63], [5, 63], [-5, 95], [5, 95], [-17, 0], [17, 0], [-4.5, -30], [4.5, -30]];
 const lantern = (x, z) => {
   add(new THREE.BoxGeometry(0.5, 2.4, 0.5), MAT.woodDark, x, 1.2, z);
@@ -283,8 +287,10 @@ function signTexture(title, sub, icon) {
   };
   draw(); signDraws.push(draw); return t;
 }
+const signMats = [];
 function sign(title, sub, icon, x, y, z, w = 6) {
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: signTexture(title, sub, icon), depthWrite: false }));
+  signMats.push(s.material); // dimmed at night
   s.scale.set(w, w * 220 / 512, 1); s.position.set(x, y, z); scene.add(s); return s;
 }
 
@@ -353,6 +359,7 @@ function sala({ x, z, rot = 0, W = 13, D = 10, H = 5.6, walls = true }) {
   });
   // warm light inside
   const lamp = new THREE.PointLight(0xffd2a0, walls ? 14 : 6, Math.max(W, D) + 2, 2); lamp.position.set(0, FY + H - 0.3, walls ? -D / 4 : 0); g.add(lamp);
+  hallLamps.push({ light: lamp, day: lamp.intensity, night: walls ? 34 : 18 });
   return { g, toWorld, block, post, W, D, H, FY, signAt: [...toWorld(0, D / 2 + 2.4), FY + H + H * 0.62] };
 }
 
@@ -547,6 +554,7 @@ function shrine(h, monks = [], { gifts = false } = {}) {
   props("vase", 0.7, [[-0.75, az - 0.1, 0, top + 1.13], [0.75, az - 0.1, 0, top + 1.13]], { parent: g });
   props("lotus", 0.45, [[0, az + 0.55, 0, top + 0.58]], { parent: g });
   const shrineLight = new THREE.PointLight(0xffc27a, 10, 7, 2); shrineLight.position.set(0, top + 2.4, az + 1.6); g.add(shrineLight);
+  hallLamps.push({ light: shrineLight, day: 10, night: 16 });
   return pz + PD / 2;
 }
 
@@ -992,6 +1000,68 @@ const gardenSpots = []; // (for ?debug checks)
   Object.values(salas).forEach((h) => { [-1, 1].forEach((sg) => { const [x, z] = h.toWorld(sg * (Math.min(5, h.W - 2) / 2 + 1.0), h.D / 2 + 1.5); bonsai.push([x, z, sg]); colliders.push({ x, z, r: 0.55 }); }); });
   props("bonsai", 1.4, bonsai, { extra: true });
   taken.forEach((t) => { gardenSpots.push(t); });
+}
+
+/* ---------------- day and night ---------------- */
+// Night: a dark blue sky with stars and a moon, soft moonlight instead of the sun, every lamp post lit (a warm
+// glow at its head and a pool of light on the ground), the halls lit from inside and their lanterns glowing.
+// Real lights are costly, so only a few follow the visitor to the lamp posts nearest him; the rest of the lamps
+// are glow alone. Chosen with the 🌙 button and remembered on this device only.
+const night = { on: read("world-night", false) === true };
+const nightObjs = new THREE.Group(); nightObjs.visible = false; scene.add(nightObjs);
+{
+  // the night sky: a deep gradient, stars and the moon
+  const g = new THREE.SphereGeometry(295, 32, 16), c = [], pos = g.attributes.position;
+  const top = new THREE.Color(0x060b1c), low = new THREE.Color(0x1d2a4a);
+  for (let i = 0; i < pos.count; i++) { const y = Math.max(0, pos.getY(i) / 295); const col = low.clone().lerp(top, Math.min(1, y * 1.6)); c.push(col.r, col.g, col.b); }
+  g.setAttribute("color", new THREE.Float32BufferAttribute(c, 3));
+  nightObjs.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false })));
+  const sp = []; let sd = 11; const r = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 900; i++) { const a = r() * Math.PI * 2, y = 0.08 + r() * 0.92, h = Math.sqrt(1 - y * y); sp.push(Math.cos(a) * h * 285, y * 285, Math.sin(a) * h * 285); }
+  const sg = new THREE.BufferGeometry(); sg.setAttribute("position", new THREE.Float32BufferAttribute(sp, 3));
+  nightObjs.add(new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xfff6e0, size: 1.6, sizeAttenuation: false, fog: false })));
+  const moon = new THREE.Mesh(new THREE.CircleGeometry(9, 32), new THREE.MeshBasicMaterial({ color: 0xfff3d6, fog: false }));
+  moon.position.set(-120, 150, -170); moon.lookAt(0, 0, 0); nightObjs.add(moon);
+  // each lamp post: a glow at its head and a soft pool of light on the ground
+  const glowMat = new THREE.MeshBasicMaterial({ color: 0xffd38a });
+  const poolTex = canvasTexture(128, 128, (cx, w, h) => { const gr = cx.createRadialGradient(64, 64, 0, 64, 64, 64); gr.addColorStop(0, "rgba(255,196,120,0.75)"); gr.addColorStop(0.45, "rgba(255,170,90,0.28)"); gr.addColorStop(1, "rgba(255,160,80,0)"); cx.fillStyle = gr; cx.fillRect(0, 0, w, h); });
+  poolTex.wrapS = poolTex.wrapT = THREE.ClampToEdgeWrapping;
+  const poolMat = new THREE.MeshBasicMaterial({ map: poolTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
+  const head = new THREE.SphereGeometry(0.3, 14, 10), pool = new THREE.PlaneGeometry(7, 7);
+  lanternSpots.forEach(([x, z]) => {
+    const gy = groundAt(x, z);
+    const h = new THREE.Mesh(head, glowMat); h.position.set(x, gy + LAMP_HEAD, z); nightObjs.add(h);
+    const p = new THREE.Mesh(pool, poolMat); p.rotation.x = -Math.PI / 2; p.position.set(x, gy + 0.07, z); p.renderOrder = 1; nightObjs.add(p);
+  });
+}
+// a few real lights go to the lamp posts nearest him
+const lampLights = []; if (HIGH) for (let i = 0; i < 3; i++) { const l = new THREE.PointLight(0xffc27a, 0, 11, 2); scene.add(l); lampLights.push(l); }
+let lampLightTimer = 0;
+function placeLampLights(dt) {
+  if (!night.on || !lampLights.length) return;
+  lampLightTimer -= dt; if (lampLightTimer > 0) return; lampLightTimer = 0.25;
+  const near = lanternSpots.map(([x, z]) => [x, z, Math.hypot(x - player.x, z - player.z)]).sort((a, b) => a[2] - b[2]);
+  lampLights.forEach((l, i) => { const q = near[i]; l.position.set(q[0], groundAt(q[0], q[1]) + LAMP_HEAD - 0.2, q[1]); });
+}
+// switch everything between day and night
+function applyTime() {
+  const n = night.on;
+  nightObjs.visible = n;
+  if (skyDome) skyDome.visible = !n && !skyHdr;
+  scene.background = n ? null : skyHdr;
+  scene.environmentIntensity = n ? 0.08 : 0.75;
+  hemi.color.set(n ? 0x8fa6d8 : 0xfff2d6); hemi.groundColor.set(n ? 0x1c2433 : 0x6f8f4a); hemi.intensity = n ? 0.32 : (skyHdr ? 0.45 : 0.9);
+  sun.color.set(n ? 0xa9bcff : 0xffd4a0); sun.intensity = n ? 0.45 : 2.3;
+  scene.fog.color.set(n ? 0x0c1428 : 0xf3d2a4); scene.fog.near = n ? 60 : 90; scene.fog.far = n ? 230 : 290;
+  hallLamps.forEach((l) => { l.light.intensity = n ? l.night : l.day; });
+  lampLights.forEach((l) => { l.intensity = n ? 26 : 0; });
+  if (bloom) { bloom.strength = n ? 0.75 : 0.3; bloom.threshold = n ? 0.85 : 1.05; }
+  renderer.toneMappingExposure = n ? 1.05 : 0.95;
+  signMats.forEach((m) => m.color.set(n ? 0x6d6d72 : 0xffffff)); // the signs are unlit: softer at night, readable without glare
+  // the hanging lanterns glow at night
+  loadProp("lantern").then((src) => { if (src) src.traverse((o) => { if (o.material && o.material.emissive) { o.material.emissive.set(0xff9a3c); o.material.emissiveIntensity = night.on ? 0.9 : 0; } }); });
+  lampLightTimer = 0;
+  const b = $("btn-night"); if (b) { b.setAttribute("aria-pressed", n); b.classList.toggle("on", n); b.firstChild.textContent = n ? "☀️ " : "🌙 "; const lb = b.querySelector(".label"); if (lb) lb.textContent = n ? tx("กลางวัน", "Day") : tx("กลางคืน", "Night"); }
 }
 
 /* ---------------- sound: off until the visitor turns it on (charter: no autoplay) ---------------- */
@@ -2231,6 +2301,8 @@ soundBtn.addEventListener("click", () => {
   sound.start().then(syncSound);
 });
 syncSound();
+$("btn-night").addEventListener("click", () => { night.on = !night.on; write("world-night", night.on); applyTime(); });
+applyTime();
 const calmBtn = $("btn-calm");
 const syncCalm = () => { calmBtn.setAttribute("aria-pressed", settings.calmMotion); calmBtn.classList.toggle("on", settings.calmMotion); };
 calmBtn.addEventListener("click", () => { settings.calmMotion = !settings.calmMotion; write("settings", { ...read("settings", {}), calmMotion: settings.calmMotion }); syncCalm(); });
@@ -2321,6 +2393,7 @@ function tick() {
 }
 // one step of the world: movement, animation, camera and the picture
 function frame(dt) {
+  placeLampLights(dt);
   monkTime += dt;
   if (!settings.calmMotion) for (const m of monkFigures) { const b = Math.sin(monkTime * 1.25 + m.ph); m.o.scale.set(1 + b * 0.004, 1 + b * 0.008, 1 + b * 0.004); } // slow breathing
   // movement relative to the camera
