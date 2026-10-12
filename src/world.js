@@ -454,6 +454,20 @@ const robeMat = S(0x8a4f22, { roughness: 0.9 }), robeEdge = S(0x6e3d18, { roughn
 function robeStack(parent, x, y, z, n = 1) {
   for (let i = 0; i < n; i++) { add(new THREE.BoxGeometry(0.42, 0.1, 0.32), i % 2 ? robeEdge : robeMat, x + (i % 2) * 0.01, y + 0.05 + i * 0.1, z, parent); }
 }
+// Kathina (กฐิน): the offering gifts (บริวารกฐิน) on a low table on the platform, before the monks and to the
+// senior monk's left: folded robes with a pillow, an alms bowl, a folded umbrella and a candle
+function kathinGifts(g, tx0, y, tz0) {
+  props("table", 0.45, [[tx0, tz0, 0, y]], { parent: g });
+  const T = y + 0.45;
+  robeStack(g, tx0 - 0.45, T, tz0, 3);
+  add(new THREE.BoxGeometry(0.4, 0.12, 0.28), S(0xd9c48a, { roughness: 0.95 }), tx0 - 0.45, T + 0.36, tz0, g); // a pillow on the robes
+  add(new THREE.SphereGeometry(0.2, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), S(0x1a1a1e, { roughness: 0.35, metalness: 0.2 }), tx0 + 0.1, T + 0.2, tz0, g).rotation.x = Math.PI; // the bowl
+  add(new THREE.CylinderGeometry(0.19, 0.19, 0.04, 20), S(0x1a1a1e, { roughness: 0.35 }), tx0 + 0.1, T + 0.02, tz0, g, false);
+  const umb = new THREE.Group(); umb.position.set(tx0 + 0.55, T, tz0 - 0.1); umb.rotation.z = 0.5; g.add(umb); // the folded umbrella (กลด), lying
+  add(new THREE.ConeGeometry(0.09, 0.75, 10), S(0xe8dcc0, { roughness: 0.8 }), 0, 0.4, 0, umb);
+  add(new THREE.CylinderGeometry(0.015, 0.015, 0.9, 6), MAT.wood, 0, 0.45, 0, umb, false);
+  candle(g, tx0 + 0.3, T, tz0 + 0.2, 0.25);
+}
 // the Kathina robe on a gold pedestal tray (พาน); its origin is the bottom of the foot
 function kathinTray() {
   const g = new THREE.Group();
@@ -479,7 +493,7 @@ function seatMonk(name, g, x, y, z) {
   }));
   return lean;
 }
-function shrine(h, monks = []) {
+function shrine(h, monks = [], { gifts = false } = {}) {
   const { g, FY, W, D } = h;
   const PH = 0.6, PD = 2.8, pz = -D / 2 + 0.2 + PD / 2;     // teachers' platform: height, depth, centre
   const top = FY + PH;
@@ -493,6 +507,7 @@ function shrine(h, monks = []) {
   const triGeo = new THREE.ExtrudeGeometry(tri, { depth: 0.22, bevelEnabled: false }); triGeo.translate(0, 0, -0.11);
   const seatGeo = new THREE.BoxGeometry(1.5, 0.14, 1.5), seatMat = S(0xb8862e, { roughness: 0.9 }), backMat = S(0x9b2a1d, { roughness: 0.9 });
   [-4.6, -2.6, 2.6, 4.6].forEach((lx) => {
+    if (gifts && lx === -4.6) { kathinGifts(g, lx, top + 0.06, pz + 0.3); return; } // the Kathina gifts stand in this seat's place
     add(seatGeo, seatMat, lx, top + 0.1, pz + 0.3, g);
     add(triGeo, backMat, lx, top + 0.03, pz - 0.6, g);
   });
@@ -536,14 +551,15 @@ function shrine(h, monks = []) {
         along the side walls that open the matching lesson ---- */
 {
   const h = salas.learn;
-  shrine(h, [["monk-elder", -2.6], ["monk-young", 2.6]]);
+  shrine(h, [["monk-elder", -2.6], ["monk-young", 2.6]], { gifts: true }); // the main hall: Kathina is offered here
   const spots = [["left", 4.2], ["left", 2.2], ["left", 0.2], ["left", -1.8], ["right", -1.8], ["right", 0.2], ["right", 2.2], ["right", 4.2]];
   spots.forEach(([side, u], i) => {
     const tex = boardTexture({ head: tx("เรื่องที่ ", "Story ") + (i + 1), icon: "👣", title: L === "en" ? JOURNEY[i][1] : JOURNEY[i][0], foot: tx("เดินมาใกล้ ๆ แล้วกด E", "Walk close and press E") });
     boards.push({ ...wallBoard(h, side, u, tex), i });
   });
   // students and visitors sit on the floor, facing the platform
-  for (let r = 0; r < 3; r++) for (let c = -2; c <= 2; c++) if (c !== 0) cushion(h, c * 1.5, -0.9 + r * 1.6);
+  // (the front row's outer pair is left out: before the senior monk there is room to kneel and bow)
+  for (let r = 0; r < 3; r++) for (let c = -2; c <= 2; c++) if (c !== 0 && !(r === 0 && Math.abs(c) === 2)) cushion(h, c * 1.5, -0.9 + r * 1.6);
   hangLanterns(h, [[-3.5, 1.2], [3.5, 1.2], [0, 3.4]]);
 }
 
@@ -585,22 +601,6 @@ function shrine(h, monks = []) {
 {
   const h = salas.access, { g, FY, W, D } = h;
   shrine(h, [["monk-elder", -2.6], ["monk", 2.6], ["monk-young", 4.6]]);
-  // Kathina (กฐิน): the offering gifts (บริวารกฐิน) set out on a low table before the platform, to the senior
-  // monk's left: folded robes, an alms bowl, a folded umbrella, a lamp and a pillow
-  if (h.senior) {
-    const tx0 = -4.9, tz0 = h.senior.edge + 0.55;
-    props("table", 0.55, [[tx0, tz0, 0, FY]], { parent: g });
-    const T = FY + 0.55;
-    robeStack(g, tx0 - 0.45, T, tz0, 3);
-    add(new THREE.SphereGeometry(0.2, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), S(0x1a1a1e, { roughness: 0.35, metalness: 0.2 }), tx0 + 0.1, T + 0.2, tz0, g).rotation.x = Math.PI; // the bowl
-    add(new THREE.CylinderGeometry(0.19, 0.19, 0.04, 20), S(0x1a1a1e, { roughness: 0.35 }), tx0 + 0.1, T + 0.02, tz0, g, false);
-    const umb = new THREE.Group(); umb.position.set(tx0 + 0.55, T, tz0 - 0.1); umb.rotation.z = 0.5; g.add(umb); // the folded umbrella (กลด), lying
-    add(new THREE.ConeGeometry(0.09, 0.75, 10), S(0xe8dcc0, { roughness: 0.8 }), 0, 0.4, 0, umb);
-    add(new THREE.CylinderGeometry(0.015, 0.015, 0.9, 6), MAT.wood, 0, 0.45, 0, umb, false);
-    candle(g, tx0 + 0.3, T, tz0 + 0.2, 0.25);
-    add(new THREE.BoxGeometry(0.4, 0.12, 0.28), S(0xd9c48a, { roughness: 0.95 }), tx0 - 0.4, T + 0.06 + 0.33, tz0, g); // a pillow on the robes
-    h.post(tx0, tz0, 0.75);
-  }
   // the hall's own board moves to the side wall
   wallBoard(h, "left", 0.6, boardTexture({ head: tx("ศาลาสากล", "Universal Hall"), icon: "🌍", title: "ภาษาไทย · English", foot: tx("เลือกภาษา ขนาดตัวอักษร และการเคลื่อนไหวได้ในหน้าเว็บของศาลานี้", "Choose language and motion settings on this hall's web page"), wide: true }), 2.8, 2.33, 2.6);
   props("potplant", 1.6, [[-W / 2 + 1, D / 2 - 1, 2, FY], [W / 2 - 1, D / 2 - 1, 3, FY]], { parent: g });
@@ -1220,7 +1220,7 @@ function kraapState(t) {
 }
 
 /* ---------------- Kathina (ทอดกฐิน): offering the robe to the Sangha ---------------- */
-// In the Universal Hall the boy brings the Kathina robe on a gold tray to the senior monk, who receives it
+// In the Learning Hall, the temple's main hall, the boy brings the Kathina robe on a gold tray to the senior monk, who receives it
 // for the community of monks. He kneels close to the platform holding the tray, raises it to his forehead,
 // sets it on the edge of the platform before the monk (who leans in and draws it to himself), brings his hands
 // to a wai at the chest and moves back on his knees. Then he pays respect to the monk exactly as to the Buddha:
@@ -2393,7 +2393,7 @@ function frame(dt) {
   for (const s of journeyStones) { const d = Math.hypot(player.x - s.x, player.z - s.z); if (d < 2.6 && d < bestD) { best = { ...PLACES.find((p) => p.id === "journey"), stone: s.i }; bestD = d; } }
   if (Math.hypot(player.x - BELL[0], player.z - BELL[1]) < 3.6 && 3 < bestD) { best = BELL_PLACE; bestD = 3; }
   { const d = Math.hypot(player.x - DONATE.x, player.z - (DONATE.z + 0.6)); if (d < 2.4 && d < bestD) { best = DONATE_PLACE; bestD = d; } } // only when standing at the box
-  { const h = salas.access; if (h && h.senior && kraap.t < 0) { const sp = kathinSpots(h), d = Math.hypot(player.x - sp.near.x, player.z - sp.near.z); if (d < 1.3 && d < bestD) { best = { ...KATHIN_PLACE, hall: h }; bestD = d; } } }
+  { const h = salas.learn; if (h && h.senior && kraap.t < 0) { const sp = kathinSpots(h), d = Math.hypot(player.x - sp.near.x, player.z - sp.near.z); if (d < 1.3 && d < bestD) { best = { ...KATHIN_PLACE, hall: h }; bestD = d; } } }
   for (const m of almsMonks) { const d = Math.hypot(player.x - (m.x + Math.sin(m.yaw) * ALMS_STAND), player.z - (m.z + Math.cos(m.yaw) * ALMS_STAND)); if (d < 1.5 && d < bestD) { best = { ...ALMS_PLACE, monk: m }; bestD = d; } }
   for (const s of boards) { const d = Math.hypot(player.x - s.x, player.z - s.z); if (d < 1.9 && d < bestD) { best = { ...PLACES.find((p) => p.id === "learn"), stone: s.i, board: true }; bestD = d; } }
   if ((best && best.id) !== (near && near.id) || (best && best.stone) !== (near && near.stone) || (best && best.monk) !== (near && near.monk)) { near = best; showPrompt(near); }
