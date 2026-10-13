@@ -524,30 +524,137 @@ function seatStatic(name, lean) {
     monkFigures.push({ o: m, ph: monkFigures.length * 2.1 });
   }));
 }
-// The senior monk, rigged like the boy (the same skeleton) and seated cross-legged by his own animation, so his
-// hands can do things: receive the Kathina robe, take up the whisk and bless. If his model can't load, the
-// unrigged elder sits in his place.
-const SENIOR_H = 3.3; // standing height, to the boy's scale (seated he comes to about the other monks' height)
-function loadSenior(s, fallback) {
-  propLoader.load("assets/models/monk-senior.glb", (gl) => {
-    const clip = gl.animations.find((c) => /sit/i.test(c.name)) || gl.animations[0];
-    if (!clip) { seatStatic(fallback, s.lean); return; }
-    const obj = gl.scene, holder = new THREE.Group(); holder.add(obj); fitModel(obj, SENIOR_H);
-    const B = {}; obj.traverse((o) => { if (o.isBone) B[o.name] = o; });
-    const mixer = new THREE.AnimationMixer(obj);
-    mixer.clipAction(clip).play(); mixer.update(0); // (a held pose)
+// The seated monks are each one sculpted mesh, made seated (so the robe over the crossed legs is as sculpted). Their
+// upper bodies are rigged here: bones at joints measured on each model (in the model's own space as loaded: facing +x,
+// its left at -z, 1 tall), each bone's +y running along its limb, and every vertex weighted to the bones of its part
+// of the body. The arms, the head and the back can move; the legs and the lap never deform.
+const SEATED_JOINTS = {
+  "monk-senior": {
+    Hips: [-0.1, -0.33, 0], Spine02: [-0.1, -0.18, 0], Spine01: [-0.1, -0.03, 0], Spine: [-0.1, 0.1, 0], neck: [-0.09, 0.2, 0], Head: [-0.06, 0.28, 0], HeadTop: [-0.05, 0.5, 0],
+    Shoulder: [-0.1, 0.15, 0.05], Arm: [-0.1, 0.13, 0.17], ForeArm: [-0.01, -0.07, 0.28], Hand: [0.17, -0.2, 0.37], HandTip: [0.216, -0.25, 0.48], // the right side (the left mirrors it)
+    radius: { Left: [0.09, 0.05, 0.07], Right: [0.065, 0.05, 0.07] }, // upper arm (the left in its sleeve), forearm, hand (with its fingers)
+    lap: [0, 0.36, 0.12], // where his hands rest, on the robe over his lap (in his seat's space: see teacherSit)
+  },
+  "monk-middle": { // broader in the shoulders
+    Hips: [-0.1, -0.33, 0], Spine02: [-0.11, -0.18, 0], Spine01: [-0.12, -0.03, 0], Spine: [-0.13, 0.1, 0], neck: [-0.1, 0.2, 0], Head: [-0.08, 0.28, 0], HeadTop: [-0.08, 0.5, 0],
+    Shoulder: [-0.13, 0.15, 0.06], Arm: [-0.13, 0.15, 0.2], ForeArm: [-0.02, -0.06, 0.3], Hand: [0.19, -0.2, 0.38], HandTip: [0.24, -0.26, 0.49],
+    radius: { Left: [0.09, 0.055, 0.07], Right: [0.07, 0.05, 0.07] },
+    lap: [0, 0.36, 0.12],
+  },
+  "monk-junior": {
+    Hips: [-0.07, -0.33, 0], Spine02: [-0.09, -0.18, 0], Spine01: [-0.1, -0.03, 0], Spine: [-0.11, 0.1, 0], neck: [-0.08, 0.2, 0], Head: [-0.05, 0.28, 0], HeadTop: [-0.05, 0.5, 0],
+    Shoulder: [-0.11, 0.15, 0.05], Arm: [-0.11, 0.14, 0.18], ForeArm: [0, -0.08, 0.28], Hand: [0.19, -0.2, 0.37], HandTip: [0.225, -0.25, 0.48],
+    radius: { Left: [0.09, 0.05, 0.07], Right: [0.065, 0.045, 0.07] },
+    lap: [0, 0.36, 0.12],
+  },
+};
+const SPINE_CHAIN = ["Hips", "Spine02", "Spine01", "Spine", "neck", "Head", "HeadTop"], ARM_CHAIN = ["Shoulder", "Arm", "ForeArm", "ForeArmTwist", "Hand", "HandTip"];
+function rigSeated(model, J) {
+  let mesh = null; model.traverse((o) => { if (!mesh && o.isMesh) mesh = o; }); if (!mesh) return null;
+  model.updateMatrixWorld(true);
+  const toModel = model.matrixWorld.clone().invert().multiply(mesh.matrixWorld); // the mesh's vertices, in the model's space
+  // the joints, and each bone's parent and child
+  const P = {}, parent = {}, child = {};
+  SPINE_CHAIN.forEach((n, i) => { P[n] = new THREE.Vector3(...J[n]); if (i) { parent[n] = SPINE_CHAIN[i - 1]; child[SPINE_CHAIN[i - 1]] = n; } });
+  [["Left", -1], ["Right", 1]].forEach(([sd, sg]) => {
+    ARM_CHAIN.forEach((n, i) => {
+      P[sd + n] = n === "ForeArmTwist" ? null : new THREE.Vector3(J[n][0], J[n][1], J[n][2] * sg);
+      parent[sd + n] = i ? sd + ARM_CHAIN[i - 1] : "Spine"; if (i) child[sd + ARM_CHAIN[i - 1]] = sd + n;
+    });
+    P[sd + "ForeArmTwist"] = P[sd + "ForeArm"].clone().lerp(P[sd + "Hand"], 0.5); // halfway down the forearm: it takes half the wrist's turn
+  });
+  // the bones: each turned so its +y runs to its child (a leaf keeps its parent's turn); placed in the model's space
+  const B = {}, Q = {}, fwd = new THREE.Vector3(1, 0, 0);
+  Object.keys(P).forEach((n) => {
+    const b = new THREE.Bone(); b.name = n; B[n] = b;
+    if (!child[n]) return;
+    const y = P[child[n]].clone().sub(P[n]).normalize(), z = fwd.clone().addScaledVector(y, -fwd.dot(y));
+    if (z.lengthSq() < 1e-4) z.set(0, 0, 1).addScaledVector(y, -y.z);
+    z.normalize(); const x = new THREE.Vector3().crossVectors(y, z);
+    Q[n] = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+  });
+  Object.keys(P).forEach((n) => { if (!Q[n]) Q[n] = Q[parent[n]]; });
+  Object.keys(P).forEach((n) => {
+    const b = B[n], pn = parent[n];
+    if (!pn) { b.position.copy(P[n]); b.quaternion.copy(Q[n]); model.add(b); return; }
+    const inv = Q[pn].clone().invert();
+    b.position.copy(P[n]).sub(P[pn]).applyQuaternion(inv); b.quaternion.copy(inv).multiply(Q[n]); B[pn].add(b);
+  });
+  const bones = Object.values(B), idx = (n) => bones.indexOf(B[n]);
+  // the weights: each arm takes the surface around its bones that is joined to the arm itself (grown over the mesh
+  // from the forearm, inside a tube around the arm), so a knee just under a hand stays with the body; the rest of
+  // the body follows the spine by height
+  const pos = mesh.geometry.attributes.position, N = pos.count, si = new Uint16Array(N * 4), sw = new Float32Array(N * 4), cp = new THREE.Vector3();
+  const segs = ["Left", "Right"].map((sd) => [["Arm", "ForeArm", 0], ["ForeArm", "ForeArmTwist", 1], ["ForeArmTwist", "Hand", 1], ["Hand", "HandTip", 2]]
+    .map(([a, c, r]) => ({ bone: idx(sd + a), line: new THREE.Line3(P[sd + a], P[sd + c]), r: J.radius[sd][r] })));
+  const ys = SPINE_CHAIN.slice(0, -1).map((n) => P[n].y);
+  const V = [], D = [], near = new Uint8Array(N), q = new Float32Array(N);
+  for (let i = 0; i < N; i++) {
+    const v = new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(toModel); V.push(v);
+    const S = segs[v.z < 0 ? 0 : 1], ds = S.map((g) => { g.line.closestPointToPoint(v, true, cp); return cp.distanceTo(v); });
+    let k0 = 0; ds.forEach((d, k) => { if (d / S[k].r < ds[k0] / S[k0].r) k0 = k; });
+    D.push(ds); near[i] = k0; q[i] = ds[k0] / S[k0].r;
+  }
+  // the mesh's edges, with vertices split at texture seams joined again by position
+  const weld = new Map(), id = new Int32Array(N);
+  for (let i = 0; i < N; i++) { const key = `${Math.round(V[i].x * 2e4)},${Math.round(V[i].y * 2e4)},${Math.round(V[i].z * 2e4)}`; if (!weld.has(key)) weld.set(key, i); id[i] = weld.get(key); }
+  const adj = Array.from({ length: N }, () => []), ix = mesh.geometry.index;
+  for (let f = 0; ix && f < ix.count; f += 3) { const a = id[ix.getX(f)], b = id[ix.getX(f + 1)], c = id[ix.getX(f + 2)]; adj[a].push(b, c); adj[b].push(a, c); adj[c].push(a, b); }
+  const TUBE = 1.8, reached = new Uint8Array(N), queue = [];
+  for (let i = 0; i < N; i++) if (id[i] === i && near[i] >= 1 && q[i] < 0.6) { reached[i] = 1; queue.push(i); }
+  while (queue.length) { const a = queue.pop(); for (const b of adj[a]) if (!reached[b] && q[b] < TUBE) { reached[b] = 1; queue.push(b); } }
+  for (let i = 0; i < N; i++) {
+    const v = V[i], w = [], ds = D[i], S = segs[v.z < 0 ? 0 : 1];
+    // the arm, where this vertex belongs to it
+    const m = reached[id[i]] ? (1 - smooth(1.2, TUBE, q[i])) * smooth(J.Arm[2] - 0.05, J.Arm[2] + 0.03, Math.abs(v.z)) : 0; // (fading into the body at the shoulder)
+    if (m > 0) {
+      const iw = ds.map((d) => Math.pow(1 / Math.max(d, 1e-3), 6)), top = iw.map((x, k) => [x, k]).sort((a, b) => b[0] - a[0]).slice(0, 2), tot = top[0][0] + top[1][0];
+      top.forEach(([x, k]) => w.push([S[k].bone, m * x / tot]));
+    }
+    // the body along the spine: half and half at each joint, all its own in the middle of each bone
+    let j = 0; while (j < ys.length - 1 && v.y >= ys[j + 1]) j++;
+    const t = j < ys.length - 1 ? (v.y - ys[j]) / (ys[j + 1] - ys[j]) : 1, rest = 1 - m;
+    if (v.y < ys[0]) w.push([idx("Hips"), rest]);
+    else if (j === ys.length - 1) w.push([idx(SPINE_CHAIN[j]), rest]);
+    else if (t < 0.5) { w.push([idx(SPINE_CHAIN[j]), rest * (0.5 + t)]); if (j > 0) w.push([idx(SPINE_CHAIN[j - 1]), rest * (0.5 - t)]); else w[w.length - 1][1] = rest; }
+    else { w.push([idx(SPINE_CHAIN[j]), rest * (1.5 - t)], [idx(SPINE_CHAIN[j + 1]), rest * (t - 0.5)]); }
+    w.slice(0, 4).forEach(([b, x], k) => { si[i * 4 + k] = b; sw[i * 4 + k] = x; });
+  }
+  const geo = mesh.geometry.clone();
+  geo.setAttribute("skinIndex", new THREE.Uint16BufferAttribute(si, 4)); geo.setAttribute("skinWeight", new THREE.Float32BufferAttribute(sw, 4));
+  const sm = new THREE.SkinnedMesh(geo, mesh.material); sm.name = mesh.name;
+  sm.position.copy(mesh.position); sm.quaternion.copy(mesh.quaternion); sm.scale.copy(mesh.scale);
+  mesh.parent.add(sm); mesh.parent.remove(mesh);
+  sm.castShadow = true; sm.receiveShadow = true; sm.frustumCulled = false;
+  model.updateMatrixWorld(true); sm.bind(new THREE.Skeleton(bones));
+  // the palms face down in the model as made (the rest pose that handShape reads them from is not hanging arms)
+  const shape = handShape(model);
+  if (shape) ["Left", "Right"].forEach((sd) => { const hs = shape[sd]; if (hs.palm.clone().applyQuaternion(Q[sd + "Hand"]).y > 0) hs.palm.negate(); });
+  return B;
+}
+// The teachers in the main hall, rigged so they can move (the senior monk receives the Kathina robe and blesses).
+// If a rigged model can't load, the unrigged figure sits in its place.
+const TEACHER_RIGS = { "monk-elder": "monk-senior", "monk": "monk-middle", "monk-young": "monk-junior" };
+function loadSeated(file, s, fallback) {
+  loadProp(file).then((src) => {
+    const J = SEATED_JOINTS[file];
+    if (!src || !J) { seatStatic(fallback, s.lean); return; }
+    const obj = src.clone(); obj.position.set(0, 0, 0); obj.rotation.set(0, 0, 0); obj.scale.setScalar(1);
+    const holder = fitTo(obj, MONK_H); holder.rotation.y = MONK_TURN; // fitted while still a plain mesh (a skinned one's bounds need drawn bones)
+    const fit = { p: obj.position.clone(), s: obj.scale.x }; obj.position.set(0, 0, 0); obj.scale.setScalar(1);
+    const B = rigSeated(obj, J);
+    obj.position.copy(fit.p); obj.scale.setScalar(fit.s);
+    if (!B) { seatStatic(fallback, s.lean); return; }
     s.lean.add(holder);
-    // his hip joints at their height above the cushion (his legs and hands are then placed from there: seniorSit)
-    obj.position.y = 0; holder.updateMatrixWorld(true);
-    obj.position.y = SENIOR_SIT.hip - holder.worldToLocal(B.LeftUpLeg.getWorldPosition(new THREE.Vector3())).y;
-    s.rig = { holder, obj, B, mixer, k: SENIOR_H / 1.7 };
-  }, undefined, () => seatStatic(fallback, s.lean));
+    monkFigures.push({ o: holder, ph: monkFigures.length * 2.1 }); // he breathes like the others
+    s.rig = { holder, obj, B, k: 1.94, lap: J.lap };
+  });
 }
 const SEAT_Z = 0.05; // the teachers' seats, back from the platform's middle: room before them for what is offered
 // the holy-water bowl (ขันน้ำมนต์) at the senior monk's right knee, with the whisk (ไม้พรม) lying in it
 const whiskWood = S(0x8a5a2e, { roughness: 0.8 }), whiskStraw = S(0xd9c48a, { roughness: 1 }), holyWater = new THREE.MeshStandardMaterial({ color: 0xbfe3f2, roughness: 0.1, metalness: 0.1, transparent: true, opacity: 0.85 });
 function blessingSet(g, lx, top, lz) {
-  const bx = lx - 0.9, bz = lz + 0.55; // (the monk faces +z: his right is -x)
+  const bx = lx - 0.92, bz = lz + 0.3; // (the monk faces +z: his right is -x)
   add(new THREE.CylinderGeometry(0.17, 0.11, 0.13, 24, 1, true), S(0xd8dce2, { metalness: 0.9, roughness: 0.25, side: THREE.DoubleSide }), bx, top + 0.065, bz, g);
   add(new THREE.CylinderGeometry(0.11, 0.11, 0.01, 20), S(0xd8dce2, { metalness: 0.9, roughness: 0.25 }), bx, top + 0.005, bz, g, false);
   add(new THREE.CylinderGeometry(0.155, 0.155, 0.01, 24), holyWater, bx, top + 0.1, bz, g, false);
@@ -555,8 +662,8 @@ function blessingSet(g, lx, top, lz) {
   add(new THREE.CylinderGeometry(0.014, 0.016, 0.38, 8), whiskWood, 0, 0.19, 0, whisk);
   const bunch = add(new THREE.ConeGeometry(0.055, 0.22, 10, 1, true), whiskStraw, 0, 0.47, 0, whisk); bunch.rotation.x = Math.PI; bunch.material.side = THREE.DoubleSide;
   const rest = { pos: new THREE.Vector3(bx + 0.06, top + 0.08, bz + 0.05), rot: new THREE.Euler(0.15, 0, 1.1) }; // lying across the bowl
-  const hold = new THREE.Vector3(lx - 0.4, top + 0.85, lz + 0.55); // in his right hand, raised before him
-  const dip = new THREE.Vector3(bx + 0.02, top + 0.6, bz);           // the grip, with the straw end down in the water
+  const hold = new THREE.Vector3(lx - 0.38, top + 0.8, lz + 0.45); // in his right hand, raised before him
+  const dip = new THREE.Vector3(bx + 0.02, top + 0.58, bz - 0.12);   // the grip, with the straw end down in the water (the whisk leans: its end lands ahead of the grip)
   whisk.position.copy(rest.pos); whisk.rotation.copy(rest.rot);
   return { whisk, rest, hold, dip, g, flicked: [] };
 }
@@ -579,11 +686,12 @@ function shrine(h, monks = [], { gifts = false } = {}) {
     add(triGeo, backMat, lx, top + 0.03, pz + SEAT_Z - 0.9, g);
   });
   monks.forEach(([name, lx]) => {
-    const rigged = name === "monk-elder" && gifts; // the senior monk in the main hall: rigged, so he can receive and bless
+    const rigged = gifts && TEACHER_RIGS[name]; // the teachers in the main hall are rigged
     const lean = seatMonk(rigged ? null : name, g, lx, top + 0.17, pz + SEAT_Z);
+    const seat = { lean, lx, lz: pz + SEAT_Z, top: top + 0.06, edge: pz + PD / 2 };
+    if (rigged) { loadSeated(rigged, seat, name); (h.teachers = h.teachers || []).push(seat); }
     if (name === "monk-elder") { // the senior monk: he receives offerings, and blesses with holy water
-      h.senior = { lean, lx, lz: pz + SEAT_Z, top: top + 0.06, edge: pz + PD / 2 };
-      if (rigged) loadSenior(h.senior, name);
+      h.senior = seat;
       h.senior.bless = blessingSet(g, lx, top + 0.06, pz + SEAT_Z);
     }
   });
@@ -832,7 +940,7 @@ const BIG_BUDDHA_H = 21, BIG_BUDDHA_TURN = -Math.PI / 2; // the great white Budd
   props("boulder", 4.5, [[-10.5, -61.6, 0.7, 8.6], [10.4, -62, 2.1, 8.6], [-11.2, -70, 3, 8.6], [11, -70.5, 1, 8.6]]);
   props("buddha-white", BIG_BUDDHA_H, [[0, -67.5, BIG_BUDDHA_TURN, 10.2]]);
   if (HIGH) [-1, 1].forEach((sg) => { // (real lights are costly: light mode leaves it unlit at night)
-    const l = new THREE.SpotLight(0xfff0d8, 0, 60, 0.42, 0.6, 1.2); l.position.set(sg * 12, 3, -44); l.target.position.set(0, 21, -67); scene.add(l, l.target);
+    const l = new THREE.SpotLight(0xfff0d8, 0, 60, 0.42, 0.6, 1.2); l.position.set(sg * 12, 3, -50.5); l.target.position.set(0, 21, -67); scene.add(l, l.target); // (behind the halls, so their insides stay out of the beam)
     hallLamps.push({ light: l, day: 0, night: 140 });
   });
   const four = [["🧍", "กาย", "Body"], ["💗", "ความรู้สึก", "Feelings"], ["🧠", "จิต", "Mind"], ["☸", "ธรรม", "Dhamma"]];
@@ -1949,7 +2057,7 @@ function birdsStep(dt) {
 }
 
 function lifeStep(dt) {
-  laneStep(dt); noviceStep(dt); birdsStep(dt); catStep(dt); seniorStep(dt);
+  laneStep(dt); noviceStep(dt); birdsStep(dt); catStep(dt); teachersStep(dt);
 }
 // the rigged monk and novice load after the boy, so his first steps are never delayed
 setTimeout(() => {
@@ -2642,55 +2750,56 @@ function kathinStep() {
 const BLESS_FLICKS = [0.3, 0.55, 0.8], BLESS_DIPS = [0.17, 0.43, 0.68];
 const dropGeo = new THREE.SphereGeometry(0.02, 6, 4), dropMat = new THREE.MeshBasicMaterial({ color: 0xd9f2ff, transparent: true, opacity: 0.85 });
 const drops = [];
-// every frame: the senior monk's own animation, then his hands posed for what he is doing
-// His seat, as the other teachers sit: back straight, head level with the eyes lowered, knees wide and low on the
-// cushion with the right shin in front of the left, hands resting in the lap, palms up, the right on the left. The
-// clip gives the crossed legs; this sets the pose over it each frame. Points are in his seat's space (the lean
-// group: x to his left, y up from the cushion, z the way he faces), for his size.
-const SENIOR_SIT = {
-  ankle: { Left: [-0.14, 0.07, 0.34], Right: [0.16, 0.09, 0.66] }, // each foot tucked under the other knee
-  pole: { Left: [1, 0.08, 0.35], Right: [-1, 0.08, 0.35] },       // knees out to the sides
-  lean: 0.22,                                                       // the back upright (its bones sit behind the hips: a little forward)
-  hip: 0.27, lap: [0, 0.45, 0.4], rise: 0.035,                       // the hip joints' height; where the hands rest (on the robe over his lap); the right hand that much above the left
-};
-function seniorSit(R, s) {
+// At rest a teacher sits as the unrigged monks do: head a little bowed with the eyes lowered, hands resting in the
+// lap, palms up, the right on the left. Points are in his seat's space (the lean group: x to his left, y up from the
+// cushion, z the way he faces).
+const LAP_RISE = 0.03; // the right hand that much above the left
+function teacherSit(R, s) {
   const B = R.B, L = (v) => s.lean.localToWorld(new THREE.Vector3(...v));
   const qL = s.lean.getWorldQuaternion(new THREE.Quaternion());
-  const up = new THREE.Vector3(0, 1, 0).applyQuaternion(qL), fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(qL), left = new THREE.Vector3(1, 0, 0).applyQuaternion(qL);
+  const up = new THREE.Vector3(0, 1, 0).applyQuaternion(qL), left = new THREE.Vector3(1, 0, 0).applyQuaternion(qL);
   R.obj.updateMatrixWorld(true);
-  // the spine, one segment at a time, straight up, then the neck
-  const chain = ["Spine02", "Spine01", "Spine", "neck"], straight = up.clone().addScaledVector(fwd, SENIOR_SIT.lean).normalize();
-  chain.forEach((n, i) => {
-    const b = B[n], c = B[chain[i + 1]] || B.Head; if (!b || !c) return;
-    const P = b.getWorldPosition(new THREE.Vector3()), C = c.getWorldPosition(new THREE.Vector3());
-    aimBone(b, C, P.clone().addScaledVector(straight, P.distanceTo(C)));
-  });
-  const rest = restPose(R.obj); if (rest && rest.Head) B.Head.quaternion.copy(rest.Head);
-  B.Head.updateMatrixWorld(true);
-  turnBone(B.Head, _q2.setFromAxisAngle(left, 0.12)); // eyes lowered
-  // the legs
-  ["Left", "Right"].forEach((sd) => {
-    const a = L(SENIOR_SIT.ankle[sd]), sg = sd === "Left" ? 1 : -1;
-    legTo(B, sd, a, a.clone().addScaledVector(left, -sg * 0.12).addScaledVector(fwd, 0.06).addScaledVector(up, -0.04), L(SENIOR_SIT.pole[sd]).sub(L([0, 0, 0])), 1);
-  });
-  // the hands in the lap
+  turnBone(B.Head, _q2.setFromAxisAngle(left, 0.1)); // eyes lowered
   const shape = handShape(R.obj); if (!shape) return;
-  const lap = L(SENIOR_SIT.lap);
-  [["Left", 1, 0], ["Right", -1, SENIOR_SIT.rise]].forEach(([sd, sg, dy]) => {
+  const lap = L(R.lap), scale = R.obj.getWorldScale(_v1).y;
+  [["Left", 1, 0], ["Right", -1, LAP_RISE]].forEach(([sd, sg, dy]) => {
     const hs = shape[sd], Q = basisQuat(hs.finger, hs.palm, left.clone().multiplyScalar(-sg), up); // fingers across, palm up
-    const centroid = hs.points.reduce((acc, q) => acc.add(q), new THREE.Vector3()).multiplyScalar(1 / hs.points.length).applyQuaternion(Q).multiplyScalar(R.obj.getWorldScale(_v1).y);
+    const centroid = hs.points.reduce((acc, q) => acc.add(q), new THREE.Vector3()).multiplyScalar(1 / hs.points.length).applyQuaternion(Q).multiplyScalar(scale);
     armTo(B, sd, lap.clone().sub(centroid).addScaledVector(up, dy + centroid.dot(up)), Q, left.clone().multiplyScalar(sg * 0.8).addScaledVector(up, -0.6), 1);
   });
 }
+// the wrist's turn about the forearm, half of it taken by the forearm (so the wrist doesn't wring)
+function spreadTwist(B, sd) {
+  const tw = B[sd + "ForeArmTwist"], hand = B[sd + "Hand"]; if (!tw || !hand) return;
+  const ax = hand.position.clone().normalize(), q = hand.quaternion, d = ax.x * q.x + ax.y * q.y + ax.z * q.z;
+  const half = new THREE.Quaternion().slerp(new THREE.Quaternion(ax.x * d, ax.y * d, ax.z * d, q.w).normalize(), 0.5);
+  tw.quaternion.copy(half); hand.quaternion.premultiply(half.invert());
+}
 const BLESS_GRIP = [0.045, 0.03]; // where the whisk handle lies in his hand: along the fingers from the wrist, out from the palm
-function seniorStep(dt) {
-  const h = salas.learn, s = h && h.senior; if (!s || !s.rig) return;
-  const R = s.rig; R.mixer.update(dt); R.holder.updateMatrixWorld(true);
-  const k = kraap.kathin && kraap.kathin.monk === s ? kraap.kathin : null, t = k ? kraap.t : -1;
+// Now and then a teacher's head turns a little, and when the child is close before him he looks at the child.
+const GAZE_NEAR = 3.5, GAZE_MAX = 0.45; // how close the child must be; how far the head turns (radians)
+function teacherGaze(s, R, dt, fwd, left, up) {
+  const G = s.gaze || (s.gaze = { yaw: 0, aim: 0, next: 2 + Math.random() * 6 });
+  const at = R.B.Head.getWorldPosition(new THREE.Vector3()), dx = player.x - at.x, dz = player.z - at.z;
+  const ahead = dx * fwd.x + dz * fwd.z, side = dx * left.x + dz * left.z;
+  if (Math.hypot(dx, dz) < GAZE_NEAR && ahead > 0.3) G.aim = Math.max(-GAZE_MAX, Math.min(GAZE_MAX, Math.atan2(side, ahead)));
+  else if ((G.next -= dt) < 0) { G.next = 5 + Math.random() * 8; G.aim = settings.calmMotion ? 0 : (Math.random() < 0.5 ? 0 : (Math.random() - 0.5) * 0.4); }
+  G.yaw += (G.aim - G.yaw) * Math.min(1, dt * 1.2);
+  turnBone(R.B.neck, _q2.setFromAxisAngle(up, G.yaw * 0.4)); turnBone(R.B.Head, _q2.setFromAxisAngle(up, G.yaw * 0.6));
+}
+// every frame, each rigged teacher: at rest as the others sit, looking about; the senior monk also receives the
+// Kathina robe and blesses with holy water
+function teachersStep(dt) {
+  const h = salas.learn; if (!h || !h.teachers) return;
+  for (const s of h.teachers) if (s.rig) teacherStep(h, s, dt);
+}
+function teacherStep(h, s, dt) {
+  const R = s.rig; R.B.LeftForeArmTwist.quaternion.identity(); R.B.RightForeArmTwist.quaternion.identity(); R.holder.updateMatrixWorld(true);
+  const k = s === h.senior && kraap.kathin && kraap.kathin.monk === s ? kraap.kathin : null, t = k ? kraap.t : -1;
   const shape = handShape(R.obj), RB = R.B; if (!shape || !RB.RightArm) return;
   const g = h.g, toW = (v) => g.localToWorld(v.clone()), dirW = (v) => v.clone().transformDirection(g.matrixWorld);
   const fwd = dirW(new THREE.Vector3(0, 0, 1)), left = dirW(new THREE.Vector3(1, 0, 0)), up = new THREE.Vector3(0, 1, 0);
-  waiBegin(RB); seniorSit(R, s);
+  waiBegin(RB); teacherSit(R, s); teacherGaze(s, R, dt, fwd, left, up);
   // receiving the robe: both hands reach out and rest on the tray's rim a moment
   const recv = k ? smooth(KATHIN_RELEASE - 0.2, KATHIN_RELEASE + 0.4, t) * (1 - smooth(KATHIN_RELEASE + 1.4, KATHIN_RELEASE + 2.1, t)) : 0;
   if (recv > 0.001 && k.tray) {
@@ -2701,7 +2810,7 @@ function seniorStep(dt) {
     });
   }
   // the blessing: his right hand takes the whisk from the bowl, dips it and flicks it toward the child
-  const Bl = s.bless;
+  const Bl = s === h.senior ? s.bless : null;
   if (Bl) {
     const [b0, b1] = KATHIN_BLESS, u = t >= 0 ? (t - b0) / (b1 - b0) : -9;
     const reach = smooth(-0.12, 0.0, u) * (1 - smooth(1.0, 1.14, u));
@@ -2717,6 +2826,7 @@ function seniorStep(dt) {
     }
     Bl.handHeld = reach > 0.5;
   }
+  spreadTwist(RB, "Left"); spreadTwist(RB, "Right");
   waiMark(RB);
   R.obj.updateMatrixWorld(true);
   if (Bl && Bl.handHeld) { // the whisk sits in his hand: its grip where his fingers close
