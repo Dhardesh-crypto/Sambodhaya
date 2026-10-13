@@ -2144,7 +2144,10 @@ const onPath = (x, z) => {
 addEventListener("visibilitychange", () => { if (document.hidden) sound.pause(); else sound.resume(); });
 
 /* ---------------- avatars ---------------- */
-// kind: "boy" (the Sambodhaya film's boy, the default), "blocky" (built here) or "photo" (a picture as the face)
+// kind: "boy" (the Sambodhaya film's boy, the default), "girl" (his classmate, the Sambodhaya girl), "blocky" (built
+// here) or "photo" (a picture as the face). The boy and the girl are rigged alike (the same skeleton and animations),
+// so everything posed on the boy - the wai, sitting, the kraap, alms, the offerings - is posed on her the same way.
+const KIDS = { boy: true, girl: true };
 const AV_DEFAULT = { kind: "boy", skin: "#e8b48a", shirt: "#e98a2b", pants: "#5e4a3a", hair: "#2b1d14", hairStyle: "short", face: "smile" };
 const savedAvatar = read("avatar", {});
 let avatarCfg = { ...AV_DEFAULT, ...savedAvatar };
@@ -2291,7 +2294,8 @@ function buildBlocky() { setModel(blockyAvatar(avatarCfg, avatarCfg.kind === "ph
 // the Sambodhaya boy: a rigged 3D model with walk and idle animations (assets/models/boy*.glb)
 const boyLoader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 const boyReady = {};
-// kit "boy" wears his sneakers; kit "boy-socks" is the same boy in his white socks, for inside the halls
+// kit "boy" wears his sneakers; kit "boy-socks" is the same boy in his white socks, for inside the halls (and the
+// same for "girl" and "girl-socks", in her school shoes)
 function loadBoy(kit = "boy") {
   // boy.glb holds the model and its walk; the other files hold only an animation for the same skeleton
   if (!boyReady[kit]) boyReady[kit] = Promise.all([kit, kit + "-idle", kit + "-run", kit + "-sit"].map((n) => new Promise((res) => boyLoader.load(`assets/models/${n}.glb`, res, undefined, () => res(null)))))
@@ -2304,13 +2308,14 @@ function loadBoy(kit = "boy") {
   return boyReady[kit];
 }
 function buildAvatar() {
-  if (avatarCfg.kind !== "boy") { buildBlocky(); return; }
-  if (!player.model) buildBlocky(); // a stand-in while the boy loads
-  loadBoy("boy").then((b) => {
-    if (avatarCfg.kind !== "boy") return;
+  const kind = avatarCfg.kind;
+  if (!KIDS[kind]) { buildBlocky(); return; }
+  if (!player.model) buildBlocky(); // a stand-in while the child loads
+  loadBoy(kind).then((b) => {
+    if (avatarCfg.kind !== kind) return;
     if (!b) { buildBlocky(); return; } // couldn't load: stay a built character
-    boyKits.shod = b; shoes.on = true; setModel(b.holder, b.clips);
-    loadBoy("boy-socks").then((socks) => { boyKits.socks = socks; }); // for inside the halls; until it arrives, he keeps his shoes on
+    removePair(); boyKits.kind = kind; boyKits.socks = null; boyKits.shod = b; shoes.on = true; setModel(b.holder, b.clips);
+    loadBoy(kind + "-socks").then((socks) => { if (avatarCfg.kind === kind) boyKits.socks = socks; }); // for inside the halls; until it arrives, shoes stay on
   });
 }
 buildAvatar();
@@ -2485,7 +2490,7 @@ function startSit() {
   sit.spot = best; sit.on = true; sit.rise = 0;
   if (best) sit.faceYaw = best.yaw;
   else { const here = waiLevelHere(); sit.faceYaw = here.face ? Math.atan2(here.face.x - player.x, here.face.z - player.z) : null; }
-  if (player.mixer && player.clips.sit) playClip("sit", 1.2);
+  if (player.mixer && player.clips.sit) playClip(phabphiap() ? "idle" : "sit", 1.2);
 }
 function standUp() {
   if (!sit.on) return;
@@ -2885,11 +2890,65 @@ function poseOverlays(model, hands, bow, sitW) {
   if (broom.held && hands <= 0 && sitW <= 0.001) { waiBegin(B); poseBroom(model, B); waiMark(B); return; }
   if (hands <= 0 && bow <= 0 && sitW <= 0.001) { waiEnd(B); return; }
   waiBegin(B);
-  if (sitW > 0.001) poseSit(model, B, sitW);
+  if (sitW > 0.001) { if (phabphiap()) posePhabphiap(model, B, sitW); else poseSit(model, B, sitW); }
   poseWaiCore(model, B, hands, bow);
   waiMark(B);
 }
 function poseWai(model, hands, bow) { poseOverlays(model, hands, bow, sit.w); }
+// The girl sits พับเพียบ, as is polite before the monks and the Buddha (and her long skirt stays smooth over her
+// knees): her pelvis rests on the cushion, settled a little onto her left hip, back upright; both knees point
+// forward and both lower legs fold to her right, the feet lying behind with the soles up; her hands rest one on the
+// other on her thighs, eyes lowered. No animation for this exists, so it is posed on her skeleton (her thigh and shin
+// lengths measured from this frame), over her standing animation.
+const phabphiap = () => boyKits.kind === "girl" && isBoy();
+function posePhabphiap(model, B, w) {
+  if (!B.Hips || !B.LeftUpLeg || !B.RightUpLeg) return;
+  const rest = restPose(model);
+  if (rest) ["Spine02", "Spine01", "Spine", "neck", "Head"].forEach((n) => { if (B[n] && rest[n]) B[n].quaternion.slerp(rest[n], w); });
+  model.updateMatrixWorld(true);
+  const wp = (n) => B[n].getWorldPosition(new THREE.Vector3());
+  const up = new THREE.Vector3(0, 1, 0), fwd = new THREE.Vector3(Math.sin(player.yaw), 0, Math.cos(player.yaw)), left = new THREE.Vector3(Math.cos(player.yaw), 0, -Math.sin(player.yaw));
+  const right = left.clone().negate(), back = fwd.clone().negate(), axis = left.clone(); // (tilting about "left" bows forward)
+  const scale = model.getWorldScale(new THREE.Vector3()).y;
+  const thigh = wp("LeftUpLeg").distanceTo(wp("LeftLeg")), shin = wp("LeftLeg").distanceTo(wp("LeftFoot"));
+  const floor = groundAt(player.x, player.z) + (insideHall(player.x, player.z) ? 0 : PAVING), seat = floor + (sit.spot ? sit.spot.top : 0);
+  // 1) the pelvis: squared to the front, tilted onto the left hip, the hip joints just above the seat
+  const hipsW = wp("Hips"), hipLine = wp("LeftUpLeg").sub(wp("RightUpLeg")).normalize();
+  turnBone(B.Hips, new THREE.Quaternion().slerp(new THREE.Quaternion().setFromUnitVectors(hipLine, left), w));
+  turnBone(B.Hips, _q2.setFromAxisAngle(fwd, -0.12 * w));
+  model.updateMatrixWorld(true);
+  const joints = wp("LeftUpLeg").add(wp("RightUpLeg")).multiplyScalar(0.5);
+  const J = new THREE.Vector3(player.x, seat + 0.42 * thigh, player.z).addScaledVector(left, 0.05 * scale).addScaledVector(back, 0.04 * scale);
+  B.Hips.position.copy(B.Hips.parent.worldToLocal(wp("Hips").add(J.clone().sub(joints).multiplyScalar(w))));
+  model.updateMatrixWorld(true);
+  if (B.Spine) turnBone(B.Spine, _q2.setFromAxisAngle(fwd, 0.1 * w)); // the back comes upright again over the tilted pelvis
+  model.updateMatrixWorld(true);
+  // 2) the legs: knees forward, both shins folded to her right, feet behind, soles up
+  const kneeY = floor + KNEE_UP * scale, ankleY = floor + ANKLE_UP * scale;
+  [["Left", 0.95, 0.12, 0.8, 0.45], ["Right", 0.72, 0.42, 0.88, 0.25]].forEach(([s, kf, kr, ab, ar]) => {
+    const H = wp(s + "UpLeg");
+    const K = H.clone().addScaledVector(fwd, kf * thigh).addScaledVector(right, kr * thigh).setY(kneeY);
+    const A = K.clone().addScaledVector(back, ab * shin).addScaledVector(right, ar * shin).setY(ankleY);
+    const toe = A.clone().addScaledVector(back, 0.22 * scale).addScaledVector(right, 0.05 * scale).setY(floor + 0.02 * scale);
+    legTo(B, s, A, toe, K.clone().sub(H.clone().add(A).multiplyScalar(0.5)).normalize(), w);
+  });
+  model.updateMatrixWorld(true);
+  // 3) eyes lowered
+  [["neck", 0.08], ["Head", 0.1]].forEach(([n, a]) => { if (B[n]) turnBone(B[n], _q2.setFromAxisAngle(axis, a * w)); });
+  model.updateMatrixWorld(true);
+  // 4) the hands: one on the other on her thighs, palms down, fingers forward and a little to the right
+  const shape = handShape(model); if (!shape) return;
+  const lap = J.clone().addScaledVector(fwd, 0.62 * thigh).addScaledVector(right, 0.12 * thigh).addScaledVector(up, 0.12 * thigh);
+  const fingers = fwd.clone().multiplyScalar(0.8).addScaledVector(right, 0.35).addScaledVector(up, -0.25).normalize();
+  [["Left", 0, 1], ["Right", 0.045, -1]].forEach(([s, lift, sg]) => {
+    const hs = shape[s]; if (!hs) return;
+    const palm = up.clone().negate(); palm.addScaledVector(fingers, -palm.dot(fingers)).normalize();
+    const Q = basisQuat(hs.finger, hs.palm, fingers, palm);
+    const along = hs.points.reduce((a, q) => a + q.clone().applyQuaternion(Q).dot(fingers), 0) / hs.points.length * scale;
+    const target = lap.clone().addScaledVector(up, lift * scale + 0.03 * scale).addScaledVector(fingers, -along).addScaledVector(left, sg * 0.03 * scale);
+    armTo(B, s, target, Q, left.clone().multiplyScalar(sg).addScaledVector(back, 0.4).addScaledVector(up, -0.3), w);
+  });
+}
 // one leg: ankle to its target with the knee toward pole, the foot pointing its toes to toe; blend by weight
 function legTo(B, s, ankle, toe, pole, weight) {
   const up = B[s + "UpLeg"], lo = B[s + "Leg"], ft = B[s + "Foot"], tb = B[s + "ToeBase"]; if (!up || !lo || !ft) return;
@@ -3197,10 +3256,11 @@ function poseWaiCore(model, B, hands, bow) {
 // out of his sneakers one foot at a time and goes in in his socks; the pair waits at the step, toes turned
 // out, with his school backpack beside it (sitting and bowing with a bag on is not done either). Leaving,
 // he steps back into them and takes his bag. (Only the Sambodhaya boy: the built characters have neither.)
-const boyKits = { shod: null, socks: null };
+const boyKits = { kind: "boy", shod: null, socks: null };
 const shoes = { on: true, t: -1, mode: null, pair: null };
 const SHOES_DUR = 1.5, SHOES_SWAP = 0.62;
-let shoePairSrc = null, bagSrc = null; loadProp("shoes").then((m) => { shoePairSrc = m; }); loadProp("backpack").then((m) => { bagSrc = m; });
+const pairSrc = { boy: null, girl: null }; let bagSrc = null; // his sneakers, her school shoes; the same kind of backpack
+loadProp("shoes").then((m) => { pairSrc.boy = m; }); loadProp("shoes-girl").then((m) => { pairSrc.girl = m; }); loadProp("backpack").then((m) => { bagSrc = m; });
 const isBoy = () => boyKits.shod && boyKits.socks && (player.model === boyKits.shod.holder || player.model === boyKits.socks.holder);
 function wearKit(kit) {
   const k = boyKits[kit]; if (!k || player.model === k.holder) return;
@@ -3215,8 +3275,9 @@ function hallStepOf(x, z) { // the front step of the hall whose floor this is: w
 function placePair(x, z, yaw) {
   removePair();
   const g = new THREE.Group(); g.position.set(x, groundAt(x, z), z); g.rotation.y = yaw; scene.add(g);
-  // his sneakers at this scale: about 0.42 long
-  if (shoePairSrc) { const c = fitTo(shoePairSrc.clone(), 0.2); c.rotation.y = SHOES_TURN; c.traverse((o) => { if (o.isMesh) o.castShadow = true; }); g.add(c); }
+  // the pair at this scale: about 0.42 long
+  const src = pairSrc[boyKits.kind] || pairSrc.boy;
+  if (src) { const c = fitTo(src.clone(), PAIR_H[boyKits.kind] || 0.2); c.rotation.y = PAIR_TURN[pairSrc[boyKits.kind] ? boyKits.kind : "boy"]; c.traverse((o) => { if (o.isMesh) o.castShadow = true; }); g.add(c); }
   else [-0.1, 0.1].forEach((dx) => { add(new THREE.BoxGeometry(0.15, 0.12, 0.34), S(0x1d1d22), dx, 0.07, 0, g); add(new THREE.BoxGeometry(0.16, 0.04, 0.35), S(0xf2f2f2), dx, 0.02, 0, g, false); });
   // his backpack stands beside the shoes (about 0.75 tall at his scale)
   if (bagSrc) { const b = fitTo(bagSrc.clone(), 0.75); b.rotation.y = BAG_TURN; b.position.x = -0.55; b.traverse((o) => { if (o.isMesh) o.castShadow = true; }); g.add(b); }
@@ -3260,6 +3321,8 @@ function poseShoes(model, B, t) {
 }
 const BAG_TURN = -Math.PI / 2; // turns the backpack model's front pocket out, the way the shoes point
 const SHOE_THIGH = 0.35, SHOE_KNEE = 1.3, SHOES_TURN = -Math.PI / 2; // the pair model lies toes-sideways; this points the toes along the group's +z
+const GIRL_SHOES_TURN = -Math.PI / 2; // (her pair model's own facing; checked from above)
+const PAIR_TURN = { boy: SHOES_TURN, girl: GIRL_SHOES_TURN }, PAIR_H = { boy: 0.2, girl: 0.18 };
 
 /* ---------------- input ---------------- */
 const keys = {};
@@ -3505,9 +3568,10 @@ const SH = ["#e98a2b", "#4f9a5d", "#3d8fd1", "#f27aa0", "#f2cc62", "#fffdf8", "#
 const PA = ["#5e4a3a", "#2f3b55", "#3f6b3a", "#7a2f2f", "#d9c7a5"];
 const HA = ["#2b1d14", "#6b3e1f", "#c98e3a", "#9aa0a6"];
 function swatches(field, list) { return `<div class="swatches" role="radiogroup">${list.map((c) => `<button class="sw${avatarCfg[field] === c ? " on" : ""}" style="background:${c}" data-sw="${field}" data-c="${c}" aria-label="${c}" role="radio" aria-checked="${avatarCfg[field] === c}"></button>`).join("")}</div>`; }
-function openAvatar(tab = avatarCfg.kind === "boy" ? "boy" : "build") {
+function openAvatar(tab = KIDS[avatarCfg.kind] ? avatarCfg.kind : "build") {
   const tabs = `<div class="tabs" role="tablist">
     <button class="chip${tab === "boy" ? " on" : ""}" data-tab="boy">🧒 ${tx("เด็กชายสัมโพธายะ", "Sambodhaya boy")}</button>
+    <button class="chip${tab === "girl" ? " on" : ""}" data-tab="girl">👧 ${tx("เด็กหญิงสัมโพธายะ", "Sambodhaya girl")}</button>
     <button class="chip${tab === "build" ? " on" : ""}" data-tab="build">🧱 ${tx("สร้างเอง", "Build")}</button>
     <button class="chip${tab === "photo" ? " on" : ""}" data-tab="photo">🖼️ ${tx("รูปเป็นหน้า", "Picture face")}</button>
     <button class="chip${tab === "model" ? " on" : ""}" data-tab="model">🧩 ${tx("ไฟล์ 3 มิติ", "3D file")}</button></div>`;
@@ -3515,6 +3579,9 @@ function openAvatar(tab = avatarCfg.kind === "boy" ? "boy" : "build") {
   if (tab === "boy") body = `
     <div class="row"><img class="preview" src="img/avatar-boy.jpg" alt="" style="object-fit:contain;background:#fff"><p>${tx("เด็กชายจากภาพยนตร์สั้นของวัดสัมโพธายะ เดินได้ ยืนพักได้ สะพายกระเป๋านักเรียน", "The boy from the Sambodhaya film. He walks, stands at ease and carries his school bag.")}</p></div>
     <div class="row"><button class="btn" id="use-boy" ${avatarCfg.kind === "boy" ? "disabled" : ""}>${avatarCfg.kind === "boy" ? tx("กำลังใช้อยู่ ✓", "In use ✓") : tx("ใช้ตัวละครนี้", "Use this character")}</button></div>`;
+  if (tab === "girl") body = `
+    <div class="row"><img class="preview" src="img/avatar-girl.jpg" alt="" style="object-fit:contain;background:#fff"><p>${tx("เด็กหญิงสัมโพธายะ เพื่อนร่วมชั้นของเด็กชาย ในชุดนักเรียนที่สุภาพสำหรับไปวัด กระโปรงยาวคลุมเข่า เดินได้ ยืนพักได้ สะพายกระเป๋านักเรียน", "The Sambodhaya girl, the boy's classmate, in a school uniform fit for the temple, her skirt well below the knee. She walks, stands at ease and carries her school bag.")}</p></div>
+    <div class="row"><button class="btn" id="use-girl" ${avatarCfg.kind === "girl" ? "disabled" : ""}>${avatarCfg.kind === "girl" ? tx("กำลังใช้อยู่ ✓", "In use ✓") : tx("ใช้ตัวละครนี้", "Use this character")}</button></div>`;
   if (tab === "build") body = `
     <div class="field"><span>${tx("สีผิว", "Skin")}</span>${swatches("skin", SK)}</div>
     <div class="field"><span>${tx("เสื้อ", "Shirt")}</span>${swatches("shirt", SH)}</div>
@@ -3536,10 +3603,11 @@ function openAvatar(tab = avatarCfg.kind === "boy" ? "boy" : "build") {
   openDialog(tx("🧍 ตัวละครของฉัน", "🧍 My avatar"), tabs + body + `<div class="row"><button class="btn" data-close>${tx("เสร็จแล้ว", "Done")}</button></div>`);
   const dlg = $("dlg");
   const ub = $("use-boy"); if (ub) ub.addEventListener("click", () => { avatarCfg.kind = "boy"; write("avatar", avatarCfg); buildAvatar(); openAvatar("boy"); });
+  const ug = $("use-girl"); if (ug) ug.addEventListener("click", () => { avatarCfg.kind = "girl"; write("avatar", avatarCfg); buildAvatar(); openAvatar("girl"); });
   dlg.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => openAvatar(b.dataset.tab)));
   dlg.querySelectorAll("[data-sw]").forEach((b) => b.addEventListener("click", () => { avatarCfg = { ...avatarCfg, kind: avatarCfg.kind === "photo" ? "photo" : "blocky", [b.dataset.sw]: b.dataset.c }; write("avatar", avatarCfg); buildBlocky(); openAvatar("build"); }));
-  dlg.querySelectorAll("[data-hs]").forEach((b) => b.addEventListener("click", () => { avatarCfg.hairStyle = b.dataset.hs; if (avatarCfg.kind === "boy") avatarCfg.kind = "blocky"; write("avatar", avatarCfg); buildBlocky(); openAvatar("build"); }));
-  dlg.querySelectorAll("[data-face]").forEach((b) => b.addEventListener("click", () => { avatarCfg.face = b.dataset.face; if (avatarCfg.kind === "photo" || avatarCfg.kind === "boy") { avatarCfg.kind = "blocky"; } write("avatar", avatarCfg); buildBlocky(); openAvatar("build"); }));
+  dlg.querySelectorAll("[data-hs]").forEach((b) => b.addEventListener("click", () => { avatarCfg.hairStyle = b.dataset.hs; if (KIDS[avatarCfg.kind]) avatarCfg.kind = "blocky"; write("avatar", avatarCfg); buildBlocky(); openAvatar("build"); }));
+  dlg.querySelectorAll("[data-face]").forEach((b) => b.addEventListener("click", () => { avatarCfg.face = b.dataset.face; if (avatarCfg.kind === "photo" || KIDS[avatarCfg.kind]) { avatarCfg.kind = "blocky"; } write("avatar", avatarCfg); buildBlocky(); openAvatar("build"); }));
   const ff = $("face-file");
   if (ff) ff.addEventListener("change", () => {
     const f = ff.files[0]; if (!f) return;
@@ -3676,7 +3744,7 @@ function frame(dt) {
     } else if (player.model.position.y < 0) player.model.position.y = 0;
   } else if (player.mixer) {
     if (kraap.t >= 0 || alms.t >= 0 || shoes.t >= 0 || feed.t >= 0 || merit.t >= 0) playClip("idle", 0.4);
-    else if (sit.on && player.clips.sit) playClip("sit", 1.2);
+    else if (sit.on && player.clips.sit) playClip(phabphiap() ? "idle" : "sit", 1.2);
     else if (sit.rise > 0) playClip("idle", 1.0);
     else playClip(!moving ? "idle" : player.clips.run && speed > 5 ? "run" : player.clips.walk ? "walk" : "idle");
     // keep the soles (or, seated, the crossed legs) on the ground: each animation has its own lift,
