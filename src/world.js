@@ -2999,6 +2999,19 @@ function foreheadOf(model) {
   model.userData.forehead = f;
   return f || FOREHEAD;
 }
+// the lowest point of the head as posed now (from the vertices that follow the head bone; every third is enough)
+function headLowest(model) {
+  let sk = null; model.traverse((o) => { if (!sk && o.isSkinnedMesh) sk = o; }); if (!sk) return Infinity;
+  if (!model.userData.headIdx) {
+    const bi = sk.skeleton.bones.findIndex((b) => b.name === "Head"), si = sk.geometry.attributes.skinIndex, sw = sk.geometry.attributes.skinWeight, idx = [];
+    for (let i = 0; i < si.count; i += 3) { let w = 0; for (let k = 0; k < 4; k++) if (si.getComponent(i, k) === bi) w += sw.getComponent(i, k); if (w > 0.5) idx.push(i); }
+    model.userData.headIdx = idx;
+  }
+  model.updateMatrixWorld(true);
+  const v = new THREE.Vector3(); let low = Infinity;
+  for (const i of model.userData.headIdx) { sk.getVertexPosition(i, v); v.applyMatrix4(sk.matrixWorld); if (v.y < low) low = v.y; }
+  return low;
+}
 const foreheadAt = (B) => { const hs = B.Head.getWorldScale(new THREE.Vector3()).y || 1; return foreheadOf(B.model).clone().multiplyScalar(1 / hs).applyMatrix4(B.Head.matrixWorld); };
 const PHI_BOW = 0.75, PELVIS_SHARE = 0.6; // in the bow the thighs pivot around the knees (hips stay low); most of the fold is at the hips, the back stays long
 // The lower body. Kneeling, he sits back on his heels; as he bows, his hips rise and come forward, the thighs
@@ -3043,7 +3056,8 @@ function kraapTouch(model, B, c) {
   // scan for the first bend at which the forehead reaches the floor, then refine; if it never quite
   // does, take the bend that brings it lowest
   const pose = (th) => { reset(); poseLowerBody(model, B, c, 1, 1, PELVIS_SHARE * th); applyBow(B, c.axis, (1 - PELVIS_SHARE) * th, 1, 0); };
-  const heightAt = (th) => { pose(th); return foreheadAt(B).y - (c.floor + 0.012); };
+  // the lowest point of the head (forehead, face or fringe, whatever the model) is what must just touch the floor
+  const heightAt = (th) => { pose(th); return Math.min(foreheadAt(B).y, headLowest(model)) - (c.floor + 0.012); };
   let lo = 0, hi = null, best = 0, bestH = Infinity;
   for (let th = 0; th <= 2.6; th += 0.05) { const h = heightAt(th); if (h < bestH) { bestH = h; best = th; } if (h <= 0) { hi = th; break; } lo = th; }
   if (hi != null) { for (let i = 0; i < 14; i++) { const mid = (lo + hi) / 2; if (heightAt(mid) > 0) lo = mid; else hi = mid; } } else hi = best;
