@@ -40,7 +40,16 @@ function stopCalm() { if (!calm || !ac) return; const { src, g } = calm; g.gain.
 function readAloud(text, lang) {
   try { const ss = window.speechSynthesis; if (!ss) return false; ss.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = lang === "th" ? "th-TH" : "en-US"; u.rate = lang === "th" ? 0.95 : 1; const v = ss.getVoices().find((v) => v.lang && v.lang.toLowerCase().startsWith(lang)); if (v) u.voice = v; ss.speak(u); return true; } catch (e) { return false; }
 }
-function hush() { try { window.speechSynthesis && speechSynthesis.cancel(); } catch (e) {} stopCalm(); }
+// Each lesson's short story is recorded (audio/u01-th.mp3 …, an AI voice: "Mark", MiniMax); if a recording can't be
+// played, the device's own voice reads it instead.
+let voiceEl = null;
+function playVoice(code, lang, text) {
+  hush();
+  const a = new Audio(`audio/${code.toLowerCase()}-${lang}.mp3`); voiceEl = a;
+  const fallback = () => { if (voiceEl === a) { voiceEl = null; readAloud(text, lang); } };
+  a.onerror = fallback; a.play().catch(fallback);
+}
+function hush() { try { window.speechSynthesis && speechSynthesis.cancel(); } catch (e) {} if (voiceEl) { voiceEl.pause(); voiceEl = null; } stopCalm(); }
 
 /* ---------- labels: 📜 source · 📝 translation · 💡 explanation · 🕯️ not yet known ---------- */
 const KIND = {
@@ -65,10 +74,11 @@ function Teach({ text, kind = "explain", block }) {
     </El>
   );
 }
-function Listen({ text }) {
-  const { lang, t } = useApp();
-  return <button className="chip" onClick={() => readAloud(text, lang)}><span aria-hidden="true">🎧</span> {t(UI("ฟัง (เสียงจากเครื่อง)", "Listen (device voice)"))}</button>;
+function Listen({ text, code }) {
+  const { lang, t, settings } = useApp();
+  return <button className="chip" disabled={settings.mute} onClick={() => (code ? playVoice(code, lang, text) : readAloud(text, lang))}><span aria-hidden="true">🎧</span> {t(code ? UI("ฟัง", "Listen") : UI("ฟัง (เสียงจากเครื่อง)", "Listen (device voice)"))}</button>;
 }
+const VOICE_NOTE = UI("เสียงอ่านนี้เป็นเสียง AI ยังไม่ใช่เสียงพากย์ที่ตรวจแล้ว", "This reading is an AI voice, not yet a reviewed narration.");
 
 /* ---------- the temple dog: scripted directions only, never teaching ---------- */
 function Dog({ say, children }) {
@@ -314,7 +324,8 @@ function Unit({ k }) {
       <div className="step">
         <h2><span aria-hidden="true">🕯️</span> 1 · {t(UI("เรื่องสั้น", "The short story"))}</h2>
         <Teach text={u.simple} block />
-        <Listen text={t(u.simple)} />
+        <div className="row"><Listen text={t(u.simple)} code={u.code} /><button className="chip" onClick={hush}>⏸️ {t(UI("หยุด", "Stop"))}</button></div>
+        <p className="quiet"><Tag kind="unknown" /> {t(VOICE_NOTE)}</p>
         {u.safety && <div className="safety" role="note"><strong>{t(UI("เรื่องนี้เป็นประวัติเท่านั้น ไม่ใช่สิ่งที่ให้ทำตาม", "This is history only, not something to copy"))}</strong><span>{t(u.safety)}</span></div>}
       </div>
 
@@ -487,12 +498,12 @@ function Media({ focus }) {
               <h3>{u.code} · {t(u.title)}</h3>
               <Teach text={u.simple} block />
               <div className="row">
-                {mode === "listen" && <><Listen text={t(u.simple)} /><button className="chip" onClick={hush}>⏸️ {t(UI("หยุด", "Stop"))}</button></>}
+                {mode === "listen" && <><Listen text={t(u.simple)} code={u.code} /><button className="chip" onClick={hush}>⏸️ {t(UI("หยุด", "Stop"))}</button></>}
                 <button className="chip" onClick={() => go("unit", k)}>👣 {t(UI("เปิดเรื่องนี้และต้นทาง", "Open this story and its source"))}</button>
               </div>
             </li>
           ))}
-          {mode === "listen" && <li className="quiet"><Tag kind="unknown" /> {t(UI("เสียงนี้อ่านโดยเสียงสังเคราะห์ของเครื่อง ยังไม่ใช่เสียงพากย์ที่ตรวจแล้ว", "This is read by your device's synthetic voice, not a reviewed narration."))}</li>}
+          {mode === "listen" && <li className="quiet"><Tag kind="unknown" /> {t(VOICE_NOTE)}</li>}
         </ol>
       )}
       {mode === "watch" && (
