@@ -2354,7 +2354,7 @@ const dog = { obj: new THREE.Group(), x: 3, z: 90, y: 0, yaw: Math.PI };
 
 // A trotting walk for the dog model. In the model's own space the head points to +x, it stands
 // from y = -0.63 (paws) to 0.63 (ears), front legs sit near x = 0.6, back legs near x = -0.3 and the
-// tail curls up behind x = -0.55. Diagonal legs swing together; the tail wags, faster when walking.
+// tail curls up behind x = -0.55. Diagonal legs swing together; the tail wags slowly and widely, a little faster when walking.
 const dogAnim = { phase: { value: 0 }, walk: { value: 0 }, time: { value: 0 }, wag: { value: 1 }, sit: { value: 0 }, lie: { value: 0 }, nuzzle: { value: 0 } };
 function animateDog(mat) {
   mat.onBeforeCompile = (sh) => {
@@ -2369,7 +2369,7 @@ function animateDog(mat) {
         transformed.x += below * 0.5 * sin(uPhase + off) * uWalk;        // swing forward and back
         transformed.y += 0.07 * legW * legW * max(0.0, cos(uPhase + off)) * uWalk; // lift the paw on the way forward
         float tailW = clamp((-0.5 - transformed.x) / 0.4, 0.0, 1.0) * smoothstep(-0.15, 0.1, transformed.y);
-        transformed.z += sin(uTime * mix(7.0, 13.0, uWalk)) * mix(0.12, 0.22, uWalk) * tailW * tailW * uWag;
+        transformed.z += sin(uTime * mix(4.2, 7.0, uWalk)) * mix(0.24, 0.32, uWalk) * tailW * tailW * uWag; // an unhurried, wide wag
         float headW = smoothstep(0.35, 0.6, transformed.x) * smoothstep(0.0, 0.3, transformed.y);
         transformed.y += sin(uPhase * 2.0) * 0.025 * uWalk * headW;
         // nuzzling: the head pushes up into the stroking hand
@@ -3725,7 +3725,7 @@ function frame(dt) {
     dogAnim.phase.value = (dogAnim.phase.value + dt * dogSpeed * 5.2) % (Math.PI * 200); // kept small so it stays precise
     if (!Number.isFinite(dogAnim.phase.value)) dogAnim.phase.value = 0;
     dogAnim.walk.value += ((dogSpeed > 0.5 ? 1 : 0) - dogAnim.walk.value) * Math.min(1, dt * 6);
-    dogAnim.time.value += dt; dogAnim.wag.value = (settings.calmMotion ? 0.4 : 1) * (petting ? 1.7 : 1); // wagging hard while petted
+    dogAnim.time.value += dt; dogAnim.wag.value = (settings.calmMotion ? 0.4 : 1) * (petting ? 1.3 : 1); // wagging harder while petted
     dog.obj.position.set(dog.x, groundAt(dog.x, dog.z), dog.z); dog.obj.rotation.y = dog.yaw;
     if (!settings.calmMotion) dog.tail.rotation.y = Math.sin(performance.now() / 160) * 0.6;
   }
