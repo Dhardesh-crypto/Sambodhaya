@@ -856,7 +856,7 @@ function Support() {
   const { t, lang, go } = useApp();
   const S = SUPPORT;
   const ready = !!(S.recipient && (S.promptpayQr || S.promptpayId || S.bank) && S.retentionDays && S.contact);
-  const [method, setMethod] = useState(S.promptpayQr || S.promptpayId ? "promptpay" : "bank");
+  const method = S.promptpayQr || S.promptpayId ? "promptpay or bank" : "bank"; // (both are shown together)
   const [f, setF] = useState({ anonymous: false, name: "", amount: "", note: "", email: "", thanks: "private", agree: false });
   const [stage, setStage] = useState(1); // 1: the transfer details; 2: the slip form (shown once they say they've transferred)
   const [file, setFile] = useState(null);
@@ -891,38 +891,41 @@ function Support() {
       <p className="eyebrow-adult">{t(UI("สำหรับผู้ใหญ่", "For adults"))}</p>
       <h1 className="zone-title">🤲 {t(UI("สมทบทุนพัฒนาและสร้างวัด", "Support the temple's development"))}</h1>
       <p className="lede">{t(UI("วัดสัมโพธายะเปิดให้ทุกคนใช้ฟรีเสมอ ไม่ต้องบริจาคก็เรียนได้ครบทุกอย่าง", "Wat Sambodhaya is always free for everyone. Nothing here requires a donation."))}</p>
-      <p>{t(UI("ถ้าอยากช่วย เงินสมทบจะนำไปใช้กับ", "If you'd like to help, contributions go towards"))}:</p>
-      <ul className="uses">
-        <li><span aria-hidden="true">🏯</span> {t(UI("สร้างและพัฒนาวัด ทั้งวัดออนไลน์และพื้นที่จริง", "Building and developing the temple, online and physical"))}</li>
-        <li><span aria-hidden="true">🤖</span> {t(UI("ค่าเครื่องมือ AI รายเดือน เช่น Claude, Midjourney และ AI APIs", "Monthly AI tools such as Claude, Midjourney and AI APIs"))}</li>
-        <li><span aria-hidden="true">📚</span> {t(UI("คอร์สและแหล่งเรียนรู้ที่ทีมต้องใช้", "Courses and learning resources the team needs"))}</li>
-        <li><span aria-hidden="true">🖥️</span> {t(UI("เซิร์ฟเวอร์และโฮสติ้ง", "Servers and hosting"))}</li>
-      </ul>
-      {S.taxNote ? <p className="quiet">{t(S.taxNote)}</p> : <p className="quiet"><Tag kind="unknown" /> {t(UI("ข้อมูลเรื่องใบลดหย่อนภาษี: รอข้อมูลจากทีม", "Tax receipts: awaiting information from the team"))}</p>}
 
       <ol className="flow-steps" aria-label={t(UI("ขั้นตอน", "Steps"))}><li className={stage === 1 ? "now" : "on"}>① {t(UI("โอน", "Transfer"))}</li><li className={stage === 2 ? "now" : ""}>② {t(UI("แจ้งสลิป", "Send slip"))}</li><li>③ {t(UI("รอตรวจสอบ", "Awaiting check"))}</li></ol>
 
       {stage === 1 && <div className="step">
         <h2>① {t(UI("โอนเงิน", "Make the transfer"))}</h2>
-        {S.recipient ? <p>{t(UI("ผู้รับเงิน", "Recipient"))}: <strong>{t(S.recipient)}</strong></p> : waiting}
-        {(S.promptpayQr || S.promptpayId) && (
-        <div className="row" role="tablist">
-          <button role="tab" aria-selected={method === "promptpay"} className={"chip" + (method === "promptpay" ? " on" : "")} onClick={() => setMethod("promptpay")}>📱 PromptPay / QR</button>
-          <button role="tab" aria-selected={method === "bank"} className={"chip" + (method === "bank" ? " on" : "")} onClick={() => setMethod("bank")}>🏦 {t(UI("โอนผ่านธนาคาร", "Bank transfer"))}</button>
-        </div>)}
-        {method === "promptpay" && (S.promptpayQr || S.promptpayId ? (
-          <div className="pay">
-            {S.promptpayQr && <img className="qr" src={S.promptpayQr} alt={t(UI("คิวอาร์โค้ดพร้อมเพย์ของวัด", "The temple's PromptPay QR code"))} />}
+        {/* the QR code and the bank details side by side (stacked on phones): scan, or transfer by account number */}
+        <div className="pay-grid">
+          <div className="pay-card">
+            <h3>📱 PromptPay</h3>
+            {S.promptpayQr ? <img className="qr" src={S.promptpayQr} alt={t(UI("คิวอาร์โค้ดพร้อมเพย์ของวัด", "The temple's PromptPay QR code"))} />
+              : <div className="qr qr-ph" role="img" aria-label={t(UI("ที่สำหรับคิวอาร์โค้ดพร้อมเพย์ ยังไม่มี", "Place for the PromptPay QR code, not available yet"))}><span aria-hidden="true">▦</span><span>{t(UI("คิวอาร์โค้ดพร้อมเพย์", "PromptPay QR code"))}</span><span className="quiet">{t(UI("เร็ว ๆ นี้", "coming soon"))}</span></div>}
             {S.promptpayId && <p>PromptPay: <strong className="mono">{S.promptpayId}</strong> <Copy text={S.promptpayId} /></p>}
-            <p className="quiet">{t(UI("สแกนด้วยแอปธนาคาร แล้วตรวจชื่อผู้รับให้ตรงก่อนกดยืนยัน", "Scan with your banking app and check the recipient name before confirming."))}</p>
-          </div>) : waiting)}
-        {method === "bank" && (S.bank ? (
-          <dl className="pay bank">
-            <dt>{t(UI("ธนาคาร", "Bank"))}</dt><dd>{t(S.bank.bank)}</dd>
-            <dt>{t(UI("ชื่อบัญชี", "Account name"))}</dt><dd>{t(S.bank.name)}</dd>
-            <dt>{t(UI("เลขที่บัญชี", "Account number"))}</dt><dd><strong className="mono">{S.bank.number}</strong> <Copy text={S.bank.number.replace(/\D/g, "")} /></dd>
-          </dl>) : waiting)}
+            <p className="quiet">{S.promptpayQr ? t(UI("สแกนด้วยแอปธนาคาร แล้วตรวจชื่อผู้รับให้ตรงก่อนกดยืนยัน", "Scan with your banking app and check the recipient name before confirming.")) : t(UI("ระหว่างนี้โอนผ่านเลขบัญชีได้เลย", "Meanwhile, please transfer by account number."))}</p>
+          </div>
+          <div className="pay-card">
+            <h3>🏦 {t(UI("โอนผ่านธนาคาร", "Bank transfer"))}</h3>
+            {S.bank ? <dl className="pay bank">
+              <dt>{t(UI("ธนาคาร", "Bank"))}</dt><dd>{t(S.bank.bank)}</dd>
+              <dt>{t(UI("ชื่อบัญชี", "Account name"))}</dt><dd>{t(S.bank.name)}</dd>
+              <dt>{t(UI("เลขที่บัญชี", "Account number"))}</dt><dd><strong className="mono">{S.bank.number}</strong> <Copy text={S.bank.number.replace(/\D/g, "")} /></dd>
+            </dl> : waiting}
+          </div>
+        </div>
+        {S.recipient ? <p className="quiet">{t(UI("ผู้รับเงิน", "Recipient"))}: {t(S.recipient)}</p> : waiting}
+        {S.taxNote ? <p className="quiet">{t(S.taxNote)}</p> : <p className="quiet"><Tag kind="unknown" /> {t(UI("ข้อมูลเรื่องใบลดหย่อนภาษี: รอข้อมูลจากทีม", "Tax receipts: awaiting information from the team"))}</p>}
         <div className="row"><button type="button" className="btn big" onClick={() => { setStage(2); window.scrollTo(0, 0); }}>{t(UI("โอนเรียบร้อยแล้ว – แนบสลิป", "I've completed the transfer – attach the slip"))} →</button></div>
+        <details className="uses-more">
+          <summary>{t(UI("เงินสมทบนำไปใช้กับอะไรบ้าง", "What contributions go towards"))}</summary>
+          <ul className="uses">
+            <li><span aria-hidden="true">🏯</span> {t(UI("สร้างและพัฒนาวัด ทั้งวัดออนไลน์และพื้นที่จริง", "Building and developing the temple, online and physical"))}</li>
+            <li><span aria-hidden="true">🤖</span> {t(UI("ค่าเครื่องมือ AI รายเดือน เช่น Claude, Midjourney และ AI APIs", "Monthly AI tools such as Claude, Midjourney and AI APIs"))}</li>
+            <li><span aria-hidden="true">📚</span> {t(UI("คอร์สและแหล่งเรียนรู้ที่ทีมต้องใช้", "Courses and learning resources the team needs"))}</li>
+            <li><span aria-hidden="true">🖥️</span> {t(UI("เซิร์ฟเวอร์และโฮสติ้ง", "Servers and hosting"))}</li>
+          </ul>
+        </details>
       </div>}
 
       {stage === 2 && <form className="step" onSubmit={submit} noValidate>
