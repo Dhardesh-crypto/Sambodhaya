@@ -2303,7 +2303,10 @@ function loadBoy(kit = "boy") {
       if (!walk) return null;
       const obj = walk.scene, holder = new THREE.Group(); holder.add(obj); fitModel(obj);
       holder.updateMatrixWorld(true); pressHands(holder); // measure the hands in their rest pose
-      return { holder, clips: [walk, idle, run, sitting].flatMap((g) => (g ? g.animations : [])) };
+      // the girl doesn't run: a running stride kicks her legs out through her long skirt (and in a temple one walks
+      // anyway), so Shift is a brisk walk for her
+      const girl = kit.startsWith("girl");
+      return { holder, clips: [walk, idle, girl ? null : run, sitting].flatMap((g) => (g ? g.animations : [])) };
     });
   return boyReady[kit];
 }
@@ -3723,7 +3726,7 @@ function frame(dt) {
   const mag = Math.min(1, Math.hypot(fx, fz));
   // a calm walk, like the boy in the film; Shift (or the touch stick pushed to its edge) runs
   const running = keys.ShiftLeft || keys.ShiftRight || Math.hypot(joy.x, joy.y) > 0.92;
-  const speed = (running ? 6 : 2.6) * mag; // a 10-year-old's natural walking and running pace at this scale
+  const speed = (running ? (player.clips.walk && !player.clips.run && player.gait.walk ? Math.min(6, player.gait.walk.speed * 2.2) : 6) : 2.6) * mag; // a 10-year-old's natural walking and running pace at this scale (the girl: a brisk walk her stride keeps up with)
   if (mag > 0.05) {
     const s = Math.sin(camYaw), c = Math.cos(camYaw);
     const nx = fx / (Math.hypot(fx, fz) || 1), nz = fz / (Math.hypot(fx, fz) || 1);
