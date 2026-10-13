@@ -873,6 +873,12 @@ const ALMS_MONKS = [["alms-elder", 3.3], ["alms-monk", 3.3], ["alms-young", 3.35
 // each model's bowl, as fractions of its height in its own front-facing space: centre forward, rim height, radius (measured from the side)
 const ALMS_BOWL = { "alms-elder": [0.10, 0.674, 0.067], "alms-monk": [0.10, 0.674, 0.067], "alms-young": [0.10, 0.674, 0.067], "alms-novice": [0.10, 0.674, 0.067] };
 const almsMonks = [];
+// Monks eat only between dawn and midday, so the alms round is a morning sight: the monks and the rice table are
+// on the road from 6:00 until 11:00 by the visitor's own clock, and not in the afternoon, evening or night.
+const ALMS_HOURS = [6, 11];
+const almsTime = () => { const h = new Date().getHours(); return h >= ALMS_HOURS[0] && h < ALMS_HOURS[1]; };
+const almsScene = { on: true, table: new THREE.Group(), cols: [] };
+scene.add(almsScene.table);
 const RICE_R = 0.1, riceGeo = new THREE.SphereGeometry(RICE_R, 16, 12), riceMat = S(0xf7f1e1, { roughness: 0.95 });
 const riceBall = () => { const m = new THREE.Mesh(riceGeo, riceMat); m.scale.y = 0.85; m.castShadow = true; return m; };
 ALMS_MONKS.forEach(([name, H], i) => {
@@ -881,7 +887,7 @@ ALMS_MONKS.forEach(([name, H], i) => {
   const lean = new THREE.Group(); pivot.add(lean);                   // a slight bow toward the giver as he receives
   const [bf, by, br] = ALMS_BOWL[name];
   const m = { name, x, z, yaw, pivot, lean, bowl: { f: bf * H, y: by * H, r: br * H }, rice: [] };
-  almsMonks.push(m); colliders.push({ x, z, r: 0.75 });
+  almsMonks.push(m); const col = { x, z, r: 0.75, r0: 0.75 }; colliders.push(col); almsScene.cols.push(col);
   propJobs.push(loadProp(name).then((src) => {
     if (!src) { pivot.visible = false; almsMonks.splice(almsMonks.indexOf(m), 1); return; }
     const copy = src.clone();
@@ -893,11 +899,23 @@ ALMS_MONKS.forEach(([name, H], i) => {
 // the rice: a silver bowl of sticky-rice balls on a low table at the roadside, where the giver stands
 {
   const tx0 = -5.4, tz0 = ALMS_ROW.z0 + 1.0 * ALMS_ROW.dz, gy = groundAt(tx0, tz0); // off the road, clear of the dog's way
-  props("table", 0.8, [[tx0, tz0, Math.PI / 2, gy]]);
-  add(new THREE.CylinderGeometry(0.42, 0.3, 0.22, 24, 1, true), S(0xd9dde2, { metalness: 0.9, roughness: 0.3, side: THREE.DoubleSide }), tx0, gy + 0.92, tz0, scene, false);
-  [[0, 0], [0.15, 0.1], [-0.14, 0.08], [0.05, -0.16], [-0.1, -0.12]].forEach(([dx, dz2], k) => { const b = riceBall(); b.position.set(tx0 + dx, gy + 0.98 + (k ? 0 : 0.06), tz0 + dz2); scene.add(b); });
-  colliders.push({ x: tx0, z: tz0, r: 0.9 });
+  const T = almsScene.table;
+  props("table", 0.8, [[tx0, tz0, Math.PI / 2, gy]], { parent: T });
+  add(new THREE.CylinderGeometry(0.42, 0.3, 0.22, 24, 1, true), S(0xd9dde2, { metalness: 0.9, roughness: 0.3, side: THREE.DoubleSide }), tx0, gy + 0.92, tz0, T, false);
+  [[0, 0], [0.15, 0.1], [-0.14, 0.08], [0.05, -0.16], [-0.1, -0.12]].forEach(([dx, dz2], k) => { const b = riceBall(); b.position.set(tx0 + dx, gy + 0.98 + (k ? 0 : 0.06), tz0 + dz2); T.add(b); });
+  const col = { x: tx0, z: tz0, r: 0.9, r0: 0.9 }; colliders.push(col); almsScene.cols.push(col);
 }
+// morning or not: the monks and the table are there, or the road is empty (checked every half minute; never in
+// the middle of an offering). The rice given stays in the bowls only for that morning.
+function almsShow(on) {
+  if (almsScene.on === on) return;
+  almsScene.on = on;
+  almsMonks.forEach((m) => { m.pivot.visible = on; if (!on) { m.rice.forEach((r) => r.parent && r.parent.remove(r)); m.rice.length = 0; } });
+  almsScene.table.visible = on;
+  almsScene.cols.forEach((c) => { c.r = on ? c.r0 : 0; });
+}
+almsShow(almsTime());
+setInterval(() => { if (alms.t < 0) almsShow(almsTime()); }, 30000);
 const ALMS_PLACE = { id: "alms", icon: "🍚", th: "ใส่บาตร", en: "Give alms", sub: ["ถวายข้าวเหนียว แล้วไหว้พระ", "Offer sticky rice, then wai"] };
 const ALMS_STAND = 1.25; // how far in front of the monk the giver stands
 
@@ -3087,7 +3105,7 @@ $("dlg").addEventListener("click", (e) => {
 });
 $("btn-places").addEventListener("click", () => openPlaces(false));
 $("btn-help").addEventListener("click", () => openDialog(tx("❔ วิธีเดินในวัด", "❔ How to walk around"),
-  `<p>${tx("⌨️ W A S D หรือปุ่มลูกศร = เดิน • Shift = วิ่ง • Space = กระโดด • E = เข้าศาลาที่อยู่ใกล้ • G = เรียกหมาวัด • Q = ไหว้ 🙏 • C = นั่งสมาธิ 🧘 (เดินเพื่อลุก) • K = กราบพระ 🙇 (หน้าพระพุทธรูป) • ใส่บาตร 🍚: ยืนหน้าพระที่ถนนหน้าประตูวัด แล้วกด E", "⌨️ W A S D or arrow keys = walk • Shift = run • Space = jump • E = visit the nearby hall • G = call the temple dog • Q = wai 🙏 • C = sit 🧘 (walk to stand up) • K = pay tribute 🙇 (before a Buddha image) • give alms 🍚: stand before a monk on the road outside the gate and press E")}</p>
+  `<p>${tx("⌨️ W A S D หรือปุ่มลูกศร = เดิน • Shift = วิ่ง • Space = กระโดด • E = เข้าศาลาที่อยู่ใกล้ • G = เรียกหมาวัด • Q = ไหว้ 🙏 • C = นั่งสมาธิ 🧘 (เดินเพื่อลุก) • K = กราบพระ 🙇 (หน้าพระพุทธรูป) • ใส่บาตร 🍚: ยืนหน้าพระที่ถนนหน้าประตูวัด แล้วกด E (พระบิณฑบาตเฉพาะตอนเช้า 6:00–11:00 ตามนาฬิกาเครื่องนี้)", "⌨️ W A S D or arrow keys = walk • Shift = run • Space = jump • E = visit the nearby hall • G = call the temple dog • Q = wai 🙏 • C = sit 🧘 (walk to stand up) • K = pay tribute 🙇 (before a Buddha image) • give alms 🍚: stand before a monk on the road outside the gate and press E (monks go on the alms round only in the morning, 6:00–11:00 by this device's clock)")}</p>
    <p>${tx("🖱️ ลากเมาส์ = หมุนมุมมอง • ล้อเมาส์ = ซูม • คลิกหมาวัดหรือศาลา = เปิด", "🖱️ Drag = turn the view • Wheel = zoom • Click the dog or a hall = open it")}</p>
    <p>${tx("📱 จอยซ้ายล่าง = เดิน • ลากจอ = หมุนมุมมอง • ปุ่ม E = เข้า", "📱 Bottom-left stick = walk • Drag the screen = turn the view • E button = visit")}</p>
    <p>${tx("🔈 ปุ่มเสียง = เปิดเสียงนก ลม น้ำตก และกระดิ่งชายคา (ปิดอยู่จนกว่าจะกด) • 🔔 เดินไปที่ระฆังแล้วกด E เพื่อตีระฆัง", "🔈 Sound button = birds, breeze, the waterfall and the roof bells (off until you press it) • 🔔 Walk to the bell and press E to strike it")}</p>
@@ -3393,7 +3411,7 @@ function frame(dt) {
   if (onBridge(player.x, player.z) && feed.t < 0 && 2.5 < bestD) { best = FISH_PLACE; bestD = 2.5; }
   if (merit.t < 0 && kraap.t < 0) { const mh = meritHere(); if (mh) { best = { ...MERIT[mh.kind].place, merit: mh }; bestD = 0.5; } } // standing at it: the offering comes first
   if (Math.hypot(player.x - BROOM_AT.x, player.z - BROOM_AT.z) < 1.8 && 2.3 < bestD) { best = broom.held ? BROOM_BACK : BROOM_PLACE; bestD = 2.3; }
-  for (const m of almsMonks) { const d = Math.hypot(player.x - (m.x + Math.sin(m.yaw) * ALMS_STAND), player.z - (m.z + Math.cos(m.yaw) * ALMS_STAND)); if (d < 1.5 && d < bestD) { best = { ...ALMS_PLACE, monk: m }; bestD = d; } }
+  if (almsScene.on) for (const m of almsMonks) { const d = Math.hypot(player.x - (m.x + Math.sin(m.yaw) * ALMS_STAND), player.z - (m.z + Math.cos(m.yaw) * ALMS_STAND)); if (d < 1.5 && d < bestD) { best = { ...ALMS_PLACE, monk: m }; bestD = d; } }
   for (const s of boards) { const d = Math.hypot(player.x - s.x, player.z - s.z); if (d < 1.9 && d < bestD) { best = { ...PLACES.find((p) => p.id === "learn"), stone: s.i, board: true }; bestD = d; } }
   if ((best && best.id) !== (near && near.id) || (best && best.stone) !== (near && near.stone) || (best && best.monk) !== (near && near.monk)) { near = best; showPrompt(near); }
   // while he is doing something the prompt steps aside, and stays aside until he has walked on a little
@@ -3435,7 +3453,7 @@ document.fonts.load("64px Itim").then(() => document.fonts.load("36px Mali")).ca
 });
 camYaw = 0; camera.position.set(0, 8, 105);
 restoreSpot(); // back from a page of the site: stand where you were
-if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, gardenSpots, paths, floors, ponds, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startKathin, kathinSpots, feed, startFeed, fishes, food, onBridge, merit, startMerit, meritHere, broom, fallenLeaves, altars, gildImage, bodhiBands, lane, novice, birds, cat, look: (eye, at) => { camera.position.set(...eye); camera.lookAt(...at); if (composer) composer.render(); else renderer.render(scene, camera); }, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
+if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, almsScene, almsShow, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, gardenSpots, paths, floors, ponds, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startKathin, kathinSpots, feed, startFeed, fishes, food, onBridge, merit, startMerit, meritHere, broom, fallenLeaves, altars, gildImage, bodhiBands, lane, novice, birds, cat, look: (eye, at) => { camera.position.set(...eye); camera.lookAt(...at); if (composer) composer.render(); else renderer.render(scene, camera); }, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
 Promise.race([Promise.all(propJobs), new Promise((r) => setTimeout(r, 7000))]).then(() => {
   $("loading").hidden = true;
   canvas.focus();
