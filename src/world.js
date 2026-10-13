@@ -1165,7 +1165,7 @@ const FISH_PLACE = { id: "fish", icon: "🐟", th: "ให้อาหารป�
 const FISH_TURN = Math.PI / 2; // with the models' own facing, this points their heads where they swim (checked from the side)
 const pelletGeo = new THREE.SphereGeometry(0.045, 6, 4), pelletMat = S(0x8a5a2b, { roughness: 1 });
 const rippleGeo = new THREE.RingGeometry(0.85, 1, 32), rippleMat = new THREE.MeshBasicMaterial({ color: 0xe8f6ff, transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide });
-function addRipple(x, z, size = 0.6) { const m = new THREE.Mesh(rippleGeo, rippleMat.clone()); m.rotation.x = -Math.PI / 2; m.position.set(x, MOAT.water + 0.02, z); m.userData = { t: 0, size }; scene.add(m); ripples.push(m); }
+function addRipple(x, z, size = 0.6, y = MOAT.water + 0.02) { const m = new THREE.Mesh(rippleGeo, rippleMat.clone()); m.rotation.x = -Math.PI / 2; m.position.set(x, y, z); m.userData = { t: 0, size }; scene.add(m); ripples.push(m); }
 const onBridge = (x, z) => Math.abs(x) < ROAD / 2 - 0.4 && Math.abs(z - BRIDGE.zc) < BRIDGE.half - 1.2;
 function startFeed() {
   if (feed.t >= 0 || alms.t >= 0 || kraap.t >= 0 || !onBridge(player.x, player.z)) return;
@@ -1298,7 +1298,13 @@ function startMerit(here) {
 // Kneeling offerings run on the kraap (its kneeling, wai and bows), with two more channels: the right hand reaching
 // to something (the candles, the urn, the image) and the incense held. Keyframes:
 // [time, kneel, chest wai, high wai, palms on the floor, bow, (tray, lift, place: Kathina only), moved back, reach]
-function kneelKeys(kind) {
+function kneelKeys(kind, here = {}) {
+  const b = here.lean || 0; // leaning forward a little to reach something low (a sleeping cat)
+  if (kind === "pet") return [ // petting the dog or the cat: kneel, stroke for a while, stand
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0.3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [1.5, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0], [2.0, 1, 0, 0, 0, b, 0, 0, 0, 0, 1],
+    [6.4, 1, 0, 0, 0, b, 0, 0, 0, 0, 1], [6.9, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0], [8.1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  ];
   const k = kind === "offer" ? [
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0.6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     [2.0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],             // kneeling before the table
@@ -1330,13 +1336,14 @@ function startKneelingOffering(here) {
   kraap.merit = { ...here, items, placed: false };
   kraap.spot = here.near; kraap.faceYaw = here.faceYaw;
   kraap.floorY = groundAt(here.near.x, here.near.z);
-  kraap.keys = kneelKeys(here.kind); kraap.dur = kraap.keys[kraap.keys.length - 1][0];
+  kraap.keys = kneelKeys(here.kind, here); kraap.dur = kraap.keys[kraap.keys.length - 1][0];
   kraap.t = 0;
   if (player.mixer) playClip("idle", 0.4);
 }
 // where the right hand reaches, by the time in the offering
 function kneelReach(t) {
   const m = kraap.merit;
+  if (m.kind === "pet") return petStroke(t);
   if (m.kind === "gild") return reachPoint("image");
   const a = m.altar, flame = (i) => a.candles[i].getWorldPosition(new THREE.Vector3());
   if (t < 2.9) return flame(0).add(new THREE.Vector3(0, 0.05, 0));
@@ -1362,7 +1369,7 @@ function kneelStep(before, t) {
   }
   if (m.kind === "gild" && at(E.leaf)) gildLeaf();
 }
-function endKneelingOffering() { const m = kraap.merit; if (m && m.items && !m.placed) scene.remove(m.items); kraap.merit = null; }
+function endKneelingOffering() { const m = kraap.merit; if (m && m.items && !m.placed) scene.remove(m.items); if (m && m.kind === "pet") petDone(); kraap.merit = null; }
 // the hand's target and turn for a reach (fingers forward and down, palm down), as in poseKraap
 function kneelHand(model, fwd, up, t) {
   const shape = handShape(model); if (!shape) return null;
@@ -1496,7 +1503,7 @@ function broomStep(dt, moving) {
     for (const l of fallenLeaves) { const u = l.userData; if (u.fall > 0 || u.fade >= 0) continue; if (Math.hypot(u.x - head.x, u.z - head.z) < 0.75) { u.fade = 0; u.vx = fwd.x * 1.2 + right.x * Math.sin(broom.phase); u.vz = fwd.z * 1.2 + right.z * Math.sin(broom.phase); } }
   }
   // falling and swept leaves
-  leafClock -= dt; if (leafClock <= 0) { leafClock = 10 + Math.random() * 14; if (fallenLeaves.length < (HIGH ? 60 : 30)) dropLeaf(true); }
+  if (!settings.calmMotion) leafClock -= dt; if (leafClock <= 0) { leafClock = 10 + Math.random() * 14; if (fallenLeaves.length < (HIGH ? 60 : 30)) dropLeaf(true); }
   for (let i = fallenLeaves.length - 1; i >= 0; i--) {
     const l = fallenLeaves[i], u = l.userData;
     if (u.fall > 0) { u.fall = Math.max(0, u.fall - dt * 1.4); u.spin += dt * 3; l.position.set(u.x + Math.sin(u.spin) * 0.4, 0.02 + u.fall, u.z + Math.cos(u.spin * 0.7) * 0.3); l.rotation.set(-Math.PI / 2 + Math.sin(u.spin) * 0.6 * (u.fall > 0 ? 1 : 0), 0, u.spin); if (u.fall === 0) { u.x = l.position.x; u.z = l.position.z; } }
@@ -1639,14 +1646,171 @@ function noviceStep(dt) {
   waiMark(B);
 }
 
-// the temple cat, curled up asleep on the library's veranda; it breathes
-const cat = { obj: null };
-loadProp("cat").then((src) => {
-  if (!src) return;
-  const c = fitTo(src.clone(), 0.58), h = salas.library, [x, z] = h.toWorld(h.W / 2 - 1.1, h.D / 2 - 0.7);
-  c.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-  c.position.set(x, h.FY, z); c.rotation.y = h.g.rotation.y + 2.4; c.userData.sy = c.scale.y; scene.add(c); cat.obj = c;
-});
+// The temple cat (วิเชียรมาศ), a Siamese. She sleeps curled up on the end of the library's step; now and then she wakes,
+// stretches (front legs far forward, hindquarters up), and wanders the lawn before the library, stopping to sit a
+// while at each place, then goes back to her spot and curls up again. She can be petted at any time (walk up to
+// her and press E): she sits for it (or stays curled if asleep) and purrs (when the sound is on); a petted
+// sleeping cat wakes afterwards. Four models of the same cat, one per pose, change over with a short fade; her
+// walk, like the dog's, is done on the graphics card (legs, a swaying tail).
+const CAT_POSES = { sleep: ["cat-sleep", 0.42], stretch: ["cat-stretch", 0.62], sit: ["cat-sit", 0.86], walk: ["cat-walk", 0.74] }; // model, height
+const CAT_TURN = { sleep: 0, stretch: 0, sit: 0, walk: 0 }; // each model's turn so that her head points along +z
+const catAnim = { phase: { value: 0 }, walk: { value: 0 }, time: { value: 0 } };
+const cat = { state: "sleep", t: 0, wakeAt: 25 + Math.random() * 30, x: 0, z: 0, yaw: 0, poses: {}, cur: null, fade: null, route: [], stops: 0, sitFor: 0, purr: 0, petAsleep: false, col: { x: 0, z: 0, r: 0.4 }, home: null, edge: null };
+colliders.push(cat.col);
+// her spot: the end of the library's step, in the sun and in full view (or, if that is taken, the first clear place
+// at the foot of the step)
+function catHome() {
+  const h = salas.library;
+  for (const [lx, lz] of [[1.9, 1.2], [-1.9, 1.2], [3.2, 1.25], [-3.2, 1.25], [3.8, 1.6], [-3.8, 1.6]]) {
+    const [x, z] = h.toWorld(lx, h.D / 2 + lz), [ex, ez] = h.toWorld(lx, h.D / 2 + lz + 1.4);
+    if (catClear(x, z) && catClear(ex, ez)) return { home: { x, z, yaw: h.g.rotation.y + Math.sign(lx) * 1.9 }, edge: { x: ex, z: ez } };
+  }
+  const [x, z] = h.toWorld(3.2, h.D / 2 + 1.4), [ex, ez] = h.toWorld(3.2, h.D / 2 + 2.6);
+  return { home: { x, z, yaw: h.g.rotation.y + 1.9 }, edge: { x: ex, z: ez } };
+}
+// a walk on the graphics card: legs swing in diagonal pairs, the tail sways; measured from the model itself
+function animateCat(mat, P) {
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uPhase = catAnim.phase; sh.uniforms.uWalk = catAnim.walk; sh.uniforms.uTime = catAnim.time;
+    sh.vertexShader = "uniform float uPhase, uWalk, uTime;\n" + sh.vertexShader.replace("#include <begin_vertex>", `#include <begin_vertex>
+      {
+        const float HIP = ${P.hip.toFixed(4)}, FEET = ${P.feet.toFixed(4)}, AC = ${P.ac.toFixed(4)}, LC = ${P.lc.toFixed(4)}, S = ${P.s.toFixed(1)}, L = ${P.len.toFixed(4)};
+        float along = (transformed.${P.ax} - AC) * S;                   // toward the head
+        float below = max(HIP - transformed.y, 0.0), legW = clamp(below / (HIP - FEET), 0.0, 1.0);
+        float front = step(0.0, along), left = step(LC, transformed.${P.lat});
+        float off = 3.14159 * abs(front - left);
+        transformed.${P.ax} += S * below * 0.4 * sin(uPhase + off) * uWalk;
+        transformed.y += 0.12 * (HIP - FEET) * legW * legW * max(0.0, cos(uPhase + off)) * uWalk;
+        float tailW = smoothstep(0.28 * L, 0.5 * L, -along) * step(HIP, transformed.y);
+        transformed.${P.lat} += sin(uTime * 1.6) * 0.07 * L * tailW * tailW; // the tail sways slowly, always
+      }`);
+  };
+}
+function catLoad() {
+  Object.assign(cat, catHome()); cat.x = cat.home.x; cat.z = cat.home.z; cat.yaw = cat.home.yaw;
+  Object.entries(CAT_POSES).forEach(([k, [file, H]]) => loadProp(file).then((src) => {
+    if (!src) return;
+    const copy = src.clone(), mats = [];
+    copy.traverse((o) => {
+      if (!o.isMesh) return;
+      o.castShadow = true; o.receiveShadow = true; o.material = o.material.clone(); mats.push(o.material);
+      if (k === "walk") { // measure her for the walk
+        o.geometry.computeBoundingBox(); const b = o.geometry.boundingBox, pos = o.geometry.attributes.position;
+        const xs = b.max.x - b.min.x, zs = b.max.z - b.min.z, alongX = xs >= zs;
+        // the head end is the end whose highest point is furthest from the middle along the body (the ears, not the tail)
+        const ax = alongX ? "x" : "z", lat = alongX ? "z" : "x", get = (i) => (alongX ? pos.getX(i) : pos.getZ(i));
+        const ac = alongX ? (b.min.x + b.max.x) / 2 : (b.min.z + b.max.z) / 2, lc = alongX ? (b.min.z + b.max.z) / 2 : (b.min.x + b.max.x) / 2;
+        let hi = -Infinity, at = 0; for (let i = 0; i < pos.count; i += 7) if (pos.getY(i) > hi) { hi = pos.getY(i); at = get(i); }
+        const s = CAT_HEAD_SIGN || Math.sign(at - ac) || 1;
+        const P = { hip: b.min.y + 0.36 * (b.max.y - b.min.y), feet: b.min.y, ac, lc, ax, lat, s, len: Math.max(xs, zs) };
+        CAT_TURN.walk = alongX ? -Math.PI / 2 * s : (s > 0 ? 0 : Math.PI); // head along +z
+        animateCat(o.material, P);
+        o.customDepthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }); animateCat(o.customDepthMaterial, P);
+      }
+    });
+    const g = fitTo(copy, H); g.rotation.y = CAT_TURN[k]; const g2 = new THREE.Group(); g2.add(g); g2.visible = false; scene.add(g2);
+    cat.poses[k] = { g: g2, mats, H };
+    if (k === cat.state || (k === "sleep" && !cat.cur)) catShow(cat.state, true);
+  }));
+}
+const CAT_HEAD_SIGN = 0; // (0: worked out from the model)
+// change pose with a short fade
+function catShow(k, now = false) {
+  const to = cat.poses[k] || cat.poses.walk || cat.poses.sleep; if (!to || to === cat.cur) return;
+  const from = cat.cur; cat.cur = to; to.g.visible = true;
+  if (now || !from) { if (from) from.g.visible = false; to.mats.forEach((m) => { m.transparent = false; m.opacity = 1; }); cat.fade = null; return; }
+  cat.fade = { from, to, t: 0 };
+  [...from.mats, ...to.mats].forEach((m) => { m.transparent = true; });
+}
+// where she may walk: clear of everything that stands (checked along the way), off the paths' plants, on dry land
+function catClear(x, z) {
+  for (const c of colliders) if (c !== cat.col && c.r > 0 && Math.hypot(x - c.x, z - c.z) < c.r + 0.45) return false;
+  for (const b of blockers) { const lx = (x - b.x) * b.c - (z - b.z) * b.s, lz = (x - b.x) * b.s + (z - b.z) * b.c; if (Math.abs(lx) < b.hx + 0.4 && Math.abs(lz) < b.hz + 0.4) return false; }
+  for (const q of ponds) if (Math.hypot(x - q.x, z - q.z) < q.r + 1) return false;
+  return true;
+}
+function catLine(a, b) { const d = Math.hypot(b.x - a.x, b.z - a.z), n = Math.ceil(d / 0.3); for (let i = 1; i <= n; i++) { const u = i / n; if (!catClear(a.x + (b.x - a.x) * u, a.z + (b.z - a.z) * u)) return false; } return true; }
+let catSpots = null;
+function catPlan() {
+  if (!catSpots) { // places on the lawn before the library where she likes to sit
+    const h = salas.library; catSpots = [];
+    for (let lx = -8; lx <= 8; lx += 1.6) for (let lz = 6.5; lz <= 13; lz += 1.6) { const [x, z] = h.toWorld(lx, lz); if (!insideHall(x, z) && catClear(x, z)) catSpots.push({ x, z }); }
+  }
+  // a few stops, each reachable in a straight line from the one before, then back to her spot
+  const route = []; let at = cat.edge;
+  for (let i = 0; i < 3; i++) {
+    const near = catSpots.filter((p) => Math.hypot(p.x - at.x, p.z - at.z) > 1.5 && Math.hypot(p.x - at.x, p.z - at.z) < 7 && catLine(at, p));
+    if (!near.length) break;
+    const p = near[Math.floor(Math.random() * near.length)]; route.push({ ...p, sit: true }); at = p;
+  }
+  // home again (straight back to the veranda edge if she can, else the way she came)
+  if (!catLine(at, cat.edge)) for (let i = route.length - 2; i >= 0; i--) route.push({ x: route[i].x, z: route[i].z });
+  route.push({ ...cat.edge }, { ...cat.home, home: true });
+  cat.route = [{ ...cat.edge }, ...route];
+}
+function catStep(dt) {
+  catAnim.time.value += dt;
+  if (cat.fade) { const f = cat.fade; f.t += dt / 0.35; const u = Math.min(1, f.t); f.from.mats.forEach((m) => { m.opacity = 1 - u; }); f.to.mats.forEach((m) => { m.opacity = u; }); if (u >= 1) { f.from.g.visible = false; f.to.mats.forEach((m) => { m.transparent = false; }); cat.fade = null; } }
+  cat.t += dt; let speed = 0;
+  const petted = pet.who === "cat" && (pet.phase === "call" || pet.phase === "on");
+  if (petted) { if (cat.state !== "sleep") { cat.state = "sit"; catShow("sit"); } let dy = Math.atan2(player.x - cat.x, player.z - cat.z) - cat.yaw; if (cat.state !== "sleep") cat.yaw += Math.atan2(Math.sin(dy), Math.cos(dy)) * Math.min(1, dt * 3); }
+  else if (cat.state === "sleep") { if (cat.t > cat.wakeAt && !night.on) { cat.state = "stretch"; cat.t = 0; catShow("stretch"); } }
+  else if (cat.state === "stretch") { if (cat.t > 2.8) { catPlan(); cat.state = "walk"; cat.t = 0; catShow("walk"); } }
+  else if (cat.state === "sit") { if (cat.t > cat.sitFor) { cat.state = "walk"; cat.t = 0; catShow("walk"); } }
+  else if (cat.state === "walk") {
+    const goal = cat.route[0];
+    if (!goal) { cat.state = "sleep"; cat.t = 0; cat.wakeAt = 50 + Math.random() * 70; catShow("sleep"); }
+    else {
+      const dx = goal.x - cat.x, dz = goal.z - cat.z, d = Math.hypot(dx, dz);
+      // someone in her way: she waits
+      const block = Math.hypot(player.x - cat.x, player.z - cat.z) < 1.1 || (dog.obj.visible && Math.hypot(dog.x - cat.x, dog.z - cat.z) < 1.2);
+      if (d < 0.08) {
+        cat.route.shift();
+        if (goal.home) { cat.yaw = cat.home.yaw; cat.state = "sleep"; cat.t = 0; cat.wakeAt = 50 + Math.random() * 70; catShow("sleep"); }
+        else if (goal.sit) { cat.state = "sit"; cat.t = 0; cat.sitFor = 6 + Math.random() * 9; catShow("sit"); }
+      } else if (!block) {
+        speed = Math.min(0.75, d / dt); cat.x += dx / d * speed * dt; cat.z += dz / d * speed * dt;
+        let dy = Math.atan2(dx, dz) - cat.yaw; cat.yaw += Math.atan2(Math.sin(dy), Math.cos(dy)) * Math.min(1, dt * 6);
+      }
+    }
+  }
+  catAnim.walk.value += ((speed > 0.1 ? 1 : 0) - catAnim.walk.value) * Math.min(1, dt * 6);
+  catAnim.phase.value = (catAnim.phase.value + dt * speed * 9) % (Math.PI * 200);
+  const y = groundAt(cat.x, cat.z) + (insideHall(cat.x, cat.z) ? 0 : PAVING * 0.4);
+  Object.entries(cat.poses).forEach(([k, p]) => {
+    p.g.position.set(cat.x, y, cat.z); p.g.rotation.y = cat.yaw;
+    if (k === "sleep") p.g.scale.set(1, 1 + Math.sin(catAnim.time.value * 1.7) * 0.03, 1);            // breathing
+    if (k === "sit") p.g.scale.set(1, 1 + Math.sin(catAnim.time.value * 2.2) * 0.012 + cat.purr * Math.sin(catAnim.time.value * 50) * 0.004, 1);
+    if (k === "stretch") { const u = Math.sin(Math.min(1, cat.t / 2.8) * Math.PI); p.g.scale.set(1, 1 - 0.04 * u, 1 + 0.07 * u); } // reaching out, then easing back
+  });
+  cat.col.x = cat.x; cat.col.z = cat.z;
+  // purring while she is petted (only with the sound on)
+  cat.purr += ((pet.who === "cat" && pet.phase === "on" ? 1 : 0) - cat.purr) * Math.min(1, dt * 2);
+  sound.purr(cat.purr > 0.05 ? cat.purr : 0, cat.x, y + 0.3, cat.z);
+}
+// petting her: he kneels facing her, close enough to reach her back
+const CAT_PLACE = { id: "cat", icon: "🐈", th: "ลูบแมว", en: "Pet the cat", sub: ["แมววัด นั่งให้ลูบ", "The temple cat likes it"] };
+const CAT_PET_D = 1.05;
+function catNear() { return cat.cur && Math.hypot(player.x - cat.x, player.z - cat.z) < 1.9 && !(pet.who === "cat" && pet.phase); }
+function startPetCat() {
+  if (petBusy() || !cat.cur) return;
+  if (broom.held) putBroomBack();
+  const asleep = cat.state === "sleep", D = asleep ? 0.85 : CAT_PET_D;
+  const a = Math.atan2(player.x - cat.x, player.z - cat.z), near = { x: cat.x + Math.sin(a) * D, z: cat.z + Math.cos(a) * D };
+  pet.who = "cat"; pet.phase = "on"; pet.t = 0; pet.from = null; cat.petAsleep = cat.state === "sleep";
+  if (cat.state === "walk") { cat.state = "sit"; catShow("sit"); }
+  startKneelingOffering({ kind: "pet", near, far: near, faceYaw: a + Math.PI, lean: asleep ? 0.28 : 0 });
+}
+function catPetted() { // after petting: a sleeping cat wakes and stretches; a sitting one stays a moment, then goes on
+  if (cat.petAsleep) { cat.state = "stretch"; cat.t = 0; catShow("stretch"); }
+  else { cat.state = "sit"; cat.t = 0; cat.sitFor = 2 + Math.random() * 2; if (!cat.route.length) catPlan(); }
+}
+function catStroke(t) {
+  const p = cat.cur || cat.poses.sleep, top = (p ? p.H : 0.4) * (cat.state === "sit" ? 0.86 : 0.9);
+  const fx = Math.sin(cat.yaw), fz = Math.cos(cat.yaw), along = cat.state === "sit" ? -0.03 - 0.04 * Math.sin(t * 3.2) : -0.08 + 0.12 * Math.sin(t * 3.2);
+  return new THREE.Vector3(cat.x + fx * along, groundAt(cat.x, cat.z) + top + 0.03, cat.z + fz * along);
+}
+catLoad();
 
 // pigeons on the plaza: they walk and peck; when someone comes close (or the dog) they clatter up and fly to
 // a tree, and come back down a while later somewhere quieter. At night they roost (out of sight).
@@ -1683,11 +1847,12 @@ function fly(b, to, y1) {
 }
 let flutterAt = 0;
 function birdsStep(dt) {
-  const roost = night.on;
+  const roost = night.on, shelter = rain.s > 0.3; // at night they roost; in a shower they wait it out in the trees
   for (const b of birds) {
     b.g.visible = !roost || b.state === "fly"; b.t += dt;
     if (b.state === "ground") {
       if (roost) { b.state = "perch"; b.perch = 1e9; continue; }
+      if (shelter) { const tr = edgeTrees[Math.floor(Math.random() * edgeTrees.length)]; fly(b, [tr[0], tr[1]], 6.5 + Math.random() * 2); continue; }
       // someone close: up they go, to a tree
       const dp = Math.hypot(player.x - b.x, player.z - b.z), dd = Math.hypot(dog.x - b.x, dog.z - b.z);
       if (dp < (keys.ShiftLeft || keys.ShiftRight ? 6 : 3.6) || dd < 2.4) {
@@ -1717,7 +1882,7 @@ function birdsStep(dt) {
     } else { // perched in a tree (hidden among its leaves), or roosting for the night
       b.g.visible = false;
       b.perch -= dt;
-      if (roost) b.perch = Math.max(b.perch, 1);
+      if (roost || shelter) b.perch = Math.max(b.perch, 1);
       else if (b.perch > 1e8) { b.perch = Math.random() * 6; }
       if (b.perch <= 0) { const [x, z] = birdHome(b, true); if (Math.hypot(player.x - x, player.z - z) > 8) fly(b, [x, z], 0.03); else b.perch = 3; }
     }
@@ -1726,8 +1891,7 @@ function birdsStep(dt) {
 }
 
 function lifeStep(dt) {
-  laneStep(dt); noviceStep(dt); birdsStep(dt);
-  if (cat.obj) cat.obj.scale.y = cat.obj.userData.sy * (1 + Math.sin(performance.now() / 1000 * 1.7) * 0.025);
+  laneStep(dt); noviceStep(dt); birdsStep(dt); catStep(dt);
 }
 // the rigged monk and novice load after the boy, so his first steps are never delayed
 setTimeout(() => {
@@ -1737,6 +1901,93 @@ setTimeout(() => {
     novice.broom = broom.obj.clone(); scene.add(novice.broom);
   });
 }, 1500);
+
+/* ---------------- small touches: drifting frangipani flowers, and now and then a passing shower ---------------- */
+// Now and then a frangipani flower (ลีลาวดี) lets go of one of the trees near him and drifts down, turning, to lie in
+// the grass a while (the Bodhi tree's leaves fall the same way, above). Calm motion stops new ones falling.
+const frangiTrees = edgeTrees.filter(([, , , , i]) => i % 4 === 0 || i % 4 === 2).map(([x, z, , , i]) => ({ x, z, h: i % 4 === 0 ? 8 : 7.5 }));
+const flowerTex = canvasTexture(128, 128, (cx, w, h) => {
+  cx.translate(64, 64);
+  for (let k = 0; k < 5; k++) { // five white petals, overlapping, with a yellow heart
+    cx.save(); cx.rotate(k * Math.PI * 2 / 5);
+    const g = cx.createLinearGradient(0, 0, 0, -58); g.addColorStop(0, "#f7d34a"); g.addColorStop(0.35, "#fff7e0"); g.addColorStop(1, "#ffffff");
+    cx.fillStyle = g; cx.beginPath(); cx.ellipse(10, -30, 17, 30, 0.35, 0, Math.PI * 2); cx.fill(); cx.restore();
+  }
+  cx.fillStyle = "#f2b630"; cx.beginPath(); cx.arc(0, 0, 9, 0, Math.PI * 2); cx.fill();
+});
+const flowerMat = new THREE.MeshStandardMaterial({ map: flowerTex, transparent: true, alphaTest: 0.3, side: THREE.DoubleSide, roughness: 0.7 }), flowerGeo = new THREE.PlaneGeometry(0.34, 0.34);
+const petals = [];
+let petalClock = 3;
+function petalStep(dt) {
+  if (!settings.calmMotion && frangiTrees.length) {
+    petalClock -= dt;
+    if (petalClock <= 0) {
+      petalClock = 4 + Math.random() * 7;
+      const near = frangiTrees.filter((t) => Math.hypot(t.x - player.x, t.z - player.z) < 38);
+      if (near.length && petals.length < (HIGH ? 40 : 16)) {
+        const t = near[Math.floor(Math.random() * near.length)], a = Math.random() * 6.28, r = Math.random() * 2.4;
+        const m = new THREE.Mesh(flowerGeo, flowerMat); m.castShadow = false;
+        m.userData = { x: t.x + Math.cos(a) * r, z: t.z + Math.sin(a) * r, y: t.h * (0.6 + Math.random() * 0.25), spin: Math.random() * 6, lie: 0 };
+        scene.add(m); petals.push(m);
+      }
+    }
+  }
+  for (let i = petals.length - 1; i >= 0; i--) {
+    const m = petals[i], u = m.userData, gy = groundAt(u.x, u.z) + 0.03;
+    if (u.y > gy) { // drifting down, turning and swaying
+      u.y = Math.max(gy, u.y - dt * 0.7); u.spin += dt * 2.2;
+      u.x += Math.sin(u.spin * 0.8) * dt * 0.35; u.z += Math.cos(u.spin * 0.6) * dt * 0.3;
+      m.position.set(u.x, u.y, u.z); m.rotation.set(-Math.PI / 2 + Math.sin(u.spin) * 0.7, u.spin * 0.5, Math.cos(u.spin * 1.3) * 0.5);
+      if (u.y <= gy) { m.rotation.set(-Math.PI / 2, 0, u.spin); m.position.y = gy; }
+    } else { // lying in the grass a while, then fading away
+      u.lie += dt; if (u.lie > 70) { const k = Math.max(0.01, 1 - (u.lie - 70) / 3); m.scale.setScalar(k); if (u.lie > 73) { scene.remove(m); petals.splice(i, 1); } }
+    }
+  }
+}
+
+// A gentle shower passes over the temple every now and then (never with calm motion on): soft grey rain, the light
+// dims a little, rings spread on the moat and the ponds, the pigeons take shelter in the trees, and (with the sound
+// on) the hush of rain, muffled indoors. Then it moves on.
+const rain = { s: 0, on: false, next: 240 + Math.random() * 360, left: 0 };
+const lightBase = {}; // the light as the time of day sets it, before a shower dims it
+const RAIN_N = HIGH ? 1400 : 500, RAIN_R = 16, RAIN_H = 18;
+const rainGeo = new THREE.BufferGeometry(), rainPos = new Float32Array(RAIN_N * 6), rainDrop = [];
+rainGeo.setAttribute("position", new THREE.BufferAttribute(rainPos, 3));
+const rainMat = new THREE.LineBasicMaterial({ color: 0xe4ecf5, transparent: true, opacity: 0, depthWrite: false });
+const rainLines = new THREE.LineSegments(rainGeo, rainMat); rainLines.frustumCulled = false; rainLines.visible = false; scene.add(rainLines);
+for (let i = 0; i < RAIN_N; i++) rainDrop.push({ x: 0, y: -100, z: 0, v: 18 + Math.random() * 6 });
+function rainRespawn(d, top) {
+  const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * RAIN_R;
+  d.x = camera.position.x + Math.cos(a) * r; d.z = camera.position.z + Math.sin(a) * r;
+  d.y = (top ? RAIN_H : Math.random() * RAIN_H) + groundAt(d.x, d.z);
+  if (insideHall(d.x, d.z)) d.y = -100; // under a roof: no rain
+}
+function rainStep(dt) {
+  if (settings.calmMotion) rain.on = false;
+  else if (!rain.on) { rain.next -= dt; if (rain.next <= 0) { rain.on = true; rain.left = 70 + Math.random() * 50; rainDrop.forEach((d) => rainRespawn(d, false)); } }
+  else { rain.left -= dt; if (rain.left <= 0) { rain.on = false; rain.next = 600 + Math.random() * 600; } }
+  rain.s += ((rain.on ? 1 : 0) - rain.s) * Math.min(1, dt / 8);
+  if (rain.s < 0.003) rain.s = 0;
+  sound.setRain(rain.s);
+  // the light dims a little under the cloud
+  const k = rain.s;
+  if (lightBase.sun != null) { sun.intensity = lightBase.sun * (1 - 0.6 * k); hemi.intensity = lightBase.hemi * (1 - 0.25 * k); scene.fog.far = lightBase.far * (1 - 0.35 * k); scene.backgroundIntensity = lightBase.bg * (1 - 0.3 * k); }
+  rainLines.visible = k > 0.01; if (!rainLines.visible) return;
+  rainMat.opacity = 0.55 * k;
+  for (let i = 0; i < RAIN_N; i++) {
+    const d = rainDrop[i];
+    d.y -= d.v * dt; d.x += 0.6 * dt;
+    if (d.y < groundAt(d.x, d.z) || Math.hypot(d.x - camera.position.x, d.z - camera.position.z) > RAIN_R + 2) rainRespawn(d, true);
+    const j = i * 6; rainPos[j] = d.x; rainPos[j + 1] = d.y; rainPos[j + 2] = d.z; rainPos[j + 3] = d.x - 0.04; rainPos[j + 4] = d.y + 0.85; rainPos[j + 5] = d.z;
+  }
+  rainGeo.attributes.position.needsUpdate = true;
+  // rings on the water near him
+  let n = k * dt * (HIGH ? 45 : 18); while (n > 0) { if (Math.random() < n) {
+    const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * 20, x = player.x + Math.cos(a) * r, z = player.z + Math.sin(a) * r, d = Math.hypot(x, z);
+    if (d > MOAT.r1 + 0.3 && d < MOAT.r2 - 0.3 && !onBridge(x, z)) addRipple(x, z, 0.3);
+    else for (const q of ponds) if (Math.hypot(x - q.x, z - q.z) < q.r - 0.2) { addRipple(x, z, 0.25, 0.57); break; }
+  } n -= 1; }
+}
 
 /* ---------------- day and night, with dawn and dusk ---------------- */
 // Night: a dark blue sky with stars and a moon, soft moonlight instead of the sun, every lamp post lit (a warm
@@ -1845,6 +2096,7 @@ function applyTime() {
   hemi.color.copy(tone(0xfff2d6, 0x8fa6d8, 0xffb070, 0.8)); hemi.groundColor.copy(tone(0x6f8f4a, 0x1c2433, 0x7a5a3a, 0.5)); hemi.intensity = mix(skyHdr ? 0.45 : 0.9, 0.32);
   sun.color.copy(tone(0xffd4a0, 0xa9bcff, 0xff7a30, 0.95)); sun.intensity = mix(2.3, 0.45) + gold * 0.5;
   scene.fog.color.copy(tone(0xf3d2a4, 0x0c1428, 0xe8915a, 0.85)); scene.fog.near = mix(90, 60); scene.fog.far = mix(290, 230);
+  Object.assign(lightBase, { sun: sun.intensity, hemi: hemi.intensity, far: scene.fog.far, bg: scene.backgroundIntensity }); // (a passing shower dims these)
   hallLamps.forEach((l) => { l.light.intensity = l.night + (l.day - l.night) * smoothT(0.3, 0.75, d); }); // the halls light up as dusk deepens
   lampGlows.forEach((q) => { q.on = smoothT(q.at + 0.03, q.at - 0.03, d); q.h.material.opacity = q.on; q.p.material.opacity = q.on; q.h.visible = q.p.visible = q.on > 0.001; });
   if (d > 0.7) lampLights.forEach((l) => { l.intensity = 0; });
@@ -2103,11 +2355,11 @@ const dog = { obj: new THREE.Group(), x: 3, z: 90, y: 0, yaw: Math.PI };
 // A trotting walk for the dog model. In the model's own space the head points to +x, it stands
 // from y = -0.63 (paws) to 0.63 (ears), front legs sit near x = 0.6, back legs near x = -0.3 and the
 // tail curls up behind x = -0.55. Diagonal legs swing together; the tail wags, faster when walking.
-const dogAnim = { phase: { value: 0 }, walk: { value: 0 }, time: { value: 0 }, wag: { value: 1 }, sit: { value: 0 } };
+const dogAnim = { phase: { value: 0 }, walk: { value: 0 }, time: { value: 0 }, wag: { value: 1 }, sit: { value: 0 }, lie: { value: 0 }, nuzzle: { value: 0 } };
 function animateDog(mat) {
   mat.onBeforeCompile = (sh) => {
-    sh.uniforms.uPhase = dogAnim.phase; sh.uniforms.uWalk = dogAnim.walk; sh.uniforms.uTime = dogAnim.time; sh.uniforms.uWag = dogAnim.wag; sh.uniforms.uSit = dogAnim.sit;
-    sh.vertexShader = "uniform float uPhase, uWalk, uTime, uWag, uSit;\n" + sh.vertexShader.replace("#include <begin_vertex>", `#include <begin_vertex>
+    sh.uniforms.uPhase = dogAnim.phase; sh.uniforms.uWalk = dogAnim.walk; sh.uniforms.uTime = dogAnim.time; sh.uniforms.uWag = dogAnim.wag; sh.uniforms.uSit = dogAnim.sit; sh.uniforms.uLie = dogAnim.lie; sh.uniforms.uNuzzle = dogAnim.nuzzle;
+    sh.vertexShader = "uniform float uPhase, uWalk, uTime, uWag, uSit, uLie, uNuzzle;\n" + sh.vertexShader.replace("#include <begin_vertex>", `#include <begin_vertex>
       {
         const float HIP = -0.1, FEET = -0.634;
         float below = max(HIP - transformed.y, 0.0);                    // how far under the hip
@@ -2120,6 +2372,17 @@ function animateDog(mat) {
         transformed.z += sin(uTime * mix(7.0, 13.0, uWalk)) * mix(0.12, 0.22, uWalk) * tailW * tailW * uWag;
         float headW = smoothstep(0.35, 0.6, transformed.x) * smoothstep(0.0, 0.3, transformed.y);
         transformed.y += sin(uPhase * 2.0) * 0.025 * uWalk * headW;
+        // nuzzling: the head pushes up into the stroking hand
+        transformed.y += (0.5 + 0.5 * sin(uTime * 5.0)) * 0.05 * uNuzzle * headW;
+        transformed.x += (0.5 + 0.5 * sin(uTime * 5.0)) * 0.02 * uNuzzle * headW;
+        // lying down: the body comes down to the ground, the front legs reach forward and the hind legs fold back
+        // flat beside it; the head stays up
+        if (uLie > 0.0) {
+          float drop = (HIP - FEET) * 0.85 * uLie * (1.0 - 0.6 * headW);
+          transformed.y = max(FEET + 0.012, transformed.y - drop);
+          transformed.x += legW * mix(-0.22, 0.32, front) * uLie;
+          transformed.z *= 1.0 + 0.12 * legW * uLie;
+        }
         // sitting: the body tips back around the front paws so the haunches come down to the ground;
         // the front legs stay upright (less tip toward the paws) and the hind legs fold flat on the ground
         if (uSit > 0.0) {
@@ -2131,6 +2394,59 @@ function animateDog(mat) {
         }
       }`);
   };
+}
+
+/* ---------------- petting the dog (and the cat, below) ---------------- */
+// The dog is always at his side, so petting it is asked for (the 🐾 button, P, or from the dog's own panel):
+// it comes and sits at his right side; he kneels and strokes its head while it wags hard and nuzzles up into his
+// hand; when he stands it lies down for a moment, then gets up and follows again. Walking off calls it off.
+const DOG_PET_D = 1.15, DOG_LIE = 4.5;
+const pet = { who: null, phase: null, t: 0, yaw: 0, spot: null };
+function petBusy() { return sit.on || kraap.t >= 0 || alms.t >= 0 || shoes.t >= 0 || feed.t >= 0 || merit.t >= 0 || pet.phase === "call" || pet.phase === "on"; }
+function startPetDog() {
+  if (!dog.obj.visible || petBusy() || player.y > groundAt(player.x, player.z) + 0.05) return;
+  if (broom.held) putBroomBack();
+  if (dogKeepOut(player.x, player.z)) return; // (not in the Learning Hall)
+  pet.who = "dog"; pet.phase = "call"; pet.t = 0; pet.yaw = player.yaw; pet.from = { x: player.x, z: player.z };
+  // it sits at his right side, facing the way he faces, its head within reach of his right hand
+  pet.spot = { x: player.x - Math.cos(pet.yaw) * DOG_PET_D + Math.sin(pet.yaw) * 0.15, z: player.z + Math.sin(pet.yaw) * DOG_PET_D + Math.cos(pet.yaw) * 0.15 };
+  [pet.spot.x, pet.spot.z] = collide(pet.spot.x, pet.spot.z);
+}
+function petStep(dt) {
+  if (!pet.phase) return;
+  pet.t += dt;
+  const moved = Math.hypot(player.x - (pet.from ? pet.from.x : player.x), player.z - (pet.from ? pet.from.z : player.z)) > 0.3;
+  if (pet.phase === "call") {
+    if (moved || pet.t > 8) { pet.phase = null; return; } // walked off, or it couldn't come
+    if (pet.who === "dog" && Math.hypot(dog.x - pet.spot.x, dog.z - pet.spot.z) < 0.5 && dogAnim.sit.value > 0.8) {
+      pet.phase = "on"; startKneelingOffering({ kind: "pet", near: { x: player.x, z: player.z }, far: { x: player.x, z: player.z }, faceYaw: pet.yaw });
+    }
+  } else if (pet.phase === "after") {
+    if (pet.t > DOG_LIE + 1.2 || Math.hypot(player.x - dog.x, player.z - dog.z) > 5) pet.phase = null;
+  }
+}
+function petDone() {
+  if (pet.who === "dog") { pet.phase = "after"; pet.t = 0; pet.from = { x: player.x, z: player.z }; }
+  else { pet.phase = null; catPetted(); }
+}
+// where his stroking hand goes: over the top of the dog's head (worked out from the model and the same sitting and
+// nuzzling the dog's shader does), moving back and forth; for the cat, along her back
+let dogHead = null;
+function petStroke(t) {
+  if (pet.who === "cat") return catStroke(t);
+  const mesh = dog.model && dog.model.getObjectByProperty("isMesh", true); if (!mesh) return new THREE.Vector3(dog.x, 1.2, dog.z);
+  if (!dogHead) { // the top of the head, in the model's own space (head toward +x, paws at y = -0.634)
+    const pos = mesh.geometry.attributes.position; let top = -Infinity;
+    for (let i = 0; i < pos.count; i++) if (pos.getX(i) > 0.3) top = Math.max(top, pos.getY(i));
+    const c = new THREE.Vector3(); let n = 0;
+    for (let i = 0; i < pos.count; i++) if (pos.getX(i) > 0.3 && pos.getY(i) > top - 0.12 && Math.abs(pos.getZ(i)) < 0.12) { c.x += pos.getX(i); c.y += pos.getY(i); n++; }
+    dogHead = n ? c.multiplyScalar(1 / n) : new THREE.Vector3(0.5, 0.5, 0);
+  }
+  const FEET = -0.634, th = 0.5 * dogAnim.sit.value, cs = Math.cos(th), sn = Math.sin(th);
+  const p = dogHead.clone(); p.x -= 0.1 + 0.07 * Math.sin(t * 4); // from the forehead back toward the neck
+  p.y += 0.05 * dogAnim.nuzzle.value * (0.5 + 0.5 * Math.sin(dogAnim.time.value * 5));
+  const dx = p.x - 0.6, dy = p.y - FEET; p.x = 0.6 + dx * cs - dy * sn; p.y = FEET + dx * sn + dy * cs;
+  return mesh.localToWorld(p).add(new THREE.Vector3(0, 0.06, 0));
 }
 
 /* ---------------- sitting: cross-legged, for meditation and for listening to a teacher ---------------- */
@@ -2921,6 +3237,7 @@ addEventListener("keydown", (e) => {
   if (e.code === "KeyQ") startWai();
   if (e.code === "KeyC") toggleSit();
   if (e.code === "KeyK") startKraap();
+  if (e.code === "KeyP") startPetDog();
   if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) e.preventDefault();
 });
 addEventListener("keyup", (e) => { keys[e.code] = false; });
@@ -2959,6 +3276,7 @@ if (stick) {
   document.getElementById("t-jump").addEventListener("click", () => { if (player.y <= groundAt(player.x, player.z) + 0.01) player.vy = 9; });
   document.getElementById("t-act").addEventListener("click", () => { if (near) openPlace(near); else openPlaces(true); });
   document.getElementById("t-wai").addEventListener("click", startWai);
+  document.getElementById("t-pet").addEventListener("click", startPetDog);
   document.getElementById("t-sit").addEventListener("click", toggleSit);
 }
 
@@ -3010,7 +3328,7 @@ function showPrompt(p) {
   if (!p) { el.hidden = true; return; }
   $("prompt-name").textContent = p.icon + " " + placeName(p);
   $("prompt-sub").textContent = p.stone != null ? (p.board ? tx("ป้ายเรื่องที่ ", "Story board ") : tx("เรื่องที่ ", "Story ")) + (p.stone + 1) : p.sub[L === "en" ? 1 : 0];
-  $("prompt-go").textContent = p.id === "bell" ? tx("ตี", "Strike") : p.id === "donate" ? tx("เปิด", "Open") : p.id === "alms" ? tx("ใส่บาตร", "Offer") : p.id === "fish" ? tx("ให้อาหาร", "Feed") : p.merit ? tx("ทำบุญ", "Offer") : p.id === "broom" ? (broom.held ? tx("วาง", "Put back") : tx("หยิบ", "Pick up")) : p.id === "kathin" ? tx("ถวาย", "Offer") : tx("เข้า", "Visit");
+  $("prompt-go").textContent = p.id === "bell" ? tx("ตี", "Strike") : p.id === "donate" ? tx("เปิด", "Open") : p.id === "alms" ? tx("ใส่บาตร", "Offer") : p.id === "fish" ? tx("ให้อาหาร", "Feed") : p.merit ? tx("ทำบุญ", "Offer") : p.id === "broom" ? (broom.held ? tx("วาง", "Put back") : tx("หยิบ", "Pick up")) : p.id === "kathin" ? tx("ถวาย", "Offer") : p.id === "cat" ? tx("ลูบ", "Pet") : tx("เข้า", "Visit");
   el.hidden = false;
 }
 $("prompt-go").addEventListener("click", () => near && openPlace(near));
@@ -3066,6 +3384,7 @@ function openPlace(p) {
   if (p.id === "alms") { startAlms(p.monk); return; }
   if (p.id === "fish") { startFeed(); return; }
   if (p.merit) { startMerit(meritHere()); return; }
+  if (p.id === "cat") { startPetCat(); return; }
   if (p.id === "broom") { broom.held = !broom.held; near = null; return; }
   if (p.id === "kathin") { startKathin(p.hall); return; }
   if (p.stone != null) {
@@ -3084,7 +3403,7 @@ function openPlace(p) {
 function openPlaces(fromDog) {
   const items = PLACES.map((p) => `<li><button data-go="${p.id}"><span class="ic" aria-hidden="true">${p.icon}</span><span>${esc(placeName(p))}</span></button></li>`).join("");
   openDialog(fromDog ? tx("🐕 อยากไปทางไหน?", "🐕 Where would you like to go?") : tx("🗺️ ที่ต่าง ๆ ในวัด", "🗺️ Places in the temple"),
-    `${fromDog ? `<p>${tx("เลือกได้เลย ผมพาไป ไม่เลือกอะไรก็ได้นะ", "Pick one and I'll take you there. Choosing nothing is fine too.")}</p>` : `<p>${tx("ไม่อยากเดินแบบ 3 มิติ? เลือกที่หมายแล้ววัดพาไปเลย หรือเปิดหน้าเว็บของศาลานั้นได้", "Prefer not to walk in 3D? Pick a place and the temple takes you there, or open that hall's web page.")}</p>`}
+    `${fromDog ? `<p>${tx("เลือกได้เลย ผมพาไป ไม่เลือกอะไรก็ได้นะ", "Pick one and I'll take you there. Choosing nothing is fine too.")}</p><div class="row"><button class="chip" data-pet>🐾 ${tx("ลูบหัวหมา", "Pet the dog")}</button></div>` : `<p>${tx("ไม่อยากเดินแบบ 3 มิติ? เลือกที่หมายแล้ววัดพาไปเลย หรือเปิดหน้าเว็บของศาลานั้นได้", "Prefer not to walk in 3D? Pick a place and the temple takes you there, or open that hall's web page.")}</p>`}
      <ul class="places">${items}</ul>
      <p class="quiet">${tx("🐕 ในต้นแบบนี้ หมาวัดเป็นตัวช่วยบอกทางที่เขียนไว้ล่วงหน้า ยังไม่ใช่ AI", "🐕 In this prototype the temple dog gives pre-written directions; it isn't an AI yet.")}</p>
      <div class="row"><a class="chip" href="index.html" style="text-decoration:none">${tx("ไปหน้าแผนที่วัด (ไม่ใช้ 3 มิติ)", "Go to the temple map (no 3D)")}</a><button class="chip" data-close>${tx("ปิด", "Close")}</button></div>
@@ -3101,11 +3420,12 @@ function teleport(id) {
 }
 $("dlg").addEventListener("click", (e) => {
   const go = e.target.closest("[data-go]"); if (go) { teleport(go.dataset.go); closeDialog(); return; }
+  if (e.target.closest("[data-pet]")) { closeDialog(); startPetDog(); return; }
   if (e.target.closest("[data-close]")) closeDialog();
 });
 $("btn-places").addEventListener("click", () => openPlaces(false));
 $("btn-help").addEventListener("click", () => openDialog(tx("❔ วิธีเดินในวัด", "❔ How to walk around"),
-  `<p>${tx("⌨️ W A S D หรือปุ่มลูกศร = เดิน • Shift = วิ่ง • Space = กระโดด • E = เข้าศาลาที่อยู่ใกล้ • G = เรียกหมาวัด • Q = ไหว้ 🙏 • C = นั่งสมาธิ 🧘 (เดินเพื่อลุก) • K = กราบพระ 🙇 (หน้าพระพุทธรูป) • ใส่บาตร 🍚: ยืนหน้าพระที่ถนนหน้าประตูวัด แล้วกด E (พระบิณฑบาตเฉพาะตอนเช้า 6:00–11:00 ตามนาฬิกาเครื่องนี้)", "⌨️ W A S D or arrow keys = walk • Shift = run • Space = jump • E = visit the nearby hall • G = call the temple dog • Q = wai 🙏 • C = sit 🧘 (walk to stand up) • K = pay tribute 🙇 (before a Buddha image) • give alms 🍚: stand before a monk on the road outside the gate and press E (monks go on the alms round only in the morning, 6:00–11:00 by this device's clock)")}</p>
+  `<p>${tx("⌨️ W A S D หรือปุ่มลูกศร = เดิน • Shift = วิ่ง • Space = กระโดด • E = เข้าศาลาที่อยู่ใกล้ • G = เรียกหมาวัด • Q = ไหว้ 🙏 • C = นั่งสมาธิ 🧘 (เดินเพื่อลุก) • K = กราบพระ 🙇 (หน้าพระพุทธรูป) • P = ลูบหัวหมา 🐾 • ใส่บาตร 🍚: ยืนหน้าพระที่ถนนหน้าประตูวัด แล้วกด E (พระบิณฑบาตเฉพาะตอนเช้า 6:00–11:00 ตามนาฬิกาเครื่องนี้)", "⌨️ W A S D or arrow keys = walk • Shift = run • Space = jump • E = visit the nearby hall • G = call the temple dog • Q = wai 🙏 • C = sit 🧘 (walk to stand up) • K = pay tribute 🙇 (before a Buddha image) • P = pet the dog 🐾 • give alms 🍚: stand before a monk on the road outside the gate and press E (monks go on the alms round only in the morning, 6:00–11:00 by this device's clock)")}</p>
    <p>${tx("🖱️ ลากเมาส์ = หมุนมุมมอง • ล้อเมาส์ = ซูม • คลิกหมาวัดหรือศาลา = เปิด", "🖱️ Drag = turn the view • Wheel = zoom • Click the dog or a hall = open it")}</p>
    <p>${tx("📱 จอยซ้ายล่าง = เดิน • ลากจอ = หมุนมุมมอง • ปุ่ม E = เข้า", "📱 Bottom-left stick = walk • Drag the screen = turn the view • E button = visit")}</p>
    <p>${tx("🔈 ปุ่มเสียง = เปิดเสียงนก ลม น้ำตก และกระดิ่งชายคา (ปิดอยู่จนกว่าจะกด) • 🔔 เดินไปที่ระฆังแล้วกด E เพื่อตีระฆัง", "🔈 Sound button = birds, breeze, the waterfall and the roof bells (off until you press it) • 🔔 Walk to the bell and press E to strike it")}</p>
@@ -3121,6 +3441,7 @@ qBtn.addEventListener("click", () => { write("world-quality", HIGH ? "light" : "
 $("btn-wai").addEventListener("click", () => { startWai(); canvas.focus(); });
 $("btn-sit").addEventListener("click", () => { toggleSit(); canvas.focus(); });
 $("btn-kraap").addEventListener("click", () => { startKraap(); if ($("dlg").hidden) canvas.focus(); });
+$("btn-pet").addEventListener("click", () => { startPetDog(); canvas.focus(); });
 const soundBtn = $("btn-sound");
 const syncSound = () => { soundBtn.setAttribute("aria-pressed", sound.on); soundBtn.classList.toggle("on", sound.on); soundBtn.firstChild.textContent = sound.on ? "🔊 " : "🔈 "; };
 function askSound() {
@@ -3228,7 +3549,7 @@ function tick() {
 // one step of the world: movement, animation, camera and the picture
 function frame(dt) {
   timeStep(dt); placeLampLights(dt);
-  feedStep(dt); fishStep(dt); meritStep(dt); lifeStep(dt);
+  feedStep(dt); fishStep(dt); meritStep(dt); lifeStep(dt); petStep(dt); petalStep(dt); rainStep(dt);
   if (broom.held && (alms.t >= 0 || kraap.t >= 0 || feed.t >= 0 || shoes.t >= 0 || sit.on || merit.t >= 0)) putBroomBack(); // hands needed elsewhere
   monkTime += dt;
   if (!settings.calmMotion) for (const m of monkFigures) { const b = Math.sin(monkTime * 1.25 + m.ph); m.o.scale.set(1 + b * 0.004, 1 + b * 0.008, 1 + b * 0.004); } // slow breathing
@@ -3384,19 +3705,27 @@ function frame(dt) {
     if (dogKeepOut(dog.x, dog.z)) { dog.x = DOG_WAIT.x; dog.z = DOG_WAIT.z; } // (arrived inside some other way)
     const waiting = dogKeepOut(bx, bz);
     if (waiting) { bx = DOG_WAIT.x; bz = DOG_WAIT.z; }
+    // being petted: it comes and sits at his right side; afterwards it lies down there for a moment
+    const petting = pet.who === "dog" ? pet.phase : null;
+    if (petting === "call" || petting === "on") { bx = pet.spot.x; bz = pet.spot.z; }
+    else if (petting === "after") { bx = dog.x; bz = dog.z; }
     const ddx = bx - dog.x, ddz = bz - dog.z, dd = Math.hypot(ddx, ddz);
-    const wantSit = (ceremony || waiting) && dd < 0.5;
-    dogAnim.sit.value += ((wantSit ? 1 : 0) - dogAnim.sit.value) * Math.min(1, dt * 3);
-    const dogFree = dogAnim.sit.value < 0.15; // a sitting dog gets up before it walks
+    const wantSit = (ceremony || waiting || petting === "call" || petting === "on") && dd < 0.5;
+    const wantLie = petting === "after" && pet.t > 0.5 && pet.t < DOG_LIE;
+    dogAnim.sit.value += ((wantSit && !wantLie ? 1 : 0) - dogAnim.sit.value) * Math.min(1, dt * 3);
+    dogAnim.lie.value += ((wantLie ? 1 : 0) - dogAnim.lie.value) * Math.min(1, dt * 2.2);
+    dogAnim.nuzzle.value += ((petting === "on" && kraap.t >= 0 && kraapState(kraap.t).reach > 0.6 ? 1 : 0) - dogAnim.nuzzle.value) * Math.min(1, dt * 3);
+    const dogFree = dogAnim.sit.value < 0.15 && dogAnim.lie.value < 0.15; // a sitting or lying dog gets up before it walks
     dog.moving = dd > 0.4 && dogFree;
     let dogSpeed = 0;
-    if (wantSit) { let dy = (waiting ? DOG_WAIT.yaw : player.yaw) - dog.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); dog.yaw += dy * Math.min(1, dt * 4); }
+    if (wantLie) { let dy = pet.yaw - dog.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); dog.yaw += dy * Math.min(1, dt * 2.5); } // lies down alongside him, where it sat
+    if (wantSit) { let dy = (waiting ? DOG_WAIT.yaw : petting ? pet.yaw : player.yaw) - dog.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); dog.yaw += dy * Math.min(1, dt * 4); }
     if (dd > 0.4 && dogFree) { const st = Math.min(dd, dt * (dd > 6 ? 12 : 6)); dogSpeed = dt > 0 ? st / dt : 0; const [nx, nz] = collide(dog.x + ddx / dd * st, dog.z + ddz / dd * st); if (!dogKeepOut(nx, nz)) { dog.x = nx; dog.z = nz; } dog.yaw = Math.atan2(ddx, ddz); }
     // walk cycle: about one stride per 1.2 m; the legs ease in and out of walking
     dogAnim.phase.value = (dogAnim.phase.value + dt * dogSpeed * 5.2) % (Math.PI * 200); // kept small so it stays precise
     if (!Number.isFinite(dogAnim.phase.value)) dogAnim.phase.value = 0;
     dogAnim.walk.value += ((dogSpeed > 0.5 ? 1 : 0) - dogAnim.walk.value) * Math.min(1, dt * 6);
-    dogAnim.time.value += dt; dogAnim.wag.value = settings.calmMotion ? 0.4 : 1;
+    dogAnim.time.value += dt; dogAnim.wag.value = (settings.calmMotion ? 0.4 : 1) * (petting ? 1.7 : 1); // wagging hard while petted
     dog.obj.position.set(dog.x, groundAt(dog.x, dog.z), dog.z); dog.obj.rotation.y = dog.yaw;
     if (!settings.calmMotion) dog.tail.rotation.y = Math.sin(performance.now() / 160) * 0.6;
   }
@@ -3410,12 +3739,13 @@ function frame(dt) {
   { const h = salas.learn; if (h && h.senior && kraap.t < 0) { const sp = kathinSpots(h), d = Math.hypot(player.x - sp.near.x, player.z - sp.near.z); if (d < 1.3 && d < bestD) { best = { ...KATHIN_PLACE, hall: h }; bestD = d; } } }
   if (onBridge(player.x, player.z) && feed.t < 0 && 2.5 < bestD) { best = FISH_PLACE; bestD = 2.5; }
   if (merit.t < 0 && kraap.t < 0) { const mh = meritHere(); if (mh) { best = { ...MERIT[mh.kind].place, merit: mh }; bestD = 0.5; } } // standing at it: the offering comes first
+  if (catNear() && 1.9 < bestD) { best = CAT_PLACE; bestD = 1.9; }
   if (Math.hypot(player.x - BROOM_AT.x, player.z - BROOM_AT.z) < 1.8 && 2.3 < bestD) { best = broom.held ? BROOM_BACK : BROOM_PLACE; bestD = 2.3; }
   if (almsScene.on) for (const m of almsMonks) { const d = Math.hypot(player.x - (m.x + Math.sin(m.yaw) * ALMS_STAND), player.z - (m.z + Math.cos(m.yaw) * ALMS_STAND)); if (d < 1.5 && d < bestD) { best = { ...ALMS_PLACE, monk: m }; bestD = d; } }
   for (const s of boards) { const d = Math.hypot(player.x - s.x, player.z - s.z); if (d < 1.9 && d < bestD) { best = { ...PLACES.find((p) => p.id === "learn"), stone: s.i, board: true }; bestD = d; } }
   if ((best && best.id) !== (near && near.id) || (best && best.stone) !== (near && near.stone) || (best && best.monk) !== (near && near.monk)) { near = best; showPrompt(near); }
   // while he is doing something the prompt steps aside, and stays aside until he has walked on a little
-  const busy = alms.t >= 0 || kraap.t >= 0 || shoes.t >= 0 || wai.t >= 0 || sit.on || feed.t >= 0 || merit.t >= 0;
+  const busy = alms.t >= 0 || kraap.t >= 0 || shoes.t >= 0 || wai.t >= 0 || sit.on || feed.t >= 0 || merit.t >= 0 || pet.phase === "call";
   if (busy) promptRest = { x: player.x, z: player.z };
   else if (promptRest && Math.hypot(player.x - promptRest.x, player.z - promptRest.z) > 0.6) promptRest = null;
   if (!!promptRest !== promptAway) { promptAway = !!promptRest; $("prompt").classList.toggle("away", promptAway); }
@@ -3453,7 +3783,7 @@ document.fonts.load("64px Itim").then(() => document.fonts.load("36px Mali")).ca
 });
 camYaw = 0; camera.position.set(0, 8, 105);
 restoreSpot(); // back from a page of the site: stand where you were
-if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, almsScene, almsShow, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, gardenSpots, paths, floors, ponds, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startKathin, kathinSpots, feed, startFeed, fishes, food, onBridge, merit, startMerit, meritHere, broom, fallenLeaves, altars, gildImage, bodhiBands, lane, novice, birds, cat, look: (eye, at) => { camera.position.set(...eye); camera.lookAt(...at); if (composer) composer.render(); else renderer.render(scene, camera); }, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
+if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, almsScene, almsShow, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, gardenSpots, paths, floors, ponds, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startKathin, kathinSpots, feed, startFeed, fishes, food, onBridge, merit, startMerit, meritHere, broom, fallenLeaves, altars, gildImage, bodhiBands, lane, novice, birds, cat, rain, petals, catShow, catPlan, pet, startPetDog, startPetCat, petStroke, look: (eye, at) => { camera.position.set(...eye); camera.lookAt(...at); if (composer) composer.render(); else renderer.render(scene, camera); }, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
 Promise.race([Promise.all(propJobs), new Promise((r) => setTimeout(r, 7000))]).then(() => {
   $("loading").hidden = true;
   canvas.focus();

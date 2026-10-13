@@ -236,6 +236,31 @@ export function createSound({ high = true } = {}) {
       if (!on) setTimeout(() => { if (!on && ctx) { master.gain.setValueAtTime(0.0001, ctx.currentTime); ctx.suspend(); } }, 9500);
     },
     step(surface) { if (on) step(surface); },
+    // rain: a soft hush, as heavy as level (0..1); outdoors, so a hall muffles it
+    setRain(level) {
+      if (!ctx || !on) return;
+      if (!this._rain && level <= 0) return;
+      if (!this._rain) {
+        const src = loopNoise(noiseBuffer("pink")), hp = ctx.createBiquadFilter(), lp = ctx.createBiquadFilter(), g = ctx.createGain();
+        hp.type = "highpass"; hp.frequency.value = 500; lp.type = "lowpass"; lp.frequency.value = 6500; g.gain.value = 0;
+        src.connect(hp); hp.connect(lp); lp.connect(g); g.connect(outdoor); this._rain = g;
+      }
+      this._rain.gain.setTargetAtTime(0.2 * level, ctx.currentTime, 0.5);
+    },
+    // the cat purring while she is petted: a low rumble pulsing about 25 times a second; level 0 is silent
+    purr(level, x, y, z) {
+      if (!ctx || !on) { if (this._purr) this._purr.g.gain.value = 0; return; }
+      if (!this._purr && level <= 0) return;
+      if (!this._purr) {
+        const out = placed(x, y, z, 6, 30, 1), src = loopNoise(noiseBuffer("brown")), f = ctx.createBiquadFilter(), am = ctx.createGain(), l = ctx.createOscillator(), lg = ctx.createGain(), g = ctx.createGain();
+        f.type = "lowpass"; f.frequency.value = 180; l.frequency.value = 25; lg.gain.value = 0.5; am.gain.value = 0.5; l.connect(lg); lg.connect(am.gain); l.start();
+        g.gain.value = 0; src.connect(f); f.connect(am); am.connect(g); g.connect(out);
+        this._purr = { out, g };
+      }
+      const t = ctx.currentTime, P = this._purr;
+      P.out.positionX.setTargetAtTime(x, t, 0.1); P.out.positionY.setTargetAtTime(y, t, 0.1); P.out.positionZ.setTargetAtTime(z, t, 0.1);
+      P.g.gain.setTargetAtTime(0.6 * level, t, 0.2);
+    },
     // pigeons taking off: a clatter of wingbeats
     flutter(x, y, z) {
       if (!ctx || !on) return;
