@@ -1528,28 +1528,41 @@ function poseBroom(model, B) {
 // their hands are posed the same way: the monk's clasped before him, the novice's on his broom.
 const npcLoader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 function loadNpc(name, height) {
-  return Promise.all([name, name + "-idle"].map((n) => new Promise((res) => npcLoader.load(`assets/models/${n}.glb`, res, undefined, () => res(null)))))
-    .then(([main, idle]) => {
+  return new Promise((res) => npcLoader.load(`assets/models/${name}.glb`, res, undefined, () => res(null)))
+    .then((main) => {
       if (!main) return null;
       const obj = main.scene, holder = new THREE.Group(); holder.add(obj); fitModel(obj, height); scene.add(holder);
       holder.updateMatrixWorld(true);
-      const walkClip = main.animations.find((c) => /walk/i.test(c.name)) || main.animations[0], idleClip = idle && idle.animations[0];
+      const walkClip = main.animations.find((c) => /walk/i.test(c.name)) || main.animations[0];
       if (!walkClip) return null;
       const B = {}; obj.traverse((o) => { if (o.isBone) B[o.name] = o; });
       const mixer = new THREE.AnimationMixer(obj);
-      const n = { holder, obj, B, mixer, walk: mixer.clipAction(walkClip), idle: idleClip ? mixer.clipAction(idleClip) : null, gait: measureGait(obj, walkClip), liftWalk: measureLift(obj, walkClip), liftIdle: idleClip ? measureLift(obj, idleClip) : 0, k: height / 1.7 };
-      n.lift = n.liftIdle;
-      n.walk.play(); if (n.idle) n.idle.play();
+      const n = { holder, obj, B, mixer, walk: mixer.clipAction(walkClip), gait: measureGait(obj, walkClip), lift: measureLift(obj, walkClip), standTs: feetTogether(obj, B, walkClip), k: height / 1.7 };
+      n.walk.play();
       return n;
     });
 }
-// play walk and idle blended by how fast he goes; the walk at the speed that keeps the feet planted
-function npcAnimate(n, speed, dt) {
-  const w = Math.min(1, speed / 0.15);
-  n.walk.setEffectiveWeight(n.idle ? w : 1); if (n.idle) n.idle.setEffectiveWeight(1 - w);
-  n.walk.timeScale = speed > 0.01 ? speed / n.gait.speed : (n.idle ? 1 : 0);
-  n.lift = n.idle ? n.liftIdle + (n.liftWalk - n.liftIdle) * w : n.liftWalk; // feet on the ground in either clip
+// The walk only (the models' own idle stands with the hips turned well aside and swaying, so blending into it twisted
+// the body): walking, at the speed that keeps the feet planted; turning, in small slow steps; standing, the walk carries
+// on to the moment the feet are together and rests there.
+function npcAnimate(n, speed, dt, stepping = false) {
+  if (speed > 0.02) n.walk.timeScale = Math.max(0.25, speed / n.gait.speed);
+  else if (stepping) n.walk.timeScale = 0.4;
+  else {
+    const T = n.walk.getClip().duration, t = ((n.walk.time % T) + T) % T;
+    const ahead = Math.min(...n.standTs.map((s) => (((s - t) % T) + T) % T));
+    n.walk.timeScale = ahead < 0.03 || ahead > T - 0.01 ? 0 : 0.5;
+  }
   n.mixer.update(dt);
+}
+// the moments in a walk clip when the feet pass each other (closest together): where he can stand still
+function feetTogether(obj, B, clip) {
+  const mixer = new THREE.AnimationMixer(obj), act = mixer.clipAction(clip); act.play();
+  const l = new THREE.Vector3(), r = new THREE.Vector3(), d = [], N = 60;
+  for (let i = 0; i < N; i++) { mixer.setTime(clip.duration * i / N); obj.updateMatrixWorld(true); B.LeftFoot.getWorldPosition(l); B.RightFoot.getWorldPosition(r); d.push(Math.hypot(l.x - r.x, l.z - r.z)); }
+  mixer.stopAllAction(); mixer.uncacheRoot(obj);
+  const out = []; for (let i = 0; i < N; i++) if (d[i] <= d[(i + N - 1) % N] && d[i] <= d[(i + 1) % N]) out.push(clip.duration * i / N);
+  return out.length ? out : [0];
 }
 const npcAxes = (yaw) => { const up = new THREE.Vector3(0, 1, 0), fwd = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw)); return { up, fwd, side: new THREE.Vector3().crossVectors(up, fwd) }; };
 
@@ -1591,14 +1604,15 @@ function laneStep(dt) {
   } else {
     const x = LANE.x1 + dx * lane.u, z = LANE.z1 + dz * lane.u;
     const ahead = (player.x - x) * dx * lane.dir + (player.z - z) * dz * lane.dir, across = Math.abs((player.x - x) * dz - (player.z - z) * dx);
-    target = ahead > 0 && ahead < 2.2 && across < 1.2 ? 0 : 0.55; // someone in the way: he waits
-    lane.u += lane.speed * dt * lane.dir;
-    if (lane.u >= L || lane.u <= 0) { lane.u = Math.max(0, Math.min(L, lane.u)); lane.dir = -lane.dir; lane.stop = 2.5; lane.speed = 0; }
+    const left = lane.dir > 0 ? L - lane.u : lane.u; // he slows as he nears the end of the lane
+    target = ahead > 0 && ahead < 2.2 && across < 1.2 ? 0 : 0.55 * Math.min(1, Math.max(0.12, left / 1.2)); // someone in the way: he waits
+    lane.u = Math.max(0, Math.min(L, lane.u + lane.speed * dt * lane.dir));
+    if ((lane.dir > 0 ? L - lane.u : lane.u) < 0.02) { lane.dir = -lane.dir; lane.stop = 2.5; lane.speed = 0; } // at the end: stand, then turn
   }
   lane.speed += (target - lane.speed) * Math.min(1, dt * 2);
   const x = LANE.x1 + dx * lane.u, z = LANE.z1 + dz * lane.u;
   n.holder.position.set(x, groundAt(x, z) + n.lift, z); n.holder.rotation.y = yaw; lane.col.x = x; lane.col.z = z;
-  npcAnimate(n, lane.stop > 0 || lane.turn >= 0 ? 0 : lane.speed, dt);
+  npcAnimate(n, lane.stop > 0 || lane.turn >= 0 ? 0 : lane.speed, dt, lane.turn >= 0);
   n.holder.updateMatrixWorld(true);
   poseClasped(n, yaw);
 }
