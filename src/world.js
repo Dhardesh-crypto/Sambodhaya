@@ -2384,13 +2384,22 @@ function animateDog(mat) {
           transformed.z *= 1.0 + 0.12 * legW * uLie;
         }
         // sitting: the body tips back around the front paws so the haunches come down to the ground;
-        // the front legs stay upright (less tip toward the paws) and the hind legs fold flat on the ground
+        // the front legs stay upright (less tip toward the paws); each hind leg folds under the haunch, its
+        // paw resting flat on the ground in front of it (rather than being tipped into the ground)
         if (uSit > 0.0) {
           float th = 0.5 * uSit * (1.0 - front * legW);
-          vec2 dv = vec2(transformed.x - 0.6, transformed.y - FEET);
           float cs = cos(th), sn = sin(th);
-          transformed.x = 0.6 + dv.x * cs - dv.y * sn;
-          transformed.y = max(FEET + 0.01, FEET + dv.x * sn + dv.y * cs);
+          if (front < 0.5 && legW > 0.0) {
+            vec2 hv = vec2(transformed.x - 0.6, HIP - FEET);                  // where the tipped body puts this leg's hip
+            float hx = 0.6 + hv.x * cs - hv.y * sn, hy = FEET + hv.x * sn + hv.y * cs;
+            float fx = hx + legW * 0.34, fy = max(FEET + 0.03, mix(max(hy, FEET + 0.1), FEET + 0.035, legW)); // folded forward
+            transformed.x = mix(transformed.x, fx, uSit);
+            transformed.y = mix(transformed.y, fy, uSit);
+          } else {
+            vec2 dv = vec2(transformed.x - 0.6, transformed.y - FEET);
+            transformed.x = 0.6 + dv.x * cs - dv.y * sn;
+            transformed.y = max(FEET + 0.01, FEET + dv.x * sn + dv.y * cs);
+          }
         }
       }`);
   };
@@ -3726,7 +3735,7 @@ function frame(dt) {
     if (!Number.isFinite(dogAnim.phase.value)) dogAnim.phase.value = 0;
     dogAnim.walk.value += ((dogSpeed > 0.5 ? 1 : 0) - dogAnim.walk.value) * Math.min(1, dt * 6);
     dogAnim.time.value += dt; dogAnim.wag.value = (settings.calmMotion ? 0.4 : 1) * (petting ? 1.3 : 1); // wagging harder while petted
-    dog.obj.position.set(dog.x, groundAt(dog.x, dog.z), dog.z); dog.obj.rotation.y = dog.yaw;
+    dog.obj.position.set(dog.x, groundAt(dog.x, dog.z) + (onPath(dog.x, dog.z) && !insideHall(dog.x, dog.z) ? PAVING : 0), dog.z); dog.obj.rotation.y = dog.yaw; // paws on the paving, not in it
     if (!settings.calmMotion) dog.tail.rotation.y = Math.sin(performance.now() / 160) * 0.6;
   }
 
