@@ -857,19 +857,20 @@ function Support() {
   const S = SUPPORT;
   const ready = !!(S.recipient && (S.promptpayQr || S.promptpayId || S.bank) && S.retentionDays && S.contact);
   const [method, setMethod] = useState(S.promptpayQr || S.promptpayId ? "promptpay" : "bank");
-  const [f, setF] = useState({ anonymous: false, name: "", amount: "", date: "", time: "", note: "", email: "", thanks: "private", adult: false, consent: false });
+  const [f, setF] = useState({ anonymous: false, name: "", amount: "", note: "", email: "", thanks: "private", agree: false });
+  const [stage, setStage] = useState(1); // 1: the transfer details; 2: the slip form (shown once they say they've transferred)
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [state, setState] = useState("idle");
   const set = (k) => (e) => setF({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value });
   useEffect(() => { if (!file || !file.type.startsWith("image/")) { setPreview(null); return; } const u = URL.createObjectURL(file); setPreview(u); return () => URL.revokeObjectURL(u); }, [file]);
   const fileOk = file && file.size <= 8 * MB && /^(image\/|application\/pdf)/.test(file.type);
-  const valid = ready && (f.anonymous || f.name.trim()) && Number(f.amount) > 0 && f.date && fileOk && f.adult && f.consent && state !== "sending";
+  const valid = ready && (f.anonymous || f.name.trim()) && Number(f.amount) > 0 && fileOk && f.agree && state !== "sending"; // (the slip itself shows the date and time)
   const submit = async (e) => {
     e.preventDefault(); if (!valid) return;
     setState("sending");
     try {
-      await sendForm("donation", { name: f.anonymous ? "(anonymous)" : f.name.trim(), amount: f.amount, date: f.date, time: f.time, method, note: f.note.trim(), email: f.email.trim(), thanks: f.anonymous ? "private" : f.thanks, adult: "yes", consent: "yes", lang, "bot-field": "" }, file);
+      await sendForm("donation", { name: f.anonymous ? "(anonymous)" : f.name.trim(), amount: f.amount, method, note: f.note.trim(), email: f.email.trim(), thanks: f.anonymous ? "private" : f.thanks, adult: "yes", consent: "yes", lang, "bot-field": "" }, file);
       setState("sent"); window.scrollTo(0, 0);
     } catch (err) { setState("error"); }
   };
@@ -899,9 +900,9 @@ function Support() {
       </ul>
       {S.taxNote ? <p className="quiet">{t(S.taxNote)}</p> : <p className="quiet"><Tag kind="unknown" /> {t(UI("ข้อมูลเรื่องใบลดหย่อนภาษี: รอข้อมูลจากทีม", "Tax receipts: awaiting information from the team"))}</p>}
 
-      <ol className="flow-steps" aria-label={t(UI("ขั้นตอน", "Steps"))}><li className="now">① {t(UI("โอน", "Transfer"))}</li><li>② {t(UI("แจ้งสลิป", "Send slip"))}</li><li>③ {t(UI("รอตรวจสอบ", "Awaiting check"))}</li></ol>
+      <ol className="flow-steps" aria-label={t(UI("ขั้นตอน", "Steps"))}><li className={stage === 1 ? "now" : "on"}>① {t(UI("โอน", "Transfer"))}</li><li className={stage === 2 ? "now" : ""}>② {t(UI("แจ้งสลิป", "Send slip"))}</li><li>③ {t(UI("รอตรวจสอบ", "Awaiting check"))}</li></ol>
 
-      <div className="step">
+      {stage === 1 && <div className="step">
         <h2>① {t(UI("โอนเงิน", "Make the transfer"))}</h2>
         {S.recipient ? <p>{t(UI("ผู้รับเงิน", "Recipient"))}: <strong>{t(S.recipient)}</strong></p> : waiting}
         {(S.promptpayQr || S.promptpayId) && (
@@ -921,17 +922,15 @@ function Support() {
             <dt>{t(UI("ชื่อบัญชี", "Account name"))}</dt><dd>{t(S.bank.name)}</dd>
             <dt>{t(UI("เลขที่บัญชี", "Account number"))}</dt><dd><strong className="mono">{S.bank.number}</strong> <Copy text={S.bank.number.replace(/\D/g, "")} /></dd>
           </dl>) : waiting)}
-      </div>
+        <div className="row"><button type="button" className="btn big" onClick={() => { setStage(2); window.scrollTo(0, 0); }}>{t(UI("โอนเรียบร้อยแล้ว – แนบสลิป", "I've completed the transfer – attach the slip"))} →</button></div>
+      </div>}
 
-      <form className="step" onSubmit={submit} noValidate>
+      {stage === 2 && <form className="step" onSubmit={submit} noValidate>
         <h2>② {t(UI("แจ้งการโอนและแนบสลิป", "Tell us about your transfer"))}</h2>
+        <p><button type="button" className="link" onClick={() => setStage(1)}>← {t(UI("ดูข้อมูลการโอนอีกครั้ง", "See the transfer details again"))}</button></p>
         <label className="toggle"><input type="checkbox" checked={f.anonymous} onChange={set("anonymous")} /> <span>{t(UI("ไม่ประสงค์ออกนาม", "I'd like to stay anonymous"))}</span></label>
         {!f.anonymous && <label className="fb-field" htmlFor="d-name">{t(UI("ชื่อผู้สมทบ", "Your name"))} *<input id="d-name" value={f.name} onChange={set("name")} autoComplete="name" /></label>}
-        <div className="grid2">
-          <label className="fb-field" htmlFor="d-amount">{t(UI("จำนวนเงิน (บาท)", "Amount (THB)"))} *<input id="d-amount" type="number" min="1" step="0.01" inputMode="decimal" value={f.amount} onChange={set("amount")} /></label>
-          <label className="fb-field" htmlFor="d-date">{t(UI("วันที่โอน", "Transfer date"))} *<input id="d-date" type="date" value={f.date} onChange={set("date")} /></label>
-          <label className="fb-field" htmlFor="d-time">{t(UI("เวลาโอน (ถ้าจำได้)", "Transfer time (if you know it)"))}<input id="d-time" type="time" value={f.time} onChange={set("time")} /></label>
-        </div>
+        <label className="fb-field" htmlFor="d-amount">{t(UI("จำนวนเงิน (บาท)", "Amount (THB)"))} *<input id="d-amount" type="number" min="1" step="0.01" inputMode="decimal" value={f.amount} onChange={set("amount")} /></label>
         <label className="fb-field" htmlFor="d-slip">{t(UI("สลิปการโอน (รูปหรือ PDF ไม่เกิน 8 MB)", "Transfer slip (image or PDF, up to 8 MB)"))} *
           <input id="d-slip" type="file" accept="image/*,application/pdf" onChange={(e) => setFile(e.target.files[0] || null)} />
         </label>
@@ -947,10 +946,8 @@ function Support() {
             <label className={"fb-type" + (f.thanks === "public" ? " on" : "")}><input type="radio" name="d-thanks" value="public" checked={f.thanks === "public"} onChange={set("thanks")} /> {t(UI("แสดงชื่อในรายชื่อผู้สนับสนุน (ไม่แสดงจำนวนเงิน)", "Show my name on the supporters list (never the amount)"))}</label>
           </fieldset>
         )}
-        <label className="toggle"><input type="checkbox" checked={f.adult} onChange={set("adult")} /> <span>{t(UI("ฉันอายุ 18 ปีขึ้นไป หรือได้รับอนุญาตจากผู้ปกครอง", "I'm 18 or older, or have a parent's or guardian's permission"))} *</span></label>
-        <label className="toggle consent"><input type="checkbox" checked={f.consent} onChange={set("consent")} /> <span>
-          {t(UI("ฉันยินยอมให้ผู้ดูแลวัดเก็บข้อมูลและสลิปนี้ เพื่อยืนยันการโอน การทำบัญชีและการตรวจสอบ และเพื่อขอบคุณเท่านั้น", "I agree that the temple caretakers may keep this information and slip, only to verify the transfer, for accounting and audit checks, and to thank me"))}
-          {" "}({t(UI("เก็บไว้", "kept for"))} {S.retentionDays ? `${S.retentionDays} ${t(UI("วัน แล้วลบทิ้ง", "days, then deleted"))}` : "…"}{t(UI(" ขอลบได้ที่ ", "; request deletion at "))}{S.contact || "…"}) *</span></label>
+        <label className="toggle consent"><input type="checkbox" checked={f.agree} onChange={set("agree")} /> <span>{t(UI("ฉันอายุ 18 ปีขึ้นไป และยินยอมให้เก็บข้อมูลและสลิปไว้เพื่อการตรวจสอบ", "I am 18+ and consent to my slip data being kept for audit purposes"))} ({S.retentionDays ? `${S.retentionDays} ${t(UI("วัน", "days"))}` : "…"}) *</span></label>
+        <p className="quiet">{t(UI("ข้อมูลและสลิปใช้เพื่อยืนยันการโอน การทำบัญชีและการตรวจสอบ และเพื่อขอบคุณเท่านั้น แล้วลบทิ้ง ขอลบได้ที่ ", "The information and slip are used only to verify the transfer, for accounting and audit checks, and to thank you, then deleted. Request deletion at "))}{S.contact || "…"}</p>
         {!ready && <p className="notice"><Tag kind="unknown" /> {t(UI("ยังส่งไม่ได้: รอข้อมูลจริงจากทีม", "Can't be sent yet: awaiting from the team"))}: {[
           !(S.promptpayQr || S.promptpayId || S.bank) && t(UI("บัญชีรับเงิน", "the account")),
           !S.recipient && t(UI("ชื่อผู้รับเงิน", "the recipient")),
@@ -960,7 +957,7 @@ function Support() {
         {state === "error" && <p className="notice" role="alert">{t(UI("ส่งไม่สำเร็จ ลองอีกครั้ง", "Couldn't send. Please try again."))}</p>}
         <div className="row"><button type="submit" className="btn big" disabled={!valid}>{state === "sending" ? t(UI("กำลังส่ง…", "Sending…")) : t(UI("ส่งการแจ้งโอน", "Send transfer notice"))}</button></div>
         <p className="quiet">* {t(UI("จำเป็นต้องกรอก", "required"))}</p>
-      </form>
+      </form>}
     </section>
   );
 }
