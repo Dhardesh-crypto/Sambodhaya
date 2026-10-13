@@ -2683,12 +2683,25 @@ const WAI_LEVELS = {
 };
 const wai = { t: -1, dur: 2.9, level: "peer", faceYaw: null, plane: { normal: new THREE.Vector3(), point: new THREE.Vector3(), on: 0 } };
 const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
-// which wai fits where he stands: in a shrine hall, to the Buddha image (and he turns to face it);
-// in the caretaker's kuti, to an elder; elsewhere, the everyday wai
+// which wai fits where he stands: in a shrine hall, to the Buddha image (and he turns to face it); near a monk or a
+// novice (the monk at walking meditation, the novice sweeping, the monks on the alms round), the same high wai,
+// turned to the nearest of them - monks always receive the highest wai; in the caretaker's kuti, to an elder;
+// elsewhere, the everyday wai
+const WAI_MONK_NEAR = 5;
+function monksNear() {
+  const list = [];
+  if (lane.n) list.push(lane.n.holder.position);
+  if (novice.n && novice.n.holder.visible) list.push(novice.n.holder.position);
+  if (almsScene.on) almsMonks.forEach((m) => list.push({ x: m.x, z: m.z }));
+  let best = null, bd = WAI_MONK_NEAR;
+  for (const p of list) { const d = Math.hypot(player.x - p.x, player.z - p.z); if (d < bd) { bd = d; best = { x: p.x, z: p.z }; } }
+  return best;
+}
 function waiLevelHere() {
   for (const b of buddhaImages) {
     if (insideHall(player.x, player.z) && Math.hypot(player.x - b.x, player.z - b.z) < Math.max(b.hall.W, b.hall.D)) return { level: "buddha", face: b };
   }
+  const m = monksNear(); if (m) return { level: "buddha", face: m };
   const c = salas.care; if (c && insideHall(player.x, player.z) && Math.hypot(player.x - c.g.position.x, player.z - c.g.position.z) < Math.max(c.W, c.D) / 2 + 1) return { level: "elder" };
   return { level: "peer" };
 }
