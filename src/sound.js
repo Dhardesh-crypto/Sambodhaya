@@ -261,6 +261,19 @@ export function createSound({ high = true } = {}) {
       P.out.positionX.setTargetAtTime(x, t, 0.1); P.out.positionY.setTargetAtTime(y, t, 0.1); P.out.positionZ.setTargetAtTime(z, t, 0.1);
       P.g.gain.setTargetAtTime(0.6 * level, t, 0.2);
     },
+    // holy water flicked from the whisk: a soft spatter of drops
+    sprinkle(x, y, z) {
+      if (!ctx || !on) return;
+      const out = placed(x, y, z, 3, 30, 1.2), t0 = ctx.currentTime + 0.02, buf = noiseBuffer("white", 0.1);
+      for (let i = 0; i < 9; i++) {
+        const t = t0 + 0.12 + Math.random() * 0.35, s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+        s.buffer = buf; f.type = "bandpass"; f.frequency.value = 3500 + Math.random() * 3000; f.Q.value = 1.5;
+        s.connect(f); f.connect(g); g.connect(out); env(g, t, 0.002, 0.08, 0.03); s.start(t); s.stop(t + 0.06);
+      }
+      const s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain(); // the swish of the whisk
+      s.buffer = noiseBuffer("pink", 0.4); f.type = "bandpass"; f.frequency.value = 1800; f.Q.value = 0.8;
+      s.connect(f); f.connect(g); g.connect(out); env(g, t0, 0.05, 0.12, 0.2); s.start(t0); s.stop(t0 + 0.4);
+    },
     // pigeons taking off: a clatter of wingbeats
     flutter(x, y, z) {
       if (!ctx || !on) return;
