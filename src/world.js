@@ -520,7 +520,7 @@ function seatStatic(name, lean) {
     if (!src) return;                                       // no fallback: an empty seat is better than a block figure
     const copy = src.clone();
     copy.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; if (o.material) o.material.envMapIntensity = 1; } });
-    const m = fitTo(copy, MONK_H); m.rotation.y = MONK_TURN; lean.add(m);
+    const m = fitTo(copy, MONK_H); m.rotation.y = MONK_TURN; lean.add(m); addLids(copy, name);
     monkFigures.push({ o: m, ph: monkFigures.length * 2.1 });
   }));
 }
@@ -645,7 +645,7 @@ function loadSeated(file, s, fallback) {
     const B = rigSeated(obj, J);
     obj.position.copy(fit.p); obj.scale.setScalar(fit.s);
     if (!B) { seatStatic(fallback, s.lean); return; }
-    s.lean.add(holder);
+    s.lean.add(holder); s.lids = addLids(obj, file);
     monkFigures.push({ o: holder, ph: monkFigures.length * 2.1 }); // he breathes like the others
     s.rig = { holder, obj, B, k: 1.94, lap: J.lap };
   });
@@ -1044,7 +1044,7 @@ ALMS_MONKS.forEach(([name, H], i) => {
     if (!src) { pivot.visible = false; almsMonks.splice(almsMonks.indexOf(m), 1); return; }
     const copy = src.clone();
     copy.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; if (o.material) o.material.envMapIntensity = 1; } });
-    const fig = fitTo(copy, H); fig.rotation.y = MONK_TURN; lean.add(fig);
+    const fig = fitTo(copy, H); fig.rotation.y = MONK_TURN; lean.add(fig); m.lids = addLids(copy, name);
     monkFigures.push({ o: fig, ph: monkFigures.length * 2.1 });
   }));
 });
@@ -1690,7 +1690,7 @@ function loadNpc(name, height) {
       const B = {}; obj.traverse((o) => { if (o.isBone) B[o.name] = o; });
       const mixer = new THREE.AnimationMixer(obj);
       const n = { holder, obj, B, mixer, walk: mixer.clipAction(walkClip), gait: measureGait(obj, walkClip), lift: measureLift(obj, walkClip), standTs: feetTogether(obj, B, walkClip), k: height / 1.7 };
-      n.walk.play();
+      n.walk.play(); n.lids = addLids(obj, name);
       return n;
     });
 }
@@ -1874,6 +1874,7 @@ function catLoad() {
         o.customDepthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }); animateCat(o.customDepthMaterial, P);
       }
     });
+    addLids(copy, file); // (asleep, stretching and yawning, her eyes are shut in the model itself)
     const g = fitTo(copy, H); g.rotation.y = CAT_TURN[k]; const g2 = new THREE.Group(); g2.add(g); g2.visible = false; scene.add(g2);
     cat.poses[k] = { g: g2, mats, H };
     if (k === cat.state || (k === "sleep" && !cat.cur)) catShow(cat.state, true);
@@ -2455,6 +2456,7 @@ function loadBoy(kit = "boy") {
       if (!walk) return null;
       const obj = walk.scene, holder = new THREE.Group(); holder.add(obj); fitModel(obj);
       holder.updateMatrixWorld(true); pressHands(holder); // measure the hands in their rest pose
+      holder.userData.lids = addLids(holder, kit);
       // the girl doesn't run: a running stride kicks her legs out through her long skirt (and in a temple one walks
       // anyway), so Shift is a brisk walk for her
       const girl = kit.startsWith("girl");
@@ -2521,6 +2523,7 @@ const dog = { obj: new THREE.Group(), x: 3, z: 90, y: 0, yaw: Math.PI };
       o.material = o.material.clone(); animateDog(o.material);
       o.customDepthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }); animateDog(o.customDepthMaterial);
     });
+    dog.lids = addLids(src, "dog");
     const m = fitTo(src, 1.7); m.rotation.y = -Math.PI / 2; // the model faces sideways; turn it to walk head-first
     dog.obj.add(m); dog.model = m;
   });
@@ -2825,6 +2828,7 @@ function teacherStep(h, s, dt) {
       armTo(RB, "Right", grip.clone().addScaledVector(fingers, -BLESS_GRIP[0] * R.k / 1.94).addScaledVector(palm, -BLESS_GRIP[1] * R.k / 1.94), basisQuat(hs.finger, hs.palm, fingers, palm), left.clone().multiplyScalar(-1).addScaledVector(up, -0.7).addScaledVector(fwd, -0.2), reach);
     }
     Bl.handHeld = reach > 0.5;
+    if (s.lids) s.lids.want = u > 0.02 && u < 0.98 ? 1 : 0; // eyes closed while he blesses
   }
   spreadTwist(RB, "Left"); spreadTwist(RB, "Right");
   waiMark(RB);
@@ -3090,6 +3094,135 @@ function handShape(model) {
 }
 // Palms pressed together: during the wai, any vertex of a hand that would pass the plane where the hands
 // meet is put back onto that plane, so the two palms flatten against each other instead of crossing.
+// Eyelids. No model has lids of its own (the eyes are painted on), so every character blinks on the graphics card:
+// each eye is an ellipsoid in the model's own space (measured on its front view: the eye's whites or iris, widened
+// to the whole eye), and as the lids close, the part of the eye above the upper lid's edge (and below the lower lid,
+// which rises less) is painted the skin colour round that eye, with a dark line of lashes along the edge.
+// [centre x, y, z, radius x, y, z] for each eye; the lid's colour
+const EYES = {
+  "boy": { lid: "#fbab7e", eyes: [
+    [-0.0612, 0.748, 0.2011, 0.0283, 0.0156, 0.0255],
+    [0.0568, 0.748, 0.2019, 0.0283, 0.0156, 0.0255]] },
+  "boy-socks": { lid: "#f3a176", eyes: [
+    [-0.0619, 0.7612, 0.1119, 0.0288, 0.0184, 0.0259],
+    [0.0581, 0.7616, 0.1121, 0.0288, 0.0184, 0.0259]] },
+  "girl": { lid: "#fab895", eyes: [
+    [-0.0583, 0.802, 0.157, 0.0298, 0.0194, 0.0268],
+    [0.0481, 0.8048, 0.1572, 0.0298, 0.0194, 0.0268]] },
+  "girl-socks": { lid: "#fab488", eyes: [
+    [-0.0567, 0.7832, 0.1187, 0.0269, 0.0178, 0.0242],
+    [0.0537, 0.782, 0.1189, 0.0269, 0.0178, 0.0242]] },
+  "monk-walk": { lid: "#e6a97e", eyes: [
+    [-0.042, 0.8644, 0.0965, 0.0168, 0.0092, 0.0151],
+    [0.0396, 0.8648, 0.0966, 0.0168, 0.0092, 0.0151]] },
+  "alms-novice": { lid: "#d98e5d", eyes: [
+    [0.0195, 0.815, 0.0474, 0.0327, 0.0202, 0.0364],
+    [0.0161, 0.8146, -0.0491, 0.0327, 0.0202, 0.0364]] },
+  "monk": { lid: "#d29060", eyes: [
+    [0.1772, 0.7392, 0.0858, 0.0346, 0.0211, 0.0384],
+    [0.1767, 0.7416, -0.0814, 0.0346, 0.0211, 0.0384]] },
+  "monk-young": { lid: "#e2985f", eyes: [
+    [0.0597, 0.7328, 0.0818, 0.0367, 0.0224, 0.0408],
+    [0.0601, 0.7304, -0.0794, 0.0367, 0.0224, 0.0408]] },
+  "monk-middle": { lid: "#ab6c48", eyes: [
+    [0.0189, 0.7348, 0.0778, 0.0276, 0.0169, 0.0307],
+    [0.0188, 0.7356, -0.0754, 0.0276, 0.0169, 0.0307]] },
+  "monk-junior": { lid: "#c5804a", eyes: [
+    [0.0585, 0.7432, 0.0707, 0.0368, 0.0213, 0.0409],
+    [0.0557, 0.7408, -0.0714, 0.0368, 0.0213, 0.0409]] },
+  "novice": { lid: "#f4b58b", eyes: [
+    [-0.0441, 0.8273, 0.1172, 0.0236, 0.0172, 0.0212],
+    [0.0417, 0.827, 0.1173, 0.0236, 0.0172, 0.0212]] },
+  "alms-elder": { lid: "#de945f", eyes: [
+    [0.0527, 0.8059, 0.052, 0.0243, 0.0138, 0.027],
+    [0.0524, 0.8063, -0.0393, 0.0243, 0.0138, 0.027]] },
+  "alms-monk": { lid: "#d98951", eyes: [
+    [0.0189, 0.8234, 0.0471, 0.0262, 0.0149, 0.0291],
+    [0.0182, 0.8228, -0.0461, 0.0262, 0.0149, 0.0291]] },
+  "alms-young": { lid: "#cf8a56", eyes: [
+    [0.0044, 0.8327, 0.0501, 0.0243, 0.0138, 0.027],
+    [0.0047, 0.8326, -0.0444, 0.0243, 0.0138, 0.027]] },
+  "monk-elder": { lid: "#d8915c", eyes: [
+    [0.1555, 0.7344, 0.0789, 0.0572, 0.0325, 0.0635],
+    [0.1527, 0.7415, -0.0807, 0.0572, 0.0325, 0.0635]] },
+  "monk-senior": { lid: "#d89152", eyes: [
+    [0.1099, 0.7357, 0.0791, 0.0359, 0.0294, 0.0398],
+    [0.1095, 0.738, -0.0782, 0.0359, 0.0294, 0.0398]] },
+  "dog": { lid: "#c69c71", eyes: [
+    [0.8074, 0.4632, 0.176, 0.0265, 0.0405, 0.0294],
+    [0.8764, 0.4739, 0.0587, 0.0474, 0.0414, 0.0527]] },
+  "cat-sit": { lid: "#4c3426", eyes: [
+    [0.0206, 0.6253, 0.4648, 0.066, 0.0595, 0.0594],
+    [0.2407, 0.6286, 0.3847, 0.0445, 0.0556, 0.0401]] },
+  "cat-walk": { lid: "#4e3a2e", eyes: [
+    [-0.0168, 0.3774, 0.9399, 0.0413, 0.04, 0.0371],
+    [0.1184, 0.3779, 0.8661, 0.0314, 0.04, 0.0282]] },
+};
+const LID_GROW = [1.15, 1.45]; // the lid reaches past the eye's painted outline: across, and up and down
+const lids = [];
+function addLids(model, file) {
+  const E = EYES[file]; let mesh = null; model.traverse((o) => { if (!mesh && o.isMesh) mesh = o; }); if (!E || !mesh) return null;
+  const L = { u: { uLid: { value: 0 }, uEyeC: { value: E.eyes.map((e) => new THREE.Vector3(e[0], e[1], e[2])) }, uEyeR: { value: E.eyes.map((e) => new THREE.Vector3(e[3] * LID_GROW[0], e[4] * LID_GROW[1], e[5] * LID_GROW[0])) }, uLidCol: { value: new THREE.Color(E.lid) } },
+    want: 0, shut: 0, t: 0, next: 0.5 + Math.random() * 4, blink: -1 };
+  // its own material, so that each figure blinks in its own time (one already changed for this figure is its own)
+  const own = Object.prototype.hasOwnProperty.call(mesh.material, "onBeforeCompile"), mat = own ? mesh.material : mesh.material.clone(); mesh.material = mat;
+  const prev = own ? mat.onBeforeCompile : null, key = mat.customProgramCacheKey();
+  mat.onBeforeCompile = (sh, r) => {
+    if (prev) prev(sh, r);
+    Object.assign(sh.uniforms, L.u);
+    sh.vertexShader = "varying vec3 vLidP;\n" + sh.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\n vLidP = position;");
+    // how much of this point the lids cover, and how much of it is the line of lashes along the upper lid's edge
+    sh.fragmentShader = `varying vec3 vLidP; uniform float uLid; uniform vec3 uEyeC[2], uEyeR[2], uLidCol;
+      vec2 lidCover() {
+        vec2 r = vec2(0.0); if (uLid < 0.001) return r;
+        float eU = mix(1.05, -0.2, uLid), eL = mix(-1.05, -0.2, uLid);   // the upper lid's edge comes down, the lower lid's rises to meet it
+        for (int i = 0; i < 2; i++) {
+          vec3 d = (vLidP - uEyeC[i]) / uEyeR[i]; float q = dot(d, d);
+          if (q < 1.0) {
+            float rim = 1.0 - smoothstep(0.9, 1.0, q);
+            r.x = max(r.x, max(smoothstep(eU - 0.05, eU + 0.05, d.y), 1.0 - smoothstep(eL - 0.05, eL + 0.05, d.y)) * rim);
+            r.y = max(r.y, exp(-pow((d.y - eU) / 0.08, 2.0)) * (1.0 - smoothstep(0.55, 0.95, q)) * min(1.0, uLid * 8.0));
+          }
+        }
+        return r;
+      }\n` + sh.fragmentShader
+      .replace("#include <map_fragment>", `#include <map_fragment>
+        vec2 lidC = lidCover();
+        diffuseColor.rgb = mix(diffuseColor.rgb, uLidCol, lidC.x);
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.12, 0.07, 0.05), lidC.y * 0.8);`)
+      // a lid is skin: matte, and without the eye's relief that the model's normal map paints
+      .replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\n roughnessFactor = mix(roughnessFactor, 0.8, lidC.x);")
+      .replace("#include <normal_fragment_begin>", "#include <normal_fragment_begin>\n vec3 lidN0 = normal;")
+      .replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>\n normal = normalize(mix(normal, lidN0, lidC.x));");
+  };
+  mat.customProgramCacheKey = () => key + "|lids";
+  mat.needsUpdate = true;
+  lids.push(L);
+  return L;
+}
+// whose eyes stay shut: the child's while bowing to the Buddha or a monk with the hands in a wai, and while sitting
+// on a cushion; the dog's while it lies down to be stroked (and the senior monk's while he blesses: teacherStep)
+function eyesStep(dt) {
+  const PL = player.model && player.model.userData.lids;
+  if (PL) {
+    let shut = sit.on && sit.w > 0.9;
+    if (kraap.t >= 0) { const k = kraapState(kraap.t); shut = k.kneel > 0.9 && k.tray + k.lift + k.place + k.reach < 0.05 && k.chest + k.high + k.floor + k.bow > 0.3; }
+    PL.want = shut ? 1 : 0;
+  }
+  if (dog.lids) dog.lids.want = dogAnim.lie.value > 0.6 ? 1 : 0;
+  lidStep(dt);
+}
+// a blink every 2 to 6.5 seconds, a fifth of a second long; lids that should stay shut close and open slowly
+function lidStep(dt) {
+  for (const L of lids) {
+    L.t += dt;
+    if (L.blink < 0 && L.t > L.next) { L.blink = 0; L.next = L.t + 2 + Math.random() * 4.5; }
+    let b = 0;
+    if (L.blink >= 0) { const s = (L.blink += dt); b = s < 0.06 ? s / 0.06 : s < 0.1 ? 1 : Math.max(0, 1 - (s - 0.1) / 0.1); if (s > 0.2) L.blink = -1; } // down, shut a moment, up
+    L.shut += (L.want - L.shut) * Math.min(1, dt * 3);
+    L.u.uLid.value = Math.max(b, L.shut);
+  }
+}
 function pressHands(model) {
   let sk = null; model.traverse((o) => { if (!sk && o.isSkinnedMesh) sk = o; });
   const shape = handShape(model); if (!sk || !shape) return;
@@ -3959,7 +4092,7 @@ function tick() {
 // one step of the world: movement, animation, camera and the picture
 function frame(dt) {
   timeStep(dt); placeLampLights(dt);
-  feedStep(dt); fishStep(dt); meritStep(dt); lifeStep(dt); petStep(dt); petalStep(dt); rainStep(dt); dropsStep(dt);
+  feedStep(dt); fishStep(dt); meritStep(dt); lifeStep(dt); eyesStep(dt); petStep(dt); petalStep(dt); rainStep(dt); dropsStep(dt);
   if (broom.held && (alms.t >= 0 || kraap.t >= 0 || feed.t >= 0 || shoes.t >= 0 || sit.on || merit.t >= 0)) putBroomBack(); // hands needed elsewhere
   monkTime += dt;
   if (!settings.calmMotion) for (const m of monkFigures) { const b = Math.sin(monkTime * 1.25 + m.ph); m.o.scale.set(1 + b * 0.004, 1 + b * 0.008, 1 + b * 0.004); } // slow breathing
