@@ -89,6 +89,13 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .dialog { position: fixed; z-index: 10; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(560px, calc(100% - 24px)); max-height: calc(100% - 24px); overflow: auto; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; }
 .dialog h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 1.6rem; color: var(--saffron-deep); }
 .dialog p { margin: 0; line-height: 1.6; }
+/* photo mode: everything steps aside but a small bar */
+body.photo .hud-top, body.photo .prompt, body.photo .questbox, body.photo .toast, body.photo .medi, body.photo .fold, body.photo .subtitle, body.photo .proto, body.photo .tbtns, body.photo #medi-glow { display: none !important; }
+.photobar { position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: flex; gap: 8px; align-items: center; padding: 6px 8px; z-index: 6; white-space: nowrap; }
+@media (pointer: coarse) { .photobar { bottom: auto; top: calc(12px + env(safe-area-inset-top, 0px)); } }
+#photo-flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 8; transition: opacity .5s ease; }
+#photo-flash.on { opacity: .85; transition: none; }
+.dialog .photo-img { width: 100%; height: auto; border-radius: 10px; border: 3px solid var(--gold); display: block; }
 .dialog .mural { width: 100%; height: auto; aspect-ratio: 4 / 3; border-radius: 10px; border: 3px solid var(--gold); display: block; }
 .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .places { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
@@ -150,6 +157,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
     <button class="chip pin" id="btn-places">🗺️ <span class="label" data-th="ที่ต่าง ๆ ในวัด" data-en="Places">ที่ต่าง ๆ ในวัด</span></button>
     <button class="chip pin" id="btn-quest">📜 <span class="label" data-th="ภารกิจ" data-en="Quests">ภารกิจ</span></button>
     <button class="chip pin" id="btn-passport">📖 <span class="label" data-th="สมุดตรา" data-en="Passport">สมุดตรา</span></button>
+    <button class="chip" id="btn-photo">📷 <span class="label" data-th="ถ่ายภาพ" data-en="Photo">ถ่ายภาพ</span></button>
     <button class="chip" id="btn-avatar">🧍 <span class="label" data-th="ตัวละครของฉัน" data-en="My avatar">ตัวละครของฉัน</span></button>
     <button class="chip" id="btn-quality">✨ <span class="label">ภาพ: ละเอียด</span></button>
     <button class="chip" id="btn-wai">🙏 <span class="label" data-th="ไหว้" data-en="Wai">ไหว้</span></button>
@@ -177,6 +185,12 @@ button { font: inherit; color: inherit; cursor: pointer; }
 <div class="medi panel" id="medi" hidden></div>
 <div class="fold panel" id="fold" hidden></div>
 <div class="toast panel" id="toast" role="status" aria-live="polite" hidden></div>
+<div class="photobar panel" id="photobar" hidden>
+  <button class="chip" id="photo-in" aria-label="ซูมเข้า">＋</button><button class="chip" id="photo-out" aria-label="ซูมออก">－</button>
+  <button class="btn" id="photo-shot">📸 <span data-th="ถ่าย" data-en="Take photo">ถ่าย</span></button>
+  <button class="chip" id="photo-done">✕ <span data-th="เสร็จ" data-en="Done">เสร็จ</span></button>
+</div>
+<div id="photo-flash" aria-hidden="true"></div>
 <div class="subtitle" id="subtitle" role="status" aria-live="polite" hidden></div>
 
 <div class="dialog panel" id="dlg" role="dialog" aria-modal="true" aria-labelledby="dlg-title" hidden>

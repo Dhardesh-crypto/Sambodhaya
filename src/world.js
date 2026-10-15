@@ -4145,6 +4145,7 @@ let camYaw = Math.PI, camPitch = 0.32, camDist = 11;
 addEventListener("keydown", (e) => {
   if (dialogOpen()) { if (e.key === "Escape") closeDialog(); return; }
   if (e.target instanceof HTMLInputElement) return;
+  if (photoMode && e.key === "Escape") { setPhoto(false); return; }
   keys[e.code] = true;
   if (e.code === "KeyE" || e.code === "Enter") { if (near) openPlace(near); }
   if (e.code === "KeyG") openPlaces(true);
@@ -4165,13 +4166,44 @@ canvas.addEventListener("pointerdown", (e) => {
 canvas.addEventListener("pointermove", (e) => {
   if (!drag || e.pointerId !== drag.id) return;
   const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY; drag.moved += Math.abs(dx) + Math.abs(dy);
-  camYaw -= dx * 0.006; camPitch = Math.min(1.1, Math.max(0.05, camPitch + dy * 0.004));
+  camYaw -= dx * 0.006; camPitch = Math.min(photoMode ? 1.35 : 1.1, Math.max(photoMode ? 0 : 0.05, camPitch + dy * 0.004));
 });
 canvas.addEventListener("pointerup", (e) => {
   if (drag && drag.moved < 6) pickAt(e.clientX, e.clientY);
   drag = null;
 });
-canvas.addEventListener("wheel", (e) => { camDist = Math.min(22, Math.max(5, camDist + e.deltaY * 0.01)); e.preventDefault(); }, { passive: false });
+canvas.addEventListener("wheel", (e) => { camDist = clampDist(camDist + e.deltaY * 0.01); e.preventDefault(); }, { passive: false });
+
+/* ---------------- photo mode (📷) ---------------- */
+// Everything on screen steps aside but a small bar, and the camera may come closer and go further. A photo is the
+// picture as it is, with the temple's name in a corner; it stays on this device: saved, or shared from a phone.
+let photoMode = false, lastPhoto = null;
+const clampDist = (d) => Math.min(photoMode ? 30 : 22, Math.max(photoMode ? 1.8 : 5, d));
+function setPhoto(on) {
+  photoMode = on; document.body.classList.toggle("photo", on); $("photobar").hidden = !on;
+  if (!on) { camDist = clampDist(camDist); camPitch = Math.min(1.1, Math.max(0.05, camPitch)); canvas.focus(); }
+}
+function takePhoto() {
+  if (composer) composer.render(); else renderer.render(scene, camera); // drawn just now, so the picture can be copied
+  const c = document.createElement("canvas"); c.width = canvas.width; c.height = canvas.height;
+  const x = c.getContext("2d"); x.drawImage(canvas, 0, 0);
+  const k = Math.max(1, c.width / 1100), font = getComputedStyle(document.documentElement).getPropertyValue("--display") || "sans-serif";
+  x.font = `${Math.round(22 * k)}px ${font}`; x.textAlign = "right"; x.textBaseline = "bottom";
+  x.shadowColor = "rgba(0, 0, 0, .55)"; x.shadowBlur = 6 * k; x.fillStyle = "#fffdf8";
+  x.fillText("☸ วัดสัมโพธายะ · Sambodhaya", c.width - 18 * k, c.height - 14 * k);
+  const fl = $("photo-flash"); fl.classList.add("on"); requestAnimationFrame(() => requestAnimationFrame(() => fl.classList.remove("on")));
+  c.toBlob((blob) => { if (blob) showPhoto(blob); }, "image/jpeg", 0.92);
+}
+function showPhoto(blob) {
+  if (lastPhoto) URL.revokeObjectURL(lastPhoto.url);
+  const d = new Date(), p2 = (n) => String(n).padStart(2, "0");
+  const name = `sambodhaya-${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}${p2(d.getSeconds())}.jpg`;
+  lastPhoto = { url: URL.createObjectURL(blob), file: new File([blob], name, { type: "image/jpeg" }), name };
+  let canShare = false; try { canShare = !!(navigator.canShare && navigator.canShare({ files: [lastPhoto.file] })); } catch (e) {}
+  openDialog(tx("📷 ภาพของฉัน", "📷 My photo"), `<img class="photo-img" src="${lastPhoto.url}" alt="${esc(tx("ภาพที่ถ่ายในวัด", "A photo taken in the temple"))}">
+    <p class="quiet">${esc(tx("ภาพนี้อยู่ในเครื่องนี้เท่านั้น ไม่ได้ส่งไปที่ไหน", "This photo stays on this device; nothing is sent anywhere."))}</p>
+    <div class="row"><a class="btn" href="${lastPhoto.url}" download="${name}">💾 ${esc(tx("บันทึก", "Save"))}</a>${canShare ? `<button class="chip" data-photo-share>📤 ${esc(tx("แชร์", "Share"))}</button>` : ""}<button class="chip" data-close>${esc(tx("ถ่ายต่อ", "Keep taking photos"))}</button></div>`);
+}
 
 // touch joystick
 const stick = document.getElementById("stick"), knob = document.getElementById("knob");
@@ -4899,10 +4931,16 @@ $("dlg").addEventListener("click", (e) => {
   if (e.target.closest("[data-quest-stop]")) { questState.active = null; saveQuests(); renderQuest(); closeDialog(); return; }
   const go = e.target.closest("[data-go]"); if (go) { teleport(go.dataset.go); closeDialog(); return; }
   if (e.target.closest("[data-pet]")) { closeDialog(); startPetDog(); return; }
+  if (e.target.closest("[data-photo-share]") && lastPhoto) { navigator.share({ files: [lastPhoto.file], title: "วัดสัมโพธายะ · Sambodhaya" }).catch(() => {}); return; }
   if (e.target.closest("[data-close]")) closeDialog();
 });
 $("btn-places").addEventListener("click", () => openPlaces(false));
 $("btn-quest").addEventListener("click", openQuests);
+$("btn-photo").addEventListener("click", () => setPhoto(true));
+$("photo-done").addEventListener("click", () => setPhoto(false));
+$("photo-shot").addEventListener("click", takePhoto);
+$("photo-in").addEventListener("click", () => { camDist = clampDist(camDist / 1.25); });
+$("photo-out").addEventListener("click", () => { camDist = clampDist(camDist * 1.25); });
 $("btn-passport").addEventListener("click", openPassport);
 $("medi").addEventListener("click", (e) => { const b = e.target.closest("[data-medi]"); if (b) startMedi(+b.dataset.medi); else if (e.target.closest("#medi-stop")) stopMedi(); });
 $("quest-head").addEventListener("click", () => $("questbox").classList.toggle("folded"));
