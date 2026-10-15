@@ -75,6 +75,14 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .places { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .places button { width: 100%; text-align: left; background: var(--cream); border: 1.5px solid var(--ink); border-radius: 12px; padding: 8px 10px; display: flex; gap: 8px; align-items: center; }
 .places .ic { font-size: 1.4rem; }
+.passport h3 { margin: 12px 0 6px; font-family: var(--display); font-weight: 400; font-size: 1.15rem; color: var(--saffron-deep); }
+.stamps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: 10px 6px; }
+.stamps li { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; font-size: .8rem; line-height: 1.25; color: var(--muted); }
+.stamps .seal { width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center; font-size: 1.7rem; border: 2px dashed rgba(110, 92, 76, .45); filter: grayscale(1); opacity: .38; }
+.stamps li.got { color: var(--ink); }
+.stamps li.got .seal { border: 3px double #b8322a; background: #fdeee6; filter: none; opacity: 1; transform: rotate(-8deg); box-shadow: 0 0 0 2px #fdeee6, 0 0 0 3.5px rgba(184, 50, 42, .55); }
+.stamps li.got:nth-child(2n) .seal { transform: rotate(6deg); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
 .swatches { display: flex; gap: 6px; flex-wrap: wrap; }
 .sw { width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--ink); }
@@ -122,6 +130,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
   <div class="hud-tools">
     <button class="chip" id="btn-places">🗺️ <span class="label" data-th="ที่ต่าง ๆ ในวัด" data-en="Places">ที่ต่าง ๆ ในวัด</span></button>
     <button class="chip" id="btn-quest">📜 <span class="label" data-th="ภารกิจ" data-en="Quests">ภารกิจ</span></button>
+    <button class="chip" id="btn-passport">📖 <span class="label" data-th="สมุดตรา" data-en="Passport">สมุดตรา</span></button>
     <button class="chip" id="btn-avatar">🧍 <span class="label" data-th="ตัวละครของฉัน" data-en="My avatar">ตัวละครของฉัน</span></button>
     <button class="chip" id="btn-quality">✨ <span class="label">ภาพ: ละเอียด</span></button>
     <button class="chip" id="btn-wai">🙏 <span class="label" data-th="ไหว้" data-en="Wai">ไหว้</span></button>

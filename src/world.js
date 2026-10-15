@@ -3000,7 +3000,7 @@ function startGreet(h, s) {
   const from = s.rig ? s.rig.B.Head.getWorldPosition(new THREE.Vector3()) : s.lean.getWorldPosition(new THREE.Vector3());
   kraap.recite = { at: k0 + 0.4, url: `audio/talk-${T.file}-${i + 1}-${L}.mp3`, from, inside: true, text: tx(...T.lines[i]), who: s, secs };
   if (player.mixer) playClip("idle", 0.4);
-  questEvent("waiMonk");
+  questEvent("waiMonk"); stamp(s.name);
 }
 const dropGeo = new THREE.SphereGeometry(0.02, 6, 4), dropMat = new THREE.MeshBasicMaterial({ color: 0xd9f2ff, transparent: true, opacity: 0.85 });
 const drops = [];
@@ -4155,7 +4155,7 @@ function openDonate() {
 const BELL_PLACE = { id: "bell", icon: "🔔", th: "ระฆังวัด", en: "Temple bell", sub: ["ตีระฆังได้ ฟังเสียงจนเงียบ", "Strike it, and listen until it fades"] };
 function ringBell() {
   if (settings.mute) { askSound(); return; }
-  sound.bell(BELL[0], 3.4, BELL[1]);
+  sound.bell(BELL[0], 3.4, BELL[1]); stamp("bell");
 }
 const dialogOpen = () => !$("dlg").hidden;
 let lastFocus = null;
@@ -4258,7 +4258,7 @@ const INFO_TEXT = {
 const seenInfo = new Set(read("info-seen", []));
 function openInfo(id) {
   const T = INFO_TEXT[id]; if (!T) return;
-  if (!seenInfo.has(id)) { seenInfo.add(id); write("info-seen", [...seenInfo]); }
+  if (!seenInfo.has(id)) { stamp("card-" + id); seenInfo.add(id); write("info-seen", [...seenInfo]); }
   openDialog(`${T.icon} ${esc(tx(...T.t))}`, `<p>${esc(tx(...T.d))}</p><div class="row"><button class="chip" data-close>${esc(tx("ปิด", "Close"))}</button></div>`);
 }
 const isShown = (o) => { for (; o; o = o.parent) if (!o.visible) return false; return true; };
@@ -4491,7 +4491,7 @@ function mediStep(dt) {
   if (!sit.on) { stopMedi(); return; } // he stood up
   medi.t += dt;
   while (medi.on && medi.t >= medi.next) {
-    const step = medi.plan[medi.i]; if (!step) { stopMedi(); return; }
+    const step = medi.plan[medi.i]; if (!step) { stopMedi(); stamp("medi"); return; }
     const [what, quiet] = step; let len = 0.5;
     if (what === "bell") sound.chime();
     else { len = MEDI_DUR[L][what - 1]; recite(`audio/medi-${what}-${L}.mp3`, new THREE.Vector3(player.x, player.y + 1.4, player.z), true, tx(...MEDI_TEXT[what - 1]), len); }
@@ -4557,6 +4557,7 @@ function nextToast() {
 const hintShown = {}; // once per visit
 function hint(k) { if (hintShown[k]) return; hintShown[k] = true; toast(`💡 ${esc(tx(...HINTS[k]))}`, 8); }
 function questEvent(ev) {
+  const st = STAMPS.find((x) => x.ev === ev); if (st) stamp(st.id);
   const q = questOf(questState.active); if (!q) return;
   const ticks = questState.ticks[q.id] || (questState.ticks[q.id] = []), i = q.steps.findIndex((s) => s.ev === ev);
   if (i < 0 || ticks.includes(i)) return;
@@ -4587,6 +4588,62 @@ function openQuests() {
   openDialog(tx("📜 ภารกิจ", "📜 Quests"), `<p>${esc(tx("เลือกภารกิจหนึ่งอย่าง แล้วทำตามขั้นตอนเหมือนที่วัดจริง ทำขั้นไหนก่อนก็ได้", "Choose a quest and do each step as you would at a real temple, in any order."))}</p>
     <ul class="places">${items}</ul>
     <div class="row">${questState.active ? `<button class="chip" data-quest-stop>${esc(tx("หยุดภารกิจ", "Stop the quest"))}</button>` : ""}<button class="chip" data-close>${esc(tx("ปิด", "Close"))}</button></div>`);
+}
+// The temple passport (📖): a stamp for each place found and each custom done, kept on this device. No score: a
+// blank stamp shows its name, so a child knows what there is still to find
+const STAMP_GROUPS = [
+  ["places", ["สถานที่ในวัด", "Places"]], ["customs", ["ธรรมเนียม", "Customs"]], ["friends", ["เพื่อนในวัด", "Friends"]], ["cards", ["สิ่งที่ได้รู้", "Discoveries"]],
+];
+const STAMPS = [
+  ...PLACES.filter((p) => p.id !== "exit").map((p) => ({ id: "place-" + p.id, g: "places", icon: p.icon, t: [p.th, p.en], at: p.pos, r: p.r })),
+  { id: "bodhi", g: "places", icon: "🌳", t: ["ต้นโพธิ์", "The Bodhi tree"], at: [0, 0], r: 4.5 },
+  { id: "bigbuddha", g: "places", icon: "🙏", t: ["พระพุทธรูปองค์ใหญ่", "The great Buddha image"], at: [0, -67.5], r: 13 },
+  { id: "bridge", g: "places", icon: "🐉", t: ["สะพานนาค", "The naga bridge"], on: () => onBridge(player.x, player.z) },
+  { id: "bell", g: "places", icon: "🔔", t: ["ตีระฆัง", "Strike the bell"] },
+  { id: "shoes", g: "customs", icon: "👟", ev: "shoesOff", t: ["ถอดรองเท้าก่อนขึ้นศาลา", "Shoes off at the hall"] },
+  { id: "kraap", g: "customs", icon: "🙇", ev: "kraap", t: ["กราบพระ 3 ครั้ง", "Three bows"] },
+  { id: "wai", g: "customs", icon: "🙏", ev: "waiMonk", t: ["ไหว้พระสงฆ์", "Greet a monk"] },
+  { id: "sit", g: "customs", icon: "🧘", ev: "sitHall", t: ["นั่งสงบในศาลา", "Sit quietly in a hall"] },
+  { id: "medi", g: "customs", icon: "🌬️", t: ["นั่งสมาธิจนจบ", "Meditate to the end"] },
+  { id: "offer", g: "customs", icon: "🕯️", ev: "offer", t: ["ถวายธูปเทียนดอกไม้", "Incense, candles and a lotus"] },
+  { id: "gild", g: "customs", icon: "✨", ev: "gild", t: ["ปิดทองพระ", "Gold leaf"] },
+  { id: "alms", g: "customs", icon: "🍚", ev: "giveAlms", t: ["ใส่บาตร", "Give alms"] },
+  { id: "meal", g: "customs", icon: "🍱", ev: "mealOffer", t: ["ถวายภัตตาหาร", "Offer the meal"] },
+  { id: "kathin", g: "customs", icon: "🟫", ev: "kathinOffer", t: ["ถวายผ้ากฐิน", "The Kathina"] },
+  { id: "krathong", g: "customs", icon: "🪷", ev: "floatKrathong", t: ["ลอยกระทง", "Float a krathong"], when: () => fest.now === "loykrathong" },
+  { id: "dog", g: "friends", icon: "🐕", ev: "petDog", t: ["ลูบหัวหมาวัด", "Pet the temple dog"] },
+  { id: "cat", g: "friends", icon: "🐈", ev: "petCat", t: ["ลูบแมววัด", "Pet the temple cat"] },
+  { id: "fish", g: "friends", icon: "🐟", ev: "feed", t: ["ให้อาหารปลา", "Feed the fish"] },
+  { id: "monk-elder", g: "friends", icon: "🧡", t: ["ไหว้พระอาจารย์อาวุโส", "Greet the eldest teacher"] },
+  { id: "monk", g: "friends", icon: "🧡", t: ["ไหว้พระอาจารย์รูปกลาง", "Greet the middle teacher"] },
+  { id: "monk-young", g: "friends", icon: "🧡", t: ["ไหว้พระอาจารย์รูปหนุ่ม", "Greet the youngest teacher"] },
+  ...Object.entries(INFO_TEXT).map(([id, T]) => ({ id: "card-" + id, g: "cards", icon: T.icon, t: T.t, card: id,
+    when: ["lanterns", "krathong"].includes(id) ? () => fest.now === "loykrathong" : id === "wiantian" ? () => fest.now === "bucha" : null })),
+];
+const stamps = new Set(read("stamps", []));
+const hasStamp = (s) => (s.card ? seenInfo.has(s.card) : stamps.has(s.id));
+function stamp(id) {
+  const s = STAMPS.find((x) => x.id === id); if (!s || hasStamp(s)) return;
+  if (!s.card) { stamps.add(id); write("stamps", [...stamps]); }
+  toast(`📖 <strong>${esc(tx("ได้ตราใหม่:", "New stamp:"))}</strong> ${s.icon} ${esc(tx(...s.t))}`, 5);
+}
+function passportStep() {
+  for (const s of STAMPS) {
+    if (stamps.has(s.id)) continue;
+    if (s.on ? s.on() : s.at && Math.hypot(player.x - s.at[0], player.z - s.at[1]) < s.r) stamp(s.id);
+  }
+}
+function openPassport() {
+  const shown = STAMPS.filter((s) => hasStamp(s) || !s.when || s.when()), got = shown.filter(hasStamp).length;
+  const groups = STAMP_GROUPS.map(([g, name]) => {
+    const list = shown.filter((s) => s.g === g);
+    return `<h3>${esc(tx(...name))} <span class="quiet">${list.filter(hasStamp).length}/${list.length}</span></h3><ul class="stamps">${list.map((s) =>
+      `<li class="${hasStamp(s) ? "got" : ""}"><span class="seal" aria-hidden="true">${s.icon}</span><span>${esc(tx(...s.t))}</span><span class="sr">${hasStamp(s) ? tx("ได้แล้ว", "found") : tx("ยังไม่ได้", "not yet")}</span></li>`).join("")}</ul>`;
+  }).join("");
+  openDialog(`${tx("📖 สมุดตราวัด", "📖 Temple passport")} · ${got}/${shown.length}`,
+    `<p>${esc(tx("เดินชมวัด ทำความเคารพ และทักทายเพื่อน ๆ ในวัด แต่ละอย่างได้หนึ่งตรา ตราที่ยังจาง ๆ คือสิ่งที่ยังรอให้หนูไปพบ", "Explore the temple, pay respect and greet its friends: each one gives a stamp. The faint stamps are still waiting to be found."))}</p>
+    <div class="passport">${groups}</div>
+    <div class="row"><button class="chip" data-close>${esc(tx("ปิด", "Close"))}</button></div>`);
 }
 // Passing in front of the seated monks, the child walks with the body lowered (เดินก้ม); from the hall's own layout:
 // the monks face +z from their seats, and the floor before the platform is "in front"
@@ -4638,6 +4695,7 @@ $("dlg").addEventListener("click", (e) => {
 });
 $("btn-places").addEventListener("click", () => openPlaces(false));
 $("btn-quest").addEventListener("click", openQuests);
+$("btn-passport").addEventListener("click", openPassport);
 $("medi").addEventListener("click", (e) => { const b = e.target.closest("[data-medi]"); if (b) startMedi(+b.dataset.medi); else if (e.target.closest("#medi-stop")) stopMedi(); });
 $("quest-head").addEventListener("click", () => $("questbox").classList.toggle("folded"));
 renderQuest();
@@ -4771,7 +4829,7 @@ function tick() {
 // one step of the world: movement, animation, camera and the picture
 function frame(dt) {
   timeStep(dt); placeLampLights(dt);
-  feedStep(dt); fishStep(dt); meritStep(dt); lifeStep(dt); eyesStep(dt); questsStep(dt); mealStep(dt); mediStep(dt); petStep(dt); petalStep(dt); rainStep(dt); mistStep(dt); festivalStep(dt); dropsStep(dt);
+  feedStep(dt); fishStep(dt); meritStep(dt); lifeStep(dt); eyesStep(dt); questsStep(dt); passportStep(); mealStep(dt); mediStep(dt); petStep(dt); petalStep(dt); rainStep(dt); mistStep(dt); festivalStep(dt); dropsStep(dt);
   if (broom.held && (alms.t >= 0 || kraap.t >= 0 || feed.t >= 0 || shoes.t >= 0 || sit.on || merit.t >= 0)) putBroomBack(); // hands needed elsewhere
   monkTime += dt;
   if (!settings.calmMotion) for (const m of monkFigures) { const b = Math.sin(monkTime * 1.25 + m.ph); m.o.scale.set(1 + b * 0.004, 1 + b * 0.008, 1 + b * 0.004); } // slow breathing
