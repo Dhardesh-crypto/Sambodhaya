@@ -2695,7 +2695,8 @@ function kraapState(t) {
 // the high wai and three bows, forehead and palms to the floor (the kraap above). No chant text is shown.
 // keyframes as the kraap's, plus: [.., holding the tray, raised to the forehead, set on the platform, moved back]
 const KATHIN_NEAR = 0.6, KATHIN_RELEASE = 4.65, KATHIN_BACK = 4.7; // kneel this far from the platform edge to reach it
-const BLESS_DUR = 6.0; let KATHIN_BLESS = [0, 0]; // the blessing with holy water: how long, and when (set with the keys)
+const BLESS_DUR = 15.0; let KATHIN_BLESS = [0, 0]; // the blessing with holy water: as long as the recited verse; when (set with the keys)
+const BW = 6 / BLESS_DUR; // the gestures' own pace (each dip, flick, reach) in parts of the blessing: they were made for a 6-second one
 const KATHIN_KEYS = (() => {
   const k = [
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0.6, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -2751,6 +2752,20 @@ function kathinStep() {
 // over the one kneeling before him; then lays it back across the bowl. (The seated monks are single models, so he
 // leans in and the whisk moves from his hand; the drops fly to the child.)
 const BLESS_FLICKS = [0.3, 0.55, 0.8], BLESS_DIPS = [0.17, 0.43, 0.68];
+// The monks' blessing: the Abhivādana verse (Dhammapada 109), the closing verse of the anumodana, recited after the
+// Kathina and after alms are given, with its meaning shown beneath while it plays.
+const BLESSING_TEXT = () => tx(
+  ["อะภิวาทะนะสีลิสสะ นิจจัง วุฑฒาปะจายิโน จัตตาโร ธัมมา วัฑฒันติ อายุ วัณโณ สุขัง พะลัง", "ผู้ที่กราบไหว้และอ่อนน้อมต่อผู้ใหญ่อยู่เป็นนิตย์ ธรรมสี่ประการย่อมเจริญแก่เขา คือ อายุ วรรณะ สุขะ พละ"],
+  ["Abhivādanasīlissa niccaṃ vuḍḍhāpacāyino, cattāro dhammā vaḍḍhanti: āyu vaṇṇo sukhaṃ balaṃ", "For one who always honours and respects the elders, four things grow: long life, beauty, happiness and strength."]);
+let subtitleOff = 0;
+function recite(url, at, inside) {
+  sound.blessing(url, at.x, at.y, at.z, inside).then((secs) => {
+    const el = document.getElementById("subtitle"); if (!el) return;
+    const [pali, meaning] = BLESSING_TEXT();
+    el.innerHTML = `<span class="pali">${pali}</span><span>${meaning}</span>`; el.hidden = false;
+    clearTimeout(subtitleOff); subtitleOff = setTimeout(() => { el.hidden = true; }, ((secs || 14) + 0.8) * 1000);
+  });
+}
 const dropGeo = new THREE.SphereGeometry(0.02, 6, 4), dropMat = new THREE.MeshBasicMaterial({ color: 0xd9f2ff, transparent: true, opacity: 0.85 });
 const drops = [];
 // At rest a teacher sits as the unrigged monks do: head a little bowed with the eyes lowered, hands resting in the
@@ -2816,11 +2831,11 @@ function teacherStep(h, s, dt) {
   const Bl = s === h.senior ? s.bless : null;
   if (Bl) {
     const [b0, b1] = KATHIN_BLESS, u = t >= 0 ? (t - b0) / (b1 - b0) : -9;
-    const reach = smooth(-0.12, 0.0, u) * (1 - smooth(1.0, 1.14, u));
+    const reach = smooth(-0.12 * BW, 0.0, u) * (1 - smooth(1.0, 1 + 0.14 * BW, u));
     if (reach > 0.001) {
       const gg = (c, wd) => Math.exp(-(((u - c) / wd) ** 2));
-      const dip = Math.max(...BLESS_DIPS.map((c) => gg(c, 0.05)), 1 - smooth(0.02, 0.12, u), smooth(0.92, 1.05, u));
-      const flick = Math.max(...BLESS_FLICKS.map((c) => gg(c, 0.035)));
+      const dip = Math.max(...BLESS_DIPS.map((c) => gg(c, 0.05 * BW)), 1 - smooth(0.02 * BW, 0.12 * BW, u), smooth(1 - 0.08 * BW, 1 + 0.05 * BW, u));
+      const flick = Math.max(...BLESS_FLICKS.map((c) => gg(c, 0.035 * BW)));
       const grip = toW(Bl.hold.clone().lerp(Bl.dip, dip).add(new THREE.Vector3(0, 0, 0.12 * flick)));
       // (his hand has no finger joints: the palm faces in against the handle, the fingers across it, pointing forward)
       const hs = shape.Right, axis = dirW(new THREE.Vector3(0, 1, 0).applyQuaternion(Bl.whisk.quaternion));
@@ -2843,18 +2858,19 @@ function blessStep(s, t) {
   const B = s.bless; if (!B) return;
   const [b0, b1] = KATHIN_BLESS, u = (t - b0) / (b1 - b0);
   const w = B.whisk;
-  if (t < b0 - 0.6 || u > 1.15) { w.position.copy(B.rest.pos); w.rotation.copy(B.rest.rot); B.flicked = []; return; }
-  const rise = smooth(-0.1, 0.12, u) * (1 - smooth(0.92, 1.1, u));
+  if (t < b0 - 0.6 || u > 1 + 0.15 * BW) { w.position.copy(B.rest.pos); w.rotation.copy(B.rest.rot); B.flicked = []; B.recited = false; return; }
+  if (u >= 0 && !B.recited) { B.recited = true; recite("audio/bless-hall.mp3", s.rig ? s.rig.B.Head.getWorldPosition(new THREE.Vector3()) : s.lean.getWorldPosition(new THREE.Vector3()), true); }
+  const rise = smooth(-0.1 * BW, 0.12 * BW, u) * (1 - smooth(1 - 0.08 * BW, 1 + 0.1 * BW, u));
   const g = (c, wd) => Math.exp(-(((u - c) / wd) ** 2));
-  const dip = Math.max(...BLESS_DIPS.map((c) => g(c, 0.05)), 1 - smooth(0.02, 0.12, u), smooth(0.92, 1.05, u));
-  const flick = Math.max(...BLESS_FLICKS.map((c) => g(c, 0.035)));
+  const dip = Math.max(...BLESS_DIPS.map((c) => g(c, 0.05 * BW)), 1 - smooth(0.02 * BW, 0.12 * BW, u), smooth(1 - 0.08 * BW, 1 + 0.05 * BW, u));
+  const flick = Math.max(...BLESS_FLICKS.map((c) => g(c, 0.035 * BW)));
   const hold = B.hold.clone().lerp(B.dip, dip);
   if (!B.handHeld) w.position.copy(B.rest.pos).lerp(hold, rise); // (with the rigged monk, his hand carries it)
   // held up and a little back; flicked forward over the child; dipped straw-end down into the bowl
   const ex = -0.35 + 1.45 * flick, dipRot = new THREE.Euler(Math.PI - 0.25, 0, 0);
   const held = new THREE.Euler(ex * (1 - dip) + dipRot.x * dip, 0, 0);
   w.quaternion.setFromEuler(B.rest.rot).slerp(new THREE.Quaternion().setFromEuler(held), rise);
-  s.lean.rotation.x = 0.07 * smooth(0.0, 0.12, u) * (1 - smooth(0.88, 1.0, u)) + 0.03 * flick;
+  s.lean.rotation.x = 0.07 * smooth(0.0, 0.12 * BW, u) * (1 - smooth(1 - 0.12 * BW, 1.0, u)) + 0.03 * flick;
   // the drops leave the straw at the height of each flick
   BLESS_FLICKS.forEach((c, i) => {
     if (u >= c && !B.flicked[i]) {
@@ -2868,7 +2884,7 @@ function blessStep(s, t) {
         m.userData = { v: target.sub(tip).multiplyScalar(1 / T).add(new THREE.Vector3(0, 0.5 * G * T, 0)), G, life: 0 };
         scene.add(m); drops.push(m);
       }
-      sound.sprinkle(tip.x, tip.y, tip.z);
+      sound.sprinkle(tip.x, tip.y, tip.z, true);
     }
   });
 }
@@ -2901,7 +2917,7 @@ function startKraap() {
 // places it in the bowl (bending a little, his eyes on the bowl), lowers his hands and then gives the high wai.
 // The monk leans in slightly to receive. Posed on the skeleton, like the wai.
 const alms = { t: -1, m: null, spot: null, faceYaw: 0, item: null, placed: false };
-const ALMS_DUR = 4.0, ALMS_RELEASE = 3.05;
+const ALMS_DUR = 4.0, ALMS_RELEASE = 3.05, ALMS_BLESS = 14.2; // (the high wai is held through the monk's blessing, 13 s)
 function almsState(t) {
   return {
     hold: smooth(0.4, 1.0, t) * (1 - smooth(3.3, 3.9, t)),   // the rice in both hands
@@ -2935,7 +2951,8 @@ function almsStep(dt) {
   if (alms.t > ALMS_DUR) {                                               // then the high wai to the monk
     if (!alms.placed && alms.item) scene.remove(alms.item);
     alms.t = -1; alms.item = null; if (alms.m) alms.m.lean.rotation.x = 0;
-    wai.level = "buddha"; wai.dur = WAI_LEVELS.buddha.dur; wai.faceYaw = alms.faceYaw; wai.t = 0; wai.fromAlms = true; // the dog keeps sitting through it
+    wai.level = "buddha"; wai.dur = Math.max(WAI_LEVELS.buddha.dur, ALMS_BLESS); wai.faceYaw = alms.faceYaw; wai.t = 0; wai.fromAlms = true; // the dog keeps sitting through it
+    if (alms.m) recite("audio/bless.mp3", alms.m.lean.localToWorld(new THREE.Vector3(0, 2.9, 0)), false); // and the monk gives the blessing meanwhile
   }
 }
 const ALMS_CHEST = { fwd: 0.42, up: -0.2 };  // where the rice is held, from the upper spine

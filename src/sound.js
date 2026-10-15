@@ -30,13 +30,16 @@ export function createSound({ high = true } = {}) {
   }
   const loopNoise = (buf) => { const s = ctx.createBufferSource(); s.buffer = buf; s.loop = true; s.loopStart = Math.random(); s.start(0, Math.random() * 2); return s; };
   // a sound placed in the world; distance and direction come from the listener (the camera)
-  function placed(x, y, z, ref = 4, max = 60, rolloff = 1.2) {
+  // (a sound made inside a hall, heard from inside it, skips the muffling that outdoor sounds get indoors)
+  function placed(x, y, z, ref = 4, max = 60, rolloff = 1.2, inside = false) {
     const p = ctx.createPanner();
     p.panningModel = high ? "HRTF" : "equalpower"; p.distanceModel = "inverse";
     p.refDistance = ref; p.maxDistance = max; p.rolloffFactor = rolloff;
     p.positionX.value = x; p.positionY.value = y; p.positionZ.value = z;
-    p.connect(outdoor); return p;
+    p.connect(inside ? master : outdoor); return p;
   }
+  const voices = {}; let speaking = 0; // (blessings playing with the ambience off)
+  const voiceBuffer = (url) => voices[url] || (voices[url] = fetch(url).then((r) => r.arrayBuffer()).then((b) => ctx.decodeAudioData(b)).catch(() => null));
   const env = (g, t, a, peak, d) => { g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + a + d); };
 
   /* ---------- the bells ---------- */
@@ -262,9 +265,9 @@ export function createSound({ high = true } = {}) {
       P.g.gain.setTargetAtTime(0.6 * level, t, 0.2);
     },
     // holy water flicked from the whisk: a soft spatter of drops
-    sprinkle(x, y, z) {
+    sprinkle(x, y, z, inside = false) {
       if (!ctx || !on) return;
-      const out = placed(x, y, z, 3, 30, 1.2), t0 = ctx.currentTime + 0.02, buf = noiseBuffer("white", 0.1);
+      const out = placed(x, y, z, 3, 30, 1.2, inside), t0 = ctx.currentTime + 0.02, buf = noiseBuffer("white", 0.1);
       for (let i = 0; i < 9; i++) {
         const t = t0 + 0.12 + Math.random() * 0.35, s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
         s.buffer = buf; f.type = "bandpass"; f.frequency.value = 3500 + Math.random() * 3000; f.Q.value = 1.5;
@@ -273,6 +276,19 @@ export function createSound({ high = true } = {}) {
       const s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain(); // the swish of the whisk
       s.buffer = noiseBuffer("pink", 0.4); f.type = "bandpass"; f.frequency.value = 1800; f.Q.value = 0.8;
       s.connect(f); f.connect(g); g.connect(out); env(g, t0, 0.05, 0.12, 0.2); s.start(t0); s.stop(t0 + 0.4);
+    },
+    // a monk's spoken blessing, from where he sits. Like the bell it plays with the ambience off too: it answers
+    // the visitor's own offering. Resolves to its length in seconds (0 if it can't be played).
+    // (with the ambience off, the voice goes straight out, and the rest of the world stays silent)
+    async blessing(url, x, y, z, inside = false) {
+      if (!ctx) build();
+      const quiet = !on; if (quiet) await ctx.resume();
+      const buf = await voiceBuffer(url); if (!buf) return 0;
+      const s = ctx.createBufferSource(), g = ctx.createGain(), p = placed(x, y, z, 5, 40, 0.8, inside); s.buffer = buf; g.gain.value = 1.6;
+      if (quiet) { p.disconnect(); p.connect(ctx.destination); g.gain.value = 1.3; }
+      s.connect(g); g.connect(p); s.start();
+      if (quiet) { speaking++; s.onended = () => { if (--speaking === 0 && !on && ctx) ctx.suspend(); }; }
+      return buf.duration;
     },
     // pigeons taking off: a clatter of wingbeats
     flutter(x, y, z) {
