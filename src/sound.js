@@ -298,6 +298,13 @@ export function createSound({ high = true } = {}) {
     },
     // while sitting in meditation the world outside grows quieter
     duck(quiet) { if (ctx) outdoor.gain.setTargetAtTime(quiet ? 0.35 : 1, ctx.currentTime, 1.2); },
+    // a stroke of a straw broom on the paving: a soft, dry swish
+    sweep(x, y, z) {
+      if (!ctx || !on) return;
+      const out = placed(x, y, z, 2, 16, 1.5), t = ctx.currentTime + 0.01, s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+      s.buffer = noiseBuffer("pink", 0.5); f.type = "bandpass"; f.frequency.value = 2600 + Math.random() * 900; f.Q.value = 0.7;
+      s.connect(f); f.connect(g); g.connect(out); env(g, t, 0.06, 0.18, 0.28); s.start(t); s.stop(t + 0.45);
+    },
     // pigeons taking off: a clatter of wingbeats
     flutter(x, y, z) {
       if (!ctx || !on) return;

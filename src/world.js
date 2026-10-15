@@ -1677,13 +1677,14 @@ function broomStep(dt, moving) {
   // the broom: leaning at its stand, or in his hands, its head swinging over the ground as he sweeps
   if (!broom.held) { broom.obj.position.set(BROOM_AT.x, 0, BROOM_AT.z); broom.obj.rotation.set(0, 0, -0.22); }
   else {
-    broom.phase += dt * (moving ? 5 : 1.4);
+    const stroke = Math.floor(broom.phase / Math.PI); broom.phase += dt * (moving ? 5 : 1.4);
     const fwd = new THREE.Vector3(Math.sin(player.yaw), 0, Math.cos(player.yaw)), right = new THREE.Vector3(-fwd.z, 0, fwd.x);
     const head = new THREE.Vector3(player.x, player.y, player.z).addScaledVector(fwd, 1.05).addScaledVector(right, 0.12 + Math.sin(broom.phase) * 0.35);
     const top = new THREE.Vector3(player.x, player.y + 1.75, player.z).addScaledVector(fwd, 0.25).addScaledVector(right, 0.25);
     const dir = top.clone().sub(head).normalize();
     broom.obj.position.copy(head); broom.obj.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
     broom.grips = [head.clone().addScaledVector(dir, 1.0), head.clone().addScaledVector(dir, 1.45)];
+    if (Math.floor(broom.phase / Math.PI) !== stroke) sound.sweep(head.x, head.y, head.z); // each stroke, a swish
     // leaves before the broom are brushed away
     for (const l of fallenLeaves) { const u = l.userData; if (u.fall > 0 || u.fade >= 0) continue; if (Math.hypot(u.x - head.x, u.z - head.z) < 0.75) { u.fade = 0; u.vx = fwd.x * 1.2 + right.x * Math.sin(broom.phase); u.vz = fwd.z * 1.2 + right.z * Math.sin(broom.phase); } }
   }
@@ -1827,12 +1828,13 @@ function noviceStep(dt) {
   npcAnimate(n, novice.speed, dt);
   n.holder.updateMatrixWorld(true);
   // the broom swings from side to side before him, brushing leaves along
-  novice.phase += dt * (novice.speed > 0.1 ? 4.2 : 3);
+  const stroke = Math.floor(novice.phase / Math.PI); novice.phase += dt * (novice.speed > 0.1 ? 4.2 : 3);
   const k = n.k / 1.6;
   const head = new THREE.Vector3(x, 0, z).addScaledVector(fwd, 1.1 * k).addScaledVector(right, 0.1 + Math.sin(novice.phase) * 0.38);
   const top = new THREE.Vector3(x, 1.85 * k, z).addScaledVector(fwd, 0.25 * k).addScaledVector(right, 0.25 * k);
   const dir = top.clone().sub(head).normalize();
   novice.broom.position.copy(head); novice.broom.quaternion.setFromUnitVectors(up, dir);
+  if (Math.floor(novice.phase / Math.PI) !== stroke) sound.sweep(head.x, 0.1, head.z);
   const grips = [head.clone().addScaledVector(dir, 1.05 * k), head.clone().addScaledVector(dir, 1.5 * k)];
   for (const l of fallenLeaves) { const u = l.userData; if (u.fall > 0 || u.fade >= 0) continue; if (Math.hypot(u.x - head.x, u.z - head.z) < 0.75) { u.fade = 0; u.vx = fwd.x * 0.8 + right.x * Math.cos(novice.phase) * 1.2; u.vz = fwd.z * 0.8 + right.z * Math.cos(novice.phase) * 1.2; } }
   const B = n.B, shape = handShape(n.obj); if (!shape || !B.LeftArm) return;
@@ -4787,6 +4789,11 @@ function frame(dt) {
     if (dogKeepOut(dog.x, dog.z)) { dog.x = DOG_WAIT.x; dog.z = DOG_WAIT.z; } // (arrived inside some other way)
     const waiting = dogKeepOut(bx, bz);
     if (waiting) { bx = DOG_WAIT.x; bz = DOG_WAIT.z; }
+    // after a while waiting, it trots off to keep the sweeping novice company (by day), walking at his side and
+    // sitting when he stops; when the child comes out it comes back
+    dog.waitT = waiting ? (dog.waitT || 0) + dt : 0;
+    const withNovice = waiting && dog.waitT > 15 && novice.n && novice.n.holder.visible;
+    if (withNovice) { const hp = novice.n.holder.position, ny = novice.n.holder.rotation.y; bx = hp.x + Math.cos(ny) * 1.3 - Math.sin(ny) * 0.4; bz = hp.z - Math.sin(ny) * 1.3 - Math.cos(ny) * 0.4; }
     // being petted: it comes and sits at his right side; afterwards it lies down there for a moment
     const petting = pet.who === "dog" ? pet.phase : null;
     if (petting === "call" || petting === "on") { bx = pet.spot.x; bz = pet.spot.z; }
@@ -4801,7 +4808,7 @@ function frame(dt) {
     dog.moving = dd > 0.4 && dogFree;
     let dogSpeed = 0;
     if (wantLie) { let dy = pet.yaw - dog.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); dog.yaw += dy * Math.min(1, dt * 2.5); } // lies down alongside him, where it sat
-    if (wantSit) { let dy = (waiting ? DOG_WAIT.yaw : petting ? pet.yaw : player.yaw) - dog.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); dog.yaw += dy * Math.min(1, dt * 4); }
+    if (wantSit) { let dy = (withNovice ? novice.n.holder.rotation.y : waiting ? DOG_WAIT.yaw : petting ? pet.yaw : player.yaw) - dog.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); dog.yaw += dy * Math.min(1, dt * 4); }
     if (dd > 0.4 && dogFree) { const st = Math.min(dd, dt * (dd > 6 ? 12 : 6)); dogSpeed = dt > 0 ? st / dt : 0; const [nx, nz] = collide(dog.x + ddx / dd * st, dog.z + ddz / dd * st); if (!dogKeepOut(nx, nz)) { dog.x = nx; dog.z = nz; } dog.yaw = Math.atan2(ddx, ddz); }
     // walk cycle: about one stride per 1.2 m; the legs ease in and out of walking
     dogAnim.phase.value = (dogAnim.phase.value + dt * dogSpeed * 5.2) % (Math.PI * 200); // kept small so it stays precise
