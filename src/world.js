@@ -4271,6 +4271,59 @@ function infoNear() {
   for (const c of INFO) { if (!c.near || (c.when && !c.when())) continue; const d = Math.hypot(player.x - c.x, player.z - c.z); if (d < c.near && (!best || d < best.d)) best = { id: c.id, d }; }
   return best;
 }
+/* ---------------- the meditation corner ---------------- */
+// Sitting on a cushion in a hall, or anywhere in the Practice Garden, the child may follow a short guided sitting:
+// about one minute or three. A calm voice (Mark) says a few lines with long quiet between them, a small bowl is rung
+// at the start and the end, the world outside grows quieter and the light a little warmer. The breath is never held
+// or counted: only known, as it is. Standing up (or walking) ends it at any time; there is nothing to score.
+const MEDI_TEXT = [
+  ["ลองนั่งให้สบาย หลังตรง แต่ไม่ต้องเกร็งนะ", "Sit comfortably, back straight, but not stiff."],
+  ["ค่อย ๆ หลับตา หรือมองต่ำลงก็ได้", "Gently close your eyes, or just look down."],
+  ["ไม่ต้องบังคับลมหายใจ ปล่อยให้หายใจไปตามธรรมชาติ", "You don't need to control your breath. Let it come and go by itself."],
+  ["หายใจเข้า… รู้ว่าหายใจเข้า หายใจออก… รู้ว่าหายใจออก", "Breathing in… know you are breathing in. Breathing out… know you are breathing out."],
+  ["รู้สึกถึงลมที่ปลายจมูก เย็นเมื่อเข้า อุ่นเมื่อออก", "Feel the air at the tip of your nose: cool coming in, warm going out."],
+  ["ถ้าใจลอยไป ไม่เป็นไรเลย แค่กลับมารู้ลมหายใจใหม่", "If your mind wanders, that's fine. Just come back to the breath."],
+  ["ใจที่สงบ เหมือนน้ำที่นิ่ง", "A calm mind is like still water."],
+  ["ค่อย ๆ ลืมตาขึ้นช้า ๆ ขอบคุณที่นั่งด้วยกันนะ", "Slowly open your eyes. Thank you for sitting together."],
+];
+const MEDI_DUR = { th: [3.96, 3.24, 3.54, 5.07, 3.75, 4.52, 2.5, 3.8], en: [3.24, 3.0, 3.41, 6.9, 3.75, 3.75, 1.96, 3.58] }; // audio/medi-<n>-<th|en>.mp3
+// [what, quiet after it (s)]: "bell", or a line's number
+const MEDI_PLAN = {
+  1: [["bell", 2.5], [1, 3], [2, 4], [3, 4], [4, 20], [6, 15], [8, 1.5], ["bell", 4]],
+  3: [["bell", 2.5], [1, 4], [2, 6], [3, 6], [4, 30], [5, 25], [4, 30], [6, 25], [7, 20], [8, 1.5], ["bell", 4]],
+};
+const medi = { on: false, plan: null, i: 0, next: 0, t: 0 };
+const mediPlace = () => { const g = PLACES.find((p) => p.id === "garden"); return insideHall(player.x, player.z) || (g && Math.hypot(player.x - g.pos[0], player.z - g.pos[1]) < g.r); };
+const mediReady = () => sit.on && sit.w > 0.9 && kraap.t < 0 && mediPlace();
+function startMedi(min) {
+  if (!mediReady() || medi.on) return;
+  Object.assign(medi, { on: true, plan: MEDI_PLAN[min], i: 0, next: 0, t: 0 });
+  sound.duck(true); $("medi-glow").classList.add("on"); renderMedi();
+}
+function stopMedi() {
+  if (!medi.on) return;
+  medi.on = false; sound.duck(false); $("medi-glow").classList.remove("on");
+  const el = $("subtitle"); if (el) el.hidden = true;
+  renderMedi();
+}
+function mediStep(dt) {
+  const show = mediReady() || medi.on; if (show !== !$("medi").hidden) { $("medi").hidden = !show; renderMedi(); }
+  if (!medi.on) return;
+  if (!sit.on) { stopMedi(); return; } // he stood up
+  medi.t += dt;
+  while (medi.on && medi.t >= medi.next) {
+    const step = medi.plan[medi.i]; if (!step) { stopMedi(); return; }
+    const [what, quiet] = step; let len = 0.5;
+    if (what === "bell") sound.chime();
+    else { len = MEDI_DUR[L][what - 1]; recite(`audio/medi-${what}-${L}.mp3`, new THREE.Vector3(player.x, player.y + 1.4, player.z), true, tx(...MEDI_TEXT[what - 1]), len); }
+    medi.next = medi.t + len + quiet; medi.i++;
+  }
+}
+function renderMedi() {
+  $("medi").innerHTML = medi.on
+    ? `🧘 <span>${esc(tx("กำลังนั่งสมาธิ…", "Sitting in meditation…"))}</span> <button class="chip" id="medi-stop">${esc(tx("หยุด", "Stop"))}</button>`
+    : `🧘 <span>${esc(tx("ฝึกนั่งสมาธิ", "Practise sitting"))}</span> <button class="chip" data-medi="1">${esc(tx("1 นาที", "1 min"))}</button> <button class="chip" data-medi="3">${esc(tx("3 นาที", "3 min"))}</button>`;
+}
 /* ---------------- quests and gentle hints ---------------- */
 // A quest is one custom, done as at a real temple: a short checklist that ticks itself as the child does each thing,
 // with a line on why it is done. No scores and no failing; the steps may be done in any order. Progress is kept on
@@ -4406,6 +4459,7 @@ $("dlg").addEventListener("click", (e) => {
 });
 $("btn-places").addEventListener("click", () => openPlaces(false));
 $("btn-quest").addEventListener("click", openQuests);
+$("medi").addEventListener("click", (e) => { const b = e.target.closest("[data-medi]"); if (b) startMedi(+b.dataset.medi); else if (e.target.closest("#medi-stop")) stopMedi(); });
 $("quest-head").addEventListener("click", () => $("questbox").classList.toggle("folded"));
 renderQuest();
 $("btn-help").addEventListener("click", () => openDialog(tx("❔ วิธีเดินในวัด", "❔ How to walk around"),
@@ -4538,7 +4592,7 @@ function tick() {
 // one step of the world: movement, animation, camera and the picture
 function frame(dt) {
   timeStep(dt); placeLampLights(dt);
-  feedStep(dt); fishStep(dt); meritStep(dt); lifeStep(dt); eyesStep(dt); questsStep(dt); mealStep(dt); petStep(dt); petalStep(dt); rainStep(dt); dropsStep(dt);
+  feedStep(dt); fishStep(dt); meritStep(dt); lifeStep(dt); eyesStep(dt); questsStep(dt); mealStep(dt); mediStep(dt); petStep(dt); petalStep(dt); rainStep(dt); dropsStep(dt);
   if (broom.held && (alms.t >= 0 || kraap.t >= 0 || feed.t >= 0 || shoes.t >= 0 || sit.on || merit.t >= 0)) putBroomBack(); // hands needed elsewhere
   monkTime += dt;
   if (!settings.calmMotion) for (const m of monkFigures) { const b = Math.sin(monkTime * 1.25 + m.ph); m.o.scale.set(1 + b * 0.004, 1 + b * 0.008, 1 + b * 0.004); } // slow breathing

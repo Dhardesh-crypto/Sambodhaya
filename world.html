@@ -54,6 +54,13 @@ button { font: inherit; color: inherit; cursor: pointer; }
 @media (max-width: 760px) { .questbox { top: auto; bottom: calc(40px + env(safe-area-inset-bottom, 0px)); } .toast { top: calc(var(--prompt-top, 124px) + 46px); } }
 @media (pointer: coarse) { .questbox { left: calc(12px + env(safe-area-inset-left, 0px)); top: auto; bottom: calc(176px + env(safe-area-inset-bottom, 0px)); width: min(236px, calc(100% - 136px)); font-size: .85rem; } } /* above the joystick, clear of the round buttons */
 
+/* the meditation corner: the choice while sitting, and a warm glow at the edges while it lasts */
+.medi { position: fixed; left: 50%; bottom: calc(40px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); padding: 6px 10px 6px 14px; display: flex; gap: 8px; align-items: center; z-index: 5; white-space: nowrap; }
+.medi span { font-family: var(--display); }
+#medi-glow { position: fixed; inset: 0; pointer-events: none; z-index: 2; opacity: 0; transition: opacity 3s ease; background: radial-gradient(ellipse at center, rgba(255, 196, 120, 0) 55%, rgba(255, 170, 90, .28) 100%); }
+#medi-glow.on { opacity: 1; }
+@media (pointer: coarse) { .medi { bottom: auto; top: calc(var(--prompt-top, 124px) + 46px); } }
+
 /* the monks' blessing: the verse and its meaning while it is recited */
 .subtitle { position: fixed; left: 50%; bottom: calc(110px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: min(720px, calc(100% - 32px)); padding: 10px 16px; text-align: center; display: flex; flex-direction: column; gap: 4px; z-index: 5; pointer-events: none; background: rgba(58, 42, 29, .78); color: var(--cream); border-radius: 14px; line-height: 1.5; }
 .subtitle .pali { font-family: var(--display); font-size: 1.1rem; color: var(--gold); }
@@ -137,6 +144,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
 </div>
 
 <div class="questbox panel" id="questbox" hidden><button id="quest-head" aria-label="ภารกิจ"></button><ol id="quest-steps"></ol></div>
+<div id="medi-glow" aria-hidden="true"></div>
+<div class="medi panel" id="medi" hidden></div>
 <div class="toast panel" id="toast" role="status" aria-live="polite" hidden></div>
 <div class="subtitle" id="subtitle" role="status" aria-live="polite" hidden></div>
 

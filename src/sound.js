@@ -286,6 +286,18 @@ export function createSound({ high = true } = {}) {
       s.connect(g); g.connect(placed(x, y, z, 5, 40, 0.8, inside)); s.start();
       return buf.duration;
     },
+    // a small singing bowl, rung softly to begin and end a sitting (near, inside: not muffled)
+    chime() {
+      if (!ctx || !on) return;
+      const t = ctx.currentTime + 0.02, out = ctx.createGain(); out.gain.value = 0.22; out.connect(master);
+      [[1, 0.5, 7], [2.71, 0.22, 3.5], [5.15, 0.1, 1.6]].forEach(([r, a, d]) => {
+        const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.value = 392 * r;
+        o.connect(g); g.connect(out); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(a, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+        o.start(t); o.stop(t + d + 0.1);
+      });
+    },
+    // while sitting in meditation the world outside grows quieter
+    duck(quiet) { if (ctx) outdoor.gain.setTargetAtTime(quiet ? 0.35 : 1, ctx.currentTime, 1.2); },
     // pigeons taking off: a clatter of wingbeats
     flutter(x, y, z) {
       if (!ctx || !on) return;
