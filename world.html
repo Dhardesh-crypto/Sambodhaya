@@ -61,6 +61,23 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .medi span { font-family: var(--display); }
 #medi-glow { position: fixed; inset: 0; pointer-events: none; z-index: 2; opacity: 0; transition: opacity 3s ease; background: radial-gradient(ellipse at center, rgba(255, 196, 120, 0) 55%, rgba(255, 170, 90, .28) 100%); }
 #medi-glow.on { opacity: 1; }
+/* folding a lotus: the bud seen from the front; each petal of the row being folded is a button */
+.fold { position: fixed; left: 50%; bottom: calc(40px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: min(340px, calc(100% - 24px)); padding: 8px 12px 10px; z-index: 5; text-align: center; }
+.fold svg { width: 100%; max-height: 210px; display: block; margin: 0 auto; }
+.fold p { margin: 4px 0 6px; line-height: 1.45; font-size: .92rem; }
+.fold .bud { fill: #ec8fab; stroke: #b5577a; stroke-width: 2; }
+.fold .petal path { fill: #f2a3b8; stroke: #c06a88; stroke-width: 2; }
+.fold .petal line, .fold .petal circle { opacity: 0; }
+.fold .petal { transition: transform .5s ease; transform-origin: 0 0; }
+.fold .petal.live { cursor: pointer; }
+.fold .petal.live path { fill: #f7b3c6; stroke: var(--saffron-deep); stroke-width: 3; }
+.fold .petal.live:hover path, .fold .petal.live:focus-visible path { fill: #fcc8d6; }
+.fold .petal:focus { outline: none; }
+.fold .petal.folded { transform: rotate(var(--open)) scale(.5, .78); }
+.fold .petal.folded path { fill: #fde3ea; stroke: #c06a88; stroke-width: 4; }
+.fold .petal.folded line { opacity: 1; stroke: #d58aa3; stroke-width: 4; }
+.fold .petal.folded circle { opacity: 1; fill: #f2a3b8; stroke: #c06a88; stroke-width: 3; }
+@media (pointer: coarse) { .fold { bottom: auto; top: calc(var(--prompt-top, 124px) + 8px); } .fold svg { max-height: 170px; } }
 @media (pointer: coarse) { .medi { bottom: auto; top: calc(var(--prompt-top, 124px) + 46px); } }
 
 /* the monks' blessing: the verse and its meaning while it is recited */
@@ -158,6 +175,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 <div class="questbox panel" id="questbox" hidden><button id="quest-head" aria-label="ภารกิจ"></button><ol id="quest-steps"></ol></div>
 <div id="medi-glow" aria-hidden="true"></div>
 <div class="medi panel" id="medi" hidden></div>
+<div class="fold panel" id="fold" hidden></div>
 <div class="toast panel" id="toast" role="status" aria-live="polite" hidden></div>
 <div class="subtitle" id="subtitle" role="status" aria-live="polite" hidden></div>
 

@@ -1459,6 +1459,7 @@ function incenseBundle() { // three sticks and a lotus bud, held together
   const g = new THREE.Group();
   [-0.025, 0, 0.025].forEach((dx, i) => { add(new THREE.CylinderGeometry(0.008, 0.008, 0.42, 5), incenseMat, dx, 0.21, (i - 1) * 0.01, g, false); const e = add(new THREE.SphereGeometry(0.012, 6, 4), emberMat, dx, 0.42, (i - 1) * 0.01, g, false); e.visible = false; e.userData.ember = true; });
   add(new THREE.CylinderGeometry(0.008, 0.008, 0.3, 5), stemMat, 0.05, 0.12, 0.02, g, false);
+  if (fold.ready) { fold.ready = false; const f = foldedLotus(FOLD_PETALS); f.position.set(0.05, 0.25, 0.02); f.userData.lotus = true; g.add(f); return g; } // the one he folded
   const bud = add(new THREE.SphereGeometry(0.05, 10, 8), lotusMat, 0.05, 0.31, 0.02, g, false); bud.scale.y = 1.7; bud.userData.lotus = true;
   return g;
 }
@@ -3691,6 +3692,7 @@ function poseOverlays(model, hands, bow, sitW) {
   waiBegin(B);
   if (sitW > 0.001) { if (phabphiap()) posePhabphiap(model, B, sitW); else poseSit(model, B, sitW); }
   poseWaiCore(model, B, hands, bow);
+  placeFoldLotus(B);
   waiMark(B);
 }
 function poseWai(model, hands, bow) { poseOverlays(model, hands, bow, sit.w); }
@@ -4254,7 +4256,7 @@ function showPrompt(p) {
   if (!p) { el.hidden = true; return; }
   $("prompt-name").textContent = p.icon + " " + placeName(p);
   $("prompt-sub").textContent = p.stone != null ? (p.board ? tx("ป้ายเรื่องที่ ", "Story board ") : tx("เรื่องที่ ", "Story ")) + (p.stone + 1) : p.sub[L === "en" ? 1 : 0];
-  $("prompt-go").textContent = p.id === "bell" ? tx("ตี", "Strike") : p.id === "donate" ? tx("เปิด", "Open") : p.id === "alms" ? tx("ใส่บาตร", "Offer") : p.id === "fish" ? tx("ให้อาหาร", "Feed") : p.merit ? tx("ทำบุญ", "Offer") : p.id === "broom" ? (broom.held ? tx("วาง", "Put back") : tx("หยิบ", "Pick up")) : p.id === "can" ? (can.held ? tx("วาง", "Put back") : tx("หยิบ", "Pick up")) : p.id === "water" ? tx("รดน้ำ", "Water") : p.id === "info" ? tx("อ่าน", "Read") : p.id === "bridge" ? tx("เลือก", "Choose") : p.id === "monk" ? (p.acts.length > 1 ? tx("เลือก", "Choose") : tx("ไหว้", "Greet")) : p.id === "cat" ? tx("ลูบ", "Pet") : tx("เข้า", "Visit");
+  $("prompt-go").textContent = p.id === "bell" ? tx("ตี", "Strike") : p.id === "donate" ? tx("เปิด", "Open") : p.id === "alms" ? tx("ใส่บาตร", "Offer") : p.id === "fish" ? tx("ให้อาหาร", "Feed") : p.merit ? tx("ทำบุญ", "Offer") : p.id === "broom" ? (broom.held ? tx("วาง", "Put back") : tx("หยิบ", "Pick up")) : p.id === "can" ? (can.held ? tx("วาง", "Put back") : tx("หยิบ", "Pick up")) : p.id === "water" ? tx("รดน้ำ", "Water") : p.id === "fold" ? tx("นั่งพับ", "Sit and fold") : p.id === "info" ? tx("อ่าน", "Read") : p.id === "bridge" ? tx("เลือก", "Choose") : p.id === "monk" ? (p.acts.length > 1 ? tx("เลือก", "Choose") : tx("ไหว้", "Greet")) : p.id === "cat" ? tx("ลูบ", "Pet") : tx("เข้า", "Visit");
   el.hidden = false;
 }
 $("prompt-go").addEventListener("click", () => near && openPlace(near));
@@ -4314,6 +4316,7 @@ function openPlace(p) {
   if (p.id === "broom") { broom.held = !broom.held; if (broom.held) putCanBack(); near = null; return; }
   if (p.id === "can") { can.held = !can.held; if (can.held) putBroomBack(); near = null; return; }
   if (p.id === "water") { startWater(p.key); return; }
+  if (p.id === "fold") { startFold(); return; }
   if (p.id === "monk") { openMonk(p); return; }
   if (p.id === "info") { openInfo(p.info); return; }
   if (p.id === "bridge") { openBridge(); return; }
@@ -4588,7 +4591,7 @@ const MEDI_PLAN = {
 };
 const medi = { on: false, plan: null, i: 0, next: 0, t: 0 };
 const mediPlace = () => { const g = PLACES.find((p) => p.id === "garden"); return insideHall(player.x, player.z) || (g && Math.hypot(player.x - g.pos[0], player.z - g.pos[1]) < g.r); };
-const mediReady = () => sit.on && sit.w > 0.9 && kraap.t < 0 && mediPlace();
+const mediReady = () => sit.on && sit.w > 0.9 && kraap.t < 0 && !fold.on && mediPlace();
 function startMedi(min) {
   if (!mediReady() || medi.on) return;
   Object.assign(medi, { on: true, plan: MEDI_PLAN[min], i: 0, next: 0, t: 0 });
@@ -4618,6 +4621,93 @@ function renderMedi() {
     ? `🧘 <span>${esc(tx("กำลังนั่งสมาธิ…", "Sitting in meditation…"))}</span> <button class="chip" id="medi-stop">${esc(tx("หยุด", "Stop"))}</button>`
     : `🧘 <span>${esc(tx("ฝึกนั่งสมาธิ", "Practise sitting"))}</span> <button class="chip" data-medi="1">${esc(tx("1 นาที", "1 min"))}</button> <button class="chip" data-medi="3">${esc(tx("3 นาที", "3 min"))}</button>`;
 }
+/* ---------------- folding a lotus (พับกลีบบัว) ---------------- */
+// In the Universal Hall a mat lies on the floor, with a brass tray of lotus buds. Sitting there, the child folds a bud
+// for the altar the Thai way (as a former monk in Thailand described it): each petal of the two outer rows is folded
+// in half lengthwise and its tip tucked in, the outer row first; the bud in the middle stays closed. The folded lotus
+// then goes with the next offering of incense, candles and a lotus: into the vase, kneeling, and three bows.
+const FOLD_PETALS = 8; // two rows of four
+const fold = { on: false, done: 0, order: [], ready: false, spot: null, lotus: null };
+const FOLD_PLACE = { id: "fold", icon: "🪷", th: "พับกลีบบัว", en: "Fold a lotus", sub: ["นั่งพับดอกบัวไว้ถวายพระ", "Sit and fold a lotus for the altar"] };
+const petalMat = S(0xf2a3b8, { roughness: 0.7 }), petalInnerMat = S(0xf8c6d4, { roughness: 0.75 });
+// a lotus with its first `folded` petals folded: unfolded petals hug the bud; folded ones, narrower and paler (their
+// inside shows), open outward with their tips tucked
+function foldedLotus(folded) {
+  const g = new THREE.Group();
+  add(new THREE.CylinderGeometry(0.008, 0.008, 0.3, 5), stemMat, 0, -0.17, 0, g, false);
+  const bud = add(new THREE.SphereGeometry(0.05, 10, 8), lotusMat, 0, 0.06, 0, g, false); bud.scale.y = 1.7;
+  for (let i = 0; i < FOLD_PETALS; i++) {
+    const outer = i < 4, done = i < folded;
+    const piv = new THREE.Group(); piv.rotation.y = (i % 4) * Math.PI / 2 + (outer ? Math.PI / 4 : 0); piv.position.y = -0.015; g.add(piv);
+    const tilt = new THREE.Group(); tilt.rotation.x = done ? (outer ? 1.2 : 0.8) : (outer ? 0.3 : 0.16); piv.add(tilt);
+    const m = add(new THREE.SphereGeometry(0.05, 8, 6), done ? petalInnerMat : petalMat, 0, done ? 0.068 : 0.075, outer ? 0.04 : 0.03, tilt, false);
+    m.scale.set(done ? 0.45 : 0.8, done ? 1.4 : 1.55, done ? 0.28 : 0.32);
+  }
+  return g;
+}
+{
+  const h = salas.access, lx = 4.4, lz = 1.6, [x, z] = h.toWorld(lx, lz);
+  fold.spot = { x, z, top: 0.03, yaw: h.g.rotation.y + Math.PI }; // facing the shrine, as the cushions do
+  add(new THREE.BoxGeometry(1.2, 0.02, 1.5), S(0xc9a66b, { roughness: 1 }), lx, h.FY + 0.045, lz - 0.25, h.g); // a woven mat (เสื่อ)
+  const tray = add(new THREE.CylinderGeometry(0.24, 0.2, 0.04, 20), MAT.gold, lx, h.FY + 0.075, lz - 0.7, h.g);
+  [[-0.08, 0.6], [0.06, -0.4], [0.1, 1.9], [-0.05, 2.8]].forEach(([dz, a], i) => { // buds lying on the tray
+    const b = add(new THREE.SphereGeometry(0.045, 10, 8), lotusMat, (i - 1.5) * 0.09, 0.06, dz, tray, false); b.scale.set(1, 1, 1.7); b.rotation.y = a * 0.2;
+  });
+}
+function foldHere() { return fold.spot && !fold.on && Math.hypot(player.x - fold.spot.x, player.z - fold.spot.z) < 1.3; }
+function startFold() {
+  if (fold.on || kraap.t >= 0 || alms.t >= 0 || merit.t >= 0) return;
+  putBroomBack(); putCanBack(); wai.t = -1;
+  sit.spot = fold.spot; sit.on = true; sit.rise = 0; sit.faceYaw = fold.spot.yaw;
+  if (player.mixer && player.clips.sit) playClip(phabphiap() ? "idle" : "sit", 1.2);
+  fold.on = true; fold.done = 0; fold.order = []; fold.lotus = foldedLotus(0); scene.add(fold.lotus);
+  renderFold();
+}
+function endFold() {
+  fold.on = false; if (fold.lotus) { scene.remove(fold.lotus); fold.lotus = null; }
+  $("fold").hidden = true;
+}
+function foldPetal(i) {
+  if (!fold.on || fold.order.includes(i) || Math.floor(i / 4) !== (fold.done < 4 ? 0 : 1)) return; // the outer row first, any order within a row
+  fold.order.push(i); fold.done++;
+  scene.remove(fold.lotus); fold.lotus = foldedLotus(fold.done); scene.add(fold.lotus);
+  if (fold.done === FOLD_PETALS) { fold.ready = true; stamp("fold"); }
+  renderFold();
+}
+// the panel: the lotus seen from the front, each petal a button; folded ones narrower, paler, the tip tucked in
+function renderFold() {
+  const el = $("fold"); el.hidden = false;
+  const order = fold.order, isDone = (i) => order.includes(i), row = fold.done < 4 ? 0 : 1;
+  const petal = (i, ang, L, w) => {
+    const d = `M0,0 C${w},${-L * 0.25} ${w * 0.9},${-L * 0.7} 0,${-L} C${-w * 0.9},${-L * 0.7} ${-w},${-L * 0.25} 0,0 Z`, done = isDone(i), live = !done && Math.floor(i / 4) === row && fold.done < FOLD_PETALS;
+    return `<g transform="translate(120 206) rotate(${ang})"><g class="petal${done ? " folded" : ""}${live ? " live" : ""}" style="--open:${ang < 0 ? -14 : 14}deg" ${live ? `data-petal="${i}" role="button" tabindex="0" aria-label="${esc(tx("พับกลีบนี้", "Fold this petal"))}"` : ""}><path d="${d}"/><line x1="0" y1="-4" x2="0" y2="${-L + 6}"/><circle cx="0" cy="${-L + 4}" r="5"/></g></g>`;
+  };
+  const inner = [-40, -15, 15, 40].map((a, k) => petal(4 + k, a, 140, 24)).join(""), outer = [-62, -36, 36, 62].map((a, k) => petal(k, a, 118, 30)).join("");
+  const bud = `<path class="bud" d="M120,206 C146,170 140,96 120,52 C100,96 94,170 120,206 Z"/>`;
+  const msg = fold.done === FOLD_PETALS
+    ? tx("🪷 พับเสร็จแล้ว! นำไปถวายที่โต๊ะบูชาหน้าพระในศาลานี้ คุกเข่า จุดเทียน จุดธูป ใส่ดอกบัวในแจกัน แล้วกราบ", "🪷 Done! Take it to the incense table before the Buddha in this hall: kneel, light the candles and incense, put the lotus in the vase, and bow.")
+    : row === 0 ? tx("แตะกลีบชั้นนอกทีละกลีบ: พับครึ่งตามยาว แล้วสอดปลายกลีบเข้าไป", "Tap each petal of the outer row: fold it in half lengthwise and tuck the tip in.")
+    : tx("ต่อด้วยกลีบชั้นที่สอง ดอกตูมตรงกลางปล่อยไว้นะ", "Now the second row. The bud in the middle stays closed.");
+  el.innerHTML = `<svg viewBox="0 0 240 216" aria-hidden="false" role="group" aria-label="${esc(tx("ดอกบัว", "The lotus"))}">${inner}${bud}${outer}</svg>
+    <p>${esc(msg)} <span class="quiet">${fold.done}/${FOLD_PETALS}</span></p>
+    <div class="row"><button class="chip" id="fold-stop">${esc(fold.done === FOLD_PETALS ? tx("ลุกขึ้น", "Stand up") : tx("หยุด", "Stop"))}</button></div>`;
+}
+function foldStep() {
+  if (fold.on && !sit.on) endFold(); // he stood up
+  if (fold.on && fold.lotus && !player.mixer) { fold.lotus.position.set(player.x + Math.sin(player.yaw) * 0.4, player.y + 0.35, player.z + Math.cos(player.yaw) * 0.4); }
+}
+// in his hands, resting in his lap
+function placeFoldLotus(B) {
+  if (!fold.on || !fold.lotus || !B.Hips || !B.LeftLeg) return;
+  const fwd = new THREE.Vector3(Math.sin(player.yaw), 0, Math.cos(player.yaw));
+  fold.lotus.position.copy(lapCentre(B)).addScaledVector(fwd, 0.08).add(new THREE.Vector3(0, 0.12, 0));
+  fold.lotus.rotation.set(0, player.yaw, 0); fold.lotus.rotateX(-0.35); // tipped a little toward him
+}
+$("fold").addEventListener("click", (e) => {
+  const p = e.target.closest("[data-petal]"); if (p) { foldPetal(+p.dataset.petal); return; }
+  if (e.target.closest("#fold-stop")) standUp();
+});
+$("fold").addEventListener("keydown", (e) => { const p = e.target.closest("[data-petal]"); if (p && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); foldPetal(+p.dataset.petal); } });
 /* ---------------- quests and gentle hints ---------------- */
 // A quest is one custom, done as at a real temple: a short checklist that ticks itself as the child does each thing,
 // with a line on why it is done. No scores and no failing; the steps may be done in any order. Progress is kept on
@@ -4734,6 +4824,7 @@ const STAMPS = [
   { id: "monk-young", g: "friends", icon: "🧡", t: ["ไหว้" + TEACHER_NAME["monk-young"][0], "Greet " + TEACHER_NAME["monk-young"][1]] },
   { id: "sweep", g: "help", icon: "🧹", t: ["กวาดลานวัด", "Sweep the courtyard"] },
   { id: "water", g: "help", icon: "🪴", t: ["รดน้ำต้นไม้", "Water the plants"] },
+  { id: "fold", g: "help", icon: "🪷", t: ["พับกลีบบัว", "Fold a lotus"] },
   ...Object.entries(INFO_TEXT).map(([id, T]) => ({ id: "card-" + id, g: "cards", icon: T.icon, t: T.t, card: id,
     when: ["lanterns", "krathong"].includes(id) ? () => fest.now === "loykrathong" : id === "wiantian" ? () => fest.now === "bucha" : null })),
 ];
@@ -4795,7 +4886,7 @@ function questsStep(dt) {
     else if ((fx * dx + fz * dz) / d < -0.5 && Math.hypot(player.x - backWatch.spot.x, player.z - backWatch.spot.z) > 0.25) { hint("back"); backWatch = null; }
   }
   // sitting in a hall
-  if (sit.on && sit.w > 0.98 && insideHall(player.x, player.z)) questEvent("sitHall");
+  if (sit.on && sit.w > 0.98 && !fold.on && insideHall(player.x, player.z)) questEvent("sitHall");
 }
 // the end of a kraap-timed act: which one it was
 function kraapEnded(kind) {
@@ -4946,7 +5037,7 @@ function tick() {
 // one step of the world: movement, animation, camera and the picture
 function frame(dt) {
   timeStep(dt); placeLampLights(dt);
-  feedStep(dt); fishStep(dt); meritStep(dt); lifeStep(dt); eyesStep(dt); questsStep(dt); passportStep(); mealStep(dt); mediStep(dt); petStep(dt); petalStep(dt); rainStep(dt); mistStep(dt); festivalStep(dt); canStep(dt); dropsStep(dt);
+  feedStep(dt); fishStep(dt); meritStep(dt); lifeStep(dt); eyesStep(dt); questsStep(dt); passportStep(); foldStep(); mealStep(dt); mediStep(dt); petStep(dt); petalStep(dt); rainStep(dt); mistStep(dt); festivalStep(dt); canStep(dt); dropsStep(dt);
   if ((broom.held || can.held) && (alms.t >= 0 || kraap.t >= 0 || feed.t >= 0 || shoes.t >= 0 || sit.on || merit.t >= 0)) { putBroomBack(); putCanBack(); } // hands needed elsewhere
   monkTime += dt;
   if (!settings.calmMotion) for (const m of monkFigures) { const b = Math.sin(monkTime * 1.25 + m.ph); m.o.scale.set(1 + b * 0.004, 1 + b * 0.008, 1 + b * 0.004); } // slow breathing
@@ -5148,6 +5239,7 @@ function frame(dt) {
   if (catNear() && 1.9 < bestD) { best = CAT_PLACE; bestD = 1.9; }
   if (Math.hypot(player.x - BROOM_AT.x, player.z - BROOM_AT.z) < 1.8 && 2.3 < bestD) { best = broom.held ? BROOM_BACK : BROOM_PLACE; bestD = 2.3; }
   if (Math.hypot(player.x - CAN_AT.x, player.z - CAN_AT.z) < 1.8 && 2.3 < bestD) { best = can.held ? CAN_BACK : CAN_PLACE; bestD = 2.3; }
+  if (foldHere() && 1.6 < bestD) { best = FOLD_PLACE; bestD = 1.6; }
   if (can.held && can.t < 0) { const w = potHere(); if (w && w.d < bestD) { best = { ...WATER_PLACE, key: w.i }; bestD = w.d; } }
   if (almsScene.on) for (const m of almsMonks) { const d = Math.hypot(player.x - (m.x + Math.sin(m.yaw) * ALMS_STAND), player.z - (m.z + Math.cos(m.yaw) * ALMS_STAND)); if (d < 1.5 && d < bestD) { best = { ...ALMS_PLACE, monk: m }; bestD = d; } }
   for (const s of boards) { const d = Math.hypot(player.x - s.x, player.z - s.z); if (d < 1.9 && d < bestD) { best = { ...PLACES.find((p) => p.id === "learn"), stone: s.i, board: true }; bestD = d; } }
@@ -5191,7 +5283,7 @@ document.fonts.load("64px Itim").then(() => document.fonts.load("36px Mali")).ca
 });
 camYaw = 0; camera.position.set(0, 8, 105);
 restoreSpot(); // back from a page of the site: stand where you were
-if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, meal, setMealTime: (v) => { mealForce = v; }, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, almsScene, almsShow, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, gardenSpots, paths, floors, ponds, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startKathin, kathinSpots, feed, startFeed, fishes, food, onBridge, merit, startMerit, meritHere, broom, fallenLeaves, can, waterPots, startWater, altars, gildImage, bodhiBands, lane, novice, birds, cat, rain, petals, catShow, catPlan, pet, startPetDog, startPetCat, petStroke, look: (eye, at) => { camera.position.set(...eye); camera.lookAt(...at); if (composer) composer.render(); else renderer.render(scene, camera); }, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
+if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, meal, setMealTime: (v) => { mealForce = v; }, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, almsScene, almsShow, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, gardenSpots, paths, floors, ponds, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startKathin, kathinSpots, feed, startFeed, fishes, food, onBridge, merit, startMerit, meritHere, broom, fallenLeaves, can, waterPots, startWater, fold, startFold, foldPetal, altars, gildImage, bodhiBands, lane, novice, birds, cat, rain, petals, catShow, catPlan, pet, startPetDog, startPetCat, petStroke, look: (eye, at) => { camera.position.set(...eye); camera.lookAt(...at); if (composer) composer.render(); else renderer.render(scene, camera); }, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
 Promise.race([Promise.all(propJobs), new Promise((r) => setTimeout(r, 7000))]).then(() => {
   $("loading").hidden = true;
   canvas.focus();
