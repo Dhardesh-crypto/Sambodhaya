@@ -2695,7 +2695,7 @@ function kraapState(t) {
 // the high wai and three bows, forehead and palms to the floor (the kraap above). No chant text is shown.
 // keyframes as the kraap's, plus: [.., holding the tray, raised to the forehead, set on the platform, moved back]
 const KATHIN_NEAR = 0.6, KATHIN_RELEASE = 4.65, KATHIN_BACK = 4.7; // kneel this far from the platform edge to reach it
-const BLESS_DUR = 15.0; let KATHIN_BLESS = [0, 0]; // the blessing with holy water: as long as the recited verse; when (set with the keys)
+const BLESS_DUR = 11.5; let KATHIN_BLESS = [0, 0]; // the blessing with holy water: as long as the recited verse; when (set with the keys)
 const BW = 6 / BLESS_DUR; // the gestures' own pace (each dip, flick, reach) in parts of the blessing: they were made for a 6-second one
 const KATHIN_KEYS = (() => {
   const k = [
@@ -2917,7 +2917,7 @@ function startKraap() {
 // places it in the bowl (bending a little, his eyes on the bowl), lowers his hands and then gives the high wai.
 // The monk leans in slightly to receive. Posed on the skeleton, like the wai.
 const alms = { t: -1, m: null, spot: null, faceYaw: 0, item: null, placed: false };
-const ALMS_DUR = 4.0, ALMS_RELEASE = 3.05, ALMS_BLESS = 14.2; // (the high wai is held through the monk's blessing, 13 s)
+const ALMS_DUR = 4.0, ALMS_RELEASE = 3.05, ALMS_BLESS = 11.4; // (the high wai is held through the monk's blessing, 10.4 s)
 function almsState(t) {
   return {
     hold: smooth(0.4, 1.0, t) * (1 - smooth(3.3, 3.9, t)),   // the rice in both hands
