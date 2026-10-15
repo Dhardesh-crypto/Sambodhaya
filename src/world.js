@@ -4136,6 +4136,16 @@ let promptRest = null, promptAway = false;
 // on touch screens the prompt sits just under the top buttons, however many rows they wrap to
 const placePrompt = () => { const hud = document.querySelector(".hud-top"); if (hud) document.documentElement.style.setProperty("--prompt-top", Math.round(hud.getBoundingClientRect().bottom + 8) + "px"); };
 addEventListener("resize", placePrompt); placePrompt();
+// the top buttons: the main three and ☰ stay; the menu opens the rest, and folds again after a choice
+// or a tap on the temple (remembered on this device)
+function foldMenu(fold) {
+  $("hud-tools").classList.toggle("folded", fold); $("btn-menu").setAttribute("aria-expanded", String(!fold));
+  write("menu-open", !fold); placePrompt();
+}
+foldMenu(!read("menu-open", false));
+$("btn-menu").addEventListener("click", () => foldMenu(!$("hud-tools").classList.contains("folded")));
+$("hud-tools").addEventListener("click", (e) => { const b = e.target.closest(".chip"); if (b && !b.classList.contains("pin") && !b.hasAttribute("aria-pressed")) foldMenu(true); });
+canvas.addEventListener("pointerdown", () => { if (!$("hud-tools").classList.contains("folded")) foldMenu(true); });
 function showPrompt(p) {
   const el = $("prompt");
   if (!p) { el.hidden = true; return; }

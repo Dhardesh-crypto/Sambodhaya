@@ -33,6 +33,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .hud-top > * { pointer-events: auto; }
 .brand { font-family: var(--display); font-size: 1.15rem; padding: 6px 12px; text-decoration: none; color: var(--ink); white-space: nowrap; }
 .hud-tools { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.hud-tools.folded > :not(.pin) { display: none; } /* the menu (☰) holds the rest, out of the way of the temple */
+#btn-menu[aria-expanded="true"] { background: var(--gold); }
 .proto { position: fixed; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); font-size: .75rem; padding: 3px 12px; background: #fff6dc; border: 1.5px dashed #d9b75a; border-radius: 999px; z-index: 4; white-space: nowrap; max-width: calc(100% - 20px); overflow: hidden; text-overflow: ellipsis; }
 
 /* proximity prompt */
@@ -127,10 +129,10 @@ button { font: inherit; color: inherit; cursor: pointer; }
 
 <div class="hud-top">
   <a class="brand panel" href="index.html">☸ วัดสัมโพธายะ</a>
-  <div class="hud-tools">
-    <button class="chip" id="btn-places">🗺️ <span class="label" data-th="ที่ต่าง ๆ ในวัด" data-en="Places">ที่ต่าง ๆ ในวัด</span></button>
-    <button class="chip" id="btn-quest">📜 <span class="label" data-th="ภารกิจ" data-en="Quests">ภารกิจ</span></button>
-    <button class="chip" id="btn-passport">📖 <span class="label" data-th="สมุดตรา" data-en="Passport">สมุดตรา</span></button>
+  <div class="hud-tools folded" id="hud-tools">
+    <button class="chip pin" id="btn-places">🗺️ <span class="label" data-th="ที่ต่าง ๆ ในวัด" data-en="Places">ที่ต่าง ๆ ในวัด</span></button>
+    <button class="chip pin" id="btn-quest">📜 <span class="label" data-th="ภารกิจ" data-en="Quests">ภารกิจ</span></button>
+    <button class="chip pin" id="btn-passport">📖 <span class="label" data-th="สมุดตรา" data-en="Passport">สมุดตรา</span></button>
     <button class="chip" id="btn-avatar">🧍 <span class="label" data-th="ตัวละครของฉัน" data-en="My avatar">ตัวละครของฉัน</span></button>
     <button class="chip" id="btn-quality">✨ <span class="label">ภาพ: ละเอียด</span></button>
     <button class="chip" id="btn-wai">🙏 <span class="label" data-th="ไหว้" data-en="Wai">ไหว้</span></button>
@@ -143,6 +145,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
     <a class="chip" href="index.html?from=3d#feedback" style="text-decoration:none">💬 <span class="label" data-th="แจ้งปัญหา" data-en="Feedback">แจ้งปัญหา</span></a>
     <button class="chip" id="btn-help">❔</button>
     <a class="chip" href="index.html#exit" style="text-decoration:none">🚪 <span class="label" data-th="ออกจากวัด" data-en="Leave">ออกจากวัด</span></a>
+    <button class="chip pin" id="btn-menu" aria-expanded="false" aria-controls="hud-tools">☰ <span class="label" data-th="เมนู" data-en="Menu">เมนู</span></button>
   </div>
 </div>
 
