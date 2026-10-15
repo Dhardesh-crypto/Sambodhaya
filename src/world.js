@@ -2769,6 +2769,127 @@ function recite(url, at, inside, text = null, length = 11) {
     clearTimeout(subtitleOff); subtitleOff = setTimeout(() => { el.hidden = true; }, ((secs || length) + 0.8) * 1000);
   });
 }
+/* ---------------- the monks' meal (ถวายภัตตาหาร) ---------------- */
+// Monks eat only between dawn and noon: in the main hall the three teachers have their morning meal (7:00–9:00) and
+// the late-morning meal, ฉันเพล (11:00–12:00), where they sit. Each meal, a tray of food for each monk waits on a low
+// table on the floor before the platform. The child offers each one (ประเคน): kneeling, lifting the tray with both
+// hands, and the monk receiving it with both hands (a girl sets it on the cloth he lays out to receive it: women do
+// not hand things to a monk directly). When all three are offered the child stays kneeling with a wai and the senior
+// monk gives the blessing; then the monks eat, quietly and slowly, the plate in the left hand and a spoon in the right.
+const MEAL_HOURS = [[7, 9], [11, 12]];
+let mealForce = null; // (for testing: true or false overrides the clock)
+const mealTime = () => { if (mealForce != null) return mealForce; const h = new Date().getHours(); return MEAL_HOURS.some(([a, b]) => h >= a && h < b); };
+const MEAL_RELEASE = 4.3, MEAL_TABLE = { x: 3.6, back: 2.6 }; // when the monk takes it; the low table: across, and before the platform edge
+// keys as the Kathina's: [t, kneel, chest wai, high wai, floor, bow, tray, lift, place, back, reach]
+const mealKeys = (last) => {
+  const k = [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0.6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [2.2, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0],            // kneeling, the tray in both hands
+    [2.9, 1, 0, 0, 0, 0, 1, 0.35, 0, 0, 0],         // lifted a little, offered with respect
+    [3.9, 1, 0, 0, 0, 0, 1, 0.35, 1, 0, 0], [4.6, 1, 0, 0, 0, 0, 1, 0.35, 1, 0, 0], // to the monk's hands (or onto his cloth)
+    [5.3, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0], [6.0, 1, 1, 0, 0, 0.25, 0, 0, 0, 0, 0], [6.6, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0]]; // a wai, the head bowed
+  let t = 6.6;
+  if (last) { k.push([t + 0.6, 1, 1, 0, 0, 0.14, 0, 0, 0, 0, 0], [t + 0.6 + 11.6, 1, 1, 0, 0, 0.14, 0, 0, 0, 0, 0]); t += 12.2; } // kneeling for the blessing
+  k.push([t + 1.5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+  return k;
+};
+const riceMatM = S(0xf6f1e4, { roughness: 0.9 }), plateMat = S(0xf4efe6, { roughness: 0.35 }), curryMat = S(0xc7781f, { roughness: 0.7 }), greensMat = S(0x5b8a2f, { roughness: 0.8 }), soupMat = S(0xd9a441, { roughness: 0.3 });
+const glassMat = new THREE.MeshStandardMaterial({ color: 0xdff1f7, roughness: 0.05, transparent: true, opacity: 0.55 });
+function mealTray() { // a round tray: a plate of rice, two dishes, a bowl of soup, a glass of water
+  const g = new THREE.Group();
+  add(new THREE.CylinderGeometry(0.3, 0.3, 0.03, 28), MAT.gold, 0, 0.015, 0, g);
+  const dish = (x, z, r, mat, h = 0.05) => { add(new THREE.CylinderGeometry(r, r * 0.75, h, 18), plateMat, x, 0.03 + h / 2, z, g); add(new THREE.CylinderGeometry(r * 0.85, r * 0.85, 0.012, 18), mat, x, 0.03 + h - 0.004, z, g, false); };
+  add(new THREE.CylinderGeometry(0.12, 0.09, 0.025, 20), plateMat, -0.08, 0.043, 0.06, g); // the plate of rice
+  const rice = add(new THREE.SphereGeometry(0.07, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), riceMatM, -0.08, 0.055, 0.06, g); rice.scale.y = 0.6;
+  dish(0.13, 0.1, 0.07, curryMat); dish(0.12, -0.11, 0.065, greensMat); dish(-0.12, -0.13, 0.06, soupMat, 0.07);
+  add(new THREE.CylinderGeometry(0.035, 0.03, 0.11, 12), glassMat, 0.0, 0.085, -0.17, g);
+  g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  return g;
+}
+const mealCloth = () => { const m = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.012, 0.4), S(0xc9a46a, { roughness: 0.95 })); m.receiveShadow = true; return m; };
+const spoonGeo = new THREE.BoxGeometry(0.012, 0.012, 0.13), spoonMat = S(0xd8dce2, { metalness: 0.9, roughness: 0.25 });
+const meal = { on: false, table: null, blessed: false, eatAt: 0 };
+const MEAL_PLACE = { id: "meal", icon: "🍚", th: "ถวายภัตตาหาร", en: "Offer the meal", sub: ["คุกเข่า ยกสำรับประเคนพระด้วยสองมือ", "Kneel, and offer the tray with both hands"] };
+function mealSet(on) {
+  const h = salas.learn; if (!h || !h.teachers || meal.on === on) return;
+  meal.on = on; meal.blessed = false;
+  for (const s of h.teachers) { if (s.meal) { [s.meal.tray, s.meal.cloth, s.meal.plate, s.meal.spoon].forEach((o) => o && o.parent && o.parent.remove(o)); s.meal = null; } }
+  if (meal.table) { h.g.remove(meal.table); meal.table = null; }
+  if (!on) return;
+  // the low table with the three trays, on the floor before the platform
+  const s0 = h.teachers[0], tz = s0.edge + MEAL_TABLE.back, fy = s0.top - 0.06 - 0.6;
+  const t = new THREE.Group(); t.position.set(MEAL_TABLE.x, fy, tz); h.g.add(t); meal.table = t;
+  add(new THREE.BoxGeometry(1.9, 0.06, 0.6), MAT.lacquer, 0, 0.3, 0, t); [-0.85, 0.85].forEach((x) => [-0.25, 0.25].forEach((z) => add(new THREE.BoxGeometry(0.06, 0.3, 0.06), MAT.lacquer, x, 0.15, z, t)));
+  h.teachers.forEach((s, i) => { const tray = mealTray(); tray.position.set(-0.6 + i * 0.6, 0.33, 0); t.add(tray); s.meal = { tray, offered: false, eating: false }; });
+}
+const mealLeft = () => (salas.learn.teachers || []).filter((s) => s.meal && !s.meal.offered).length;
+function startMealOffer(h, s) {
+  if (kraap.t >= 0 || alms.t >= 0 || !s.meal || s.meal.offered) return;
+  if (sit.on) { sit.on = false; sit.rise = 0; sit.faceYaw = null; }
+  wai.t = -1;
+  const girl = phabphiap(), last = mealLeft() === 1, near = greetSpot(h, s), [mx, mz] = h.toWorld(s.lx, s.lz);
+  const tray = s.meal.tray; tray.parent.remove(tray); scene.add(tray); tray.visible = false;
+  let cloth = null;
+  if (girl) { cloth = mealCloth(); cloth.position.set(s.lx, s.top + 0.01, s.edge - 0.22); h.g.add(cloth); s.meal.cloth = cloth; hint("women"); }
+  // where the tray goes: into his hands, held out over the platform edge (or down onto his cloth)
+  const placeAt = girl ? new THREE.Vector3(s.lx, s.top + TRAY_GRIP - 0.17, s.edge - 0.22) : new THREE.Vector3(s.lx, s.top + 0.42, s.edge - 0.12);
+  kraap.merit = null; kraap.kathin = null; kraap.greet = false;
+  kraap.meal = { h, monk: s, tray, released: false, near, far: near, placeAt, girl, last, release: MEAL_RELEASE };
+  kraap.keys = mealKeys(last); kraap.dur = kraap.keys[kraap.keys.length - 1][0];
+  kraap.spot = near; kraap.faceYaw = Math.atan2(mx - near.x, mz - near.z); kraap.floorY = groundAt(near.x, near.z); kraap.t = 0;
+  if (last) kraap.recite = { at: 7.2, url: "audio/bless-hall.mp3", from: h.senior.rig ? h.senior.rig.B.Head.getWorldPosition(new THREE.Vector3()) : h.senior.lean.getWorldPosition(new THREE.Vector3()), inside: true, secs: 11.0, blessing: true };
+  if (player.mixer) playClip("idle", 0.4);
+}
+// after he lets go: the monk holds it a moment, then sets it down before him (and his cloth goes with it)
+function mealOfferStep() {
+  const k = kraap.meal; if (!k) return;
+  const t = kraap.t, s = k.monk;
+  if (!k.released && t >= k.release) {
+    k.released = true; k.h.g.attach(k.tray); k.from = k.tray.position.clone(); s.meal.offered = true; questEvent("mealOffer");
+    if (mealLeft() === 0) questEvent("mealOfferAll");
+  }
+  if (k.released) {
+    const u = smooth(k.release + 0.9, k.release + 1.8, t), to = new THREE.Vector3(s.lx - 0.05, s.top + 0.0, s.edge - 0.32);
+    k.tray.position.copy(k.from).lerp(to, u); k.tray.rotation.set(0, 0, 0);
+    if (s.meal.cloth) s.meal.cloth.position.set(k.tray.position.x, s.top + 0.006, k.tray.position.z); // the cloth under it
+  }
+}
+function mealEnded(k) { if (k.last) { meal.blessed = true; meal.eatAt = 1.0; questEvent("mealBless"); } }
+// Eating: the plate of rice in his left hand before his chest, the spoon in his right going from plate to mouth and
+// back, slowly, with rests between mouthfuls.
+const EAT_CYCLE = 7.5;
+function teacherEat(s, R, shape, fwd, left, up, dt) {
+  const M = s.meal; if (!M || !M.offered || !meal.blessed || meal.eatAt > 0) return;
+  if (!M.plate) {
+    M.plate = new THREE.Group(); add(new THREE.CylinderGeometry(0.12, 0.09, 0.025, 20), plateMat, 0, 0, 0, M.plate);
+    const r = add(new THREE.SphereGeometry(0.07, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), riceMatM, 0, 0.01, 0, M.plate); r.scale.y = 0.55; scene.add(M.plate);
+    M.spoon = new THREE.Mesh(spoonGeo, spoonMat); scene.add(M.spoon); M.t = Math.random() * EAT_CYCLE;
+  }
+  M.t += dt; const c = (M.t % EAT_CYCLE) / EAT_CYCLE, B = R.B;
+  const chest = B.Spine.getWorldPosition(new THREE.Vector3()), head = B.Head.getWorldPosition(new THREE.Vector3());
+  const plateAt = chest.clone().addScaledVector(fwd, 0.32).addScaledVector(up, -0.32).addScaledVector(left, -0.02);
+  const mouth = head.clone().addScaledVector(fwd, 0.12).addScaledVector(up, -0.05);
+  // the left hand under the plate, palm up
+  const hl = shape.Left, QL = basisQuat(hl.finger, hl.palm, left.clone().multiplyScalar(-1).addScaledVector(fwd, 0.5).normalize(), up);
+  armTo(B, "Left", plateAt.clone().addScaledVector(up, -0.03).addScaledVector(left, 0.07), QL, left.clone().addScaledVector(up, -0.6), 1);
+  M.plate.position.copy(plateAt); M.plate.quaternion.copy(R.holder.getWorldQuaternion(_q1));
+  // the right hand: to the plate (scoop), up to the mouth, a pause, back; then rests a while
+  const toMouth = smooth(0.12, 0.3, c) * (1 - smooth(0.42, 0.58, c));
+  const grip = plateAt.clone().addScaledVector(up, 0.06).addScaledVector(left, -0.05).lerp(mouth.clone().addScaledVector(fwd, 0.05), toMouth);
+  const hr = shape.Right, fingers = fwd.clone().addScaledVector(left, 0.5).addScaledVector(up, -0.2 + 0.5 * toMouth).normalize(), palm = up.clone().negate().addScaledVector(fingers, fingers.dot(up)).normalize();
+  armTo(B, "Right", grip.clone().addScaledVector(fingers, -0.08), basisQuat(hr.finger, hr.palm, fingers, palm), left.clone().multiplyScalar(-1).addScaledVector(up, -0.7), 1);
+  turnBone(B.Head, _q2.setFromAxisAngle(left, 0.12 * (1 - toMouth))); // eyes on the plate, up to the spoon
+  M.spoonAt = { fingers };
+}
+function teacherEatAfter(s, R, shape) { // the spoon in the right hand, once the bones are set
+  const M = s.meal; if (!M || !M.spoon || !M.spoonAt) return;
+  const hand = R.B.RightHand.getWorldPosition(new THREE.Vector3()), fq = R.B.RightHand.getWorldQuaternion(new THREE.Quaternion());
+  const fdir = shape.Right.finger.clone().applyQuaternion(fq).normalize();
+  M.spoon.position.copy(hand).addScaledVector(fdir, 0.1); M.spoon.lookAt(hand.clone().addScaledVector(fdir, 0.3));
+}
+function mealStep(dt) {
+  const on = mealTime(); if (on !== meal.on) mealSet(on);
+  if (meal.blessed && meal.eatAt > 0) meal.eatAt -= dt;
+}
 /* ---------------- the teachers speak ---------------- */
 // A child greets a seated monk kneeling with a wai (always, before a seated monk). He looks up at the child and says a
 // few words: a different line each time, in turn (the lines checked by a former monk in Thailand). The child bows the
@@ -2863,15 +2984,16 @@ function teachersStep(dt) {
 function teacherStep(h, s, dt) {
   const R = s.rig; R.B.LeftForeArmTwist.quaternion.identity(); R.B.RightForeArmTwist.quaternion.identity(); R.holder.updateMatrixWorld(true);
   const k = s === h.senior && kraap.kathin && kraap.kathin.monk === s ? kraap.kathin : null, t = k ? kraap.t : -1;
+  const mk = kraap.meal && kraap.meal.monk === s ? kraap.meal : null, rk = k || mk, rel = k ? KATHIN_RELEASE : mk ? mk.release : 0;
   const shape = handShape(R.obj), RB = R.B; if (!shape || !RB.RightArm) return;
   const g = h.g, toW = (v) => g.localToWorld(v.clone()), dirW = (v) => v.clone().transformDirection(g.matrixWorld);
   const fwd = dirW(new THREE.Vector3(0, 0, 1)), left = dirW(new THREE.Vector3(1, 0, 0)), up = new THREE.Vector3(0, 1, 0);
-  waiBegin(RB); teacherSit(R, s); teacherGaze(s, R, dt, fwd, left, up);
+  waiBegin(RB); teacherSit(R, s); teacherGaze(s, R, dt, fwd, left, up); teacherEat(s, R, shape, fwd, left, up, dt);
   if (s.talking > 0) { s.talking -= dt; s.talkT = (s.talkT || 0) + dt; turnBone(RB.Head, _q2.setFromAxisAngle(left, -0.1 + 0.035 * Math.sin(s.talkT * 4.2) * Math.sin(s.talkT * 1.3))); } // looking up at the child as he speaks
   // receiving the robe: both hands reach out and rest on the tray's rim a moment
-  const recv = k ? smooth(KATHIN_RELEASE - 0.2, KATHIN_RELEASE + 0.4, t) * (1 - smooth(KATHIN_RELEASE + 1.4, KATHIN_RELEASE + 2.1, t)) : 0;
-  if (recv > 0.001 && k.tray) {
-    const c = k.tray.getWorldPosition(new THREE.Vector3()).addScaledVector(up, 0.22);
+  const rt = rk ? kraap.t : -1, recv = rk ? smooth(rel - 0.6, rel, rt) * (1 - smooth(rel + 1.4, rel + 2.1, rt)) : 0;
+  if (recv > 0.001 && rk.tray) {
+    const c = rk.tray.getWorldPosition(new THREE.Vector3()).addScaledVector(up, mk ? 0.06 : 0.22);
     [["Left", 1], ["Right", -1]].forEach(([sd, sg]) => {
       const hs = shape[sd], Q = basisQuat(hs.finger, hs.palm, fwd.clone().addScaledVector(up, -0.4).normalize(), up.clone().negate().addScaledVector(left, -sg * 0.3).normalize());
       armTo(RB, sd, c.clone().addScaledVector(left, sg * 0.2).addScaledVector(fwd, -0.2 * R.k / 1.94), Q, left.clone().multiplyScalar(sg).addScaledVector(up, -0.6), recv);
@@ -2898,6 +3020,7 @@ function teacherStep(h, s, dt) {
   spreadTwist(RB, "Left"); spreadTwist(RB, "Right");
   waiMark(RB);
   R.obj.updateMatrixWorld(true);
+  teacherEatAfter(s, R, shape);
   if (Bl && Bl.handHeld) { // the whisk sits in his hand: its grip where his fingers close
     const hand = RB.RightHand.getWorldPosition(new THREE.Vector3()), hs = shape.Right;
     const fq = RB.RightHand.getWorldQuaternion(new THREE.Quaternion()), fdir = hs.finger.clone().applyQuaternion(fq).normalize(), pdir = hs.palm.clone().applyQuaternion(fq).normalize();
@@ -3604,11 +3727,11 @@ function poseKraap(model, B, st) {
   const shape = handShape(model); if (!shape) return;
   // Kathina: the tray held in both hands at its rim, raised to the forehead or set on the platform edge
   let trayT = null;
-  if (st.tray > 0.001 && kraap.kathin) {
-    const k = kraap.kathin, s = k.monk;
+  if (st.tray > 0.001 && (kraap.kathin || kraap.meal)) {
+    const k = kraap.kathin || kraap.meal, s = k.monk;
     const chestP = B.Spine02.getWorldPosition(new THREE.Vector3()).addScaledVector(fwd, 0.45 * scale).addScaledVector(up, -0.25 * scale);
     const browP = B.Head.getWorldPosition(new THREE.Vector3()).addScaledVector(up, 0.12 * scale).addScaledVector(fwd, (0.3 + TRAY_HALF) * scale);
-    const placeP = k.h.g.localToWorld(new THREE.Vector3(s.lx, s.top + TRAY_GRIP, s.edge - 0.24)); // onto the platform, before the monk's cushion
+    const placeP = k.h.g.localToWorld(k.placeAt ? k.placeAt.clone() : new THREE.Vector3(s.lx, s.top + TRAY_GRIP, s.edge - 0.24)); // onto the platform, before the monk's cushion (or a meal tray into his hands)
     const grip = chestP.lerp(browP, st.lift).lerp(placeP, st.place);
     if (!k.released) { k.tray.position.copy(grip).addScaledVector(up, -TRAY_GRIP); k.tray.rotation.set(0, player.yaw, 0); k.tray.visible = st.tray > 0.3; }
     const F = fwd.clone().addScaledVector(up, -0.3 + 0.5 * st.lift).normalize();
@@ -3948,7 +4071,7 @@ function showPrompt(p) {
   if (!p) { el.hidden = true; return; }
   $("prompt-name").textContent = p.icon + " " + placeName(p);
   $("prompt-sub").textContent = p.stone != null ? (p.board ? tx("ป้ายเรื่องที่ ", "Story board ") : tx("เรื่องที่ ", "Story ")) + (p.stone + 1) : p.sub[L === "en" ? 1 : 0];
-  $("prompt-go").textContent = p.id === "bell" ? tx("ตี", "Strike") : p.id === "donate" ? tx("เปิด", "Open") : p.id === "alms" ? tx("ใส่บาตร", "Offer") : p.id === "fish" ? tx("ให้อาหาร", "Feed") : p.merit ? tx("ทำบุญ", "Offer") : p.id === "broom" ? (broom.held ? tx("วาง", "Put back") : tx("หยิบ", "Pick up")) : p.id === "kathin" ? tx("ถวาย", "Offer") : p.id === "greet" ? tx("ไหว้", "Greet") : p.id === "cat" ? tx("ลูบ", "Pet") : tx("เข้า", "Visit");
+  $("prompt-go").textContent = p.id === "bell" ? tx("ตี", "Strike") : p.id === "donate" ? tx("เปิด", "Open") : p.id === "alms" ? tx("ใส่บาตร", "Offer") : p.id === "fish" ? tx("ให้อาหาร", "Feed") : p.merit ? tx("ทำบุญ", "Offer") : p.id === "broom" ? (broom.held ? tx("วาง", "Put back") : tx("หยิบ", "Pick up")) : p.id === "kathin" ? tx("ถวาย", "Offer") : p.id === "greet" ? tx("ไหว้", "Greet") : p.id === "meal" ? tx("ประเคน", "Offer") : p.id === "cat" ? tx("ลูบ", "Pet") : tx("เข้า", "Visit");
   el.hidden = false;
 }
 $("prompt-go").addEventListener("click", () => near && openPlace(near));
@@ -4008,6 +4131,7 @@ function openPlace(p) {
   if (p.id === "broom") { broom.held = !broom.held; near = null; return; }
   if (p.id === "kathin") { startKathin(p.hall); return; }
   if (p.id === "greet") { startGreet(p.hall, p.monk); return; }
+  if (p.id === "meal") { startMealOffer(p.hall, p.monk); return; }
   if (p.stone != null) {
     const n = p.stone + 1;
     openDialog(`👣 ${n} · ${esc(L === "en" ? JOURNEY[p.stone][1] : JOURNEY[p.stone][0])}`,
@@ -4053,6 +4177,11 @@ const QUESTS = [
   { id: "alms", icon: "🍚", name: ["ใส่บาตรตอนเช้า", "Giving alms in the morning"], morning: true, steps: [
     { ev: "giveAlms", t: ["ใส่ข้าวลงในบาตรของพระ", "Put rice into a monk's bowl"], why: ["พระฉันอาหารที่ญาติโยมถวาย และฉันก่อนเที่ยงวันเท่านั้น", "Monks eat only what is offered to them, and only before midday."] },
     { ev: "almsBless", t: ["คุกเข่าพนมมือรับพร", "Kneel with a wai for the blessing"], why: ["เมื่อพระให้พร เรานั่งคุกเข่า พนมมือ และตั้งใจฟังด้วยความเคารพ", "When the monk gives the blessing, we kneel with our hands in a wai and listen with respect."] },
+  ] },
+  { id: "meal", icon: "🍛", name: ["ถวายภัตตาหารพระ", "The monks' meal"], mealHours: true, steps: [
+    { ev: "mealOffer", t: ["ประเคนสำรับอาหารแด่พระด้วยสองมือ", "Offer a tray of food to a monk with both hands"], why: ["การประเคนคือการยื่นของถวายพระด้วยความเคารพ พระจึงรับไปฉันได้", "Offering (ประเคน) means giving with respect: a monk eats only what has been offered to him."] },
+    { ev: "mealOfferAll", t: ["ถวายให้ครบทั้งสามรูป", "Offer a tray to each of the three monks"], why: ["พระฉันได้เฉพาะช่วงเช้าถึงเที่ยงวัน เราจึงถวายอาหารให้ทันเวลา", "Monks may eat only from dawn until noon, so the food is offered in time."] },
+    { ev: "mealBless", t: ["คุกเข่าพนมมือรับพร", "Kneel with a wai for the blessing"], why: ["เมื่อถวายอาหารแล้ว พระให้พรก่อนลงมือฉัน", "When the food has been offered, the monks give a blessing before they eat."] },
   ] },
   { id: "merit", icon: "🪷", name: ["ทำบุญในศาลา", "Making merit in the halls"], steps: [
     { ev: "offer", t: ["ถวายธูปเทียนดอกไม้หน้าพระพุทธรูป", "Offer incense, candles and a lotus before the Buddha"], why: ["เราถวายธูปเทียนดอกไม้ เพื่อบูชาพระพุทธ พระธรรม และพระสงฆ์", "We offer incense, candles and a lotus to honour the Buddha, the Dhamma and the Sangha."] },
@@ -4112,7 +4241,7 @@ function renderQuest() {
 function openQuests() {
   const items = QUESTS.map((q) => {
     const done = questState.done.includes(q.id), on = questState.active === q.id;
-    const note = q.morning && !almsTime() ? `<br><span class="quiet">${esc(tx("พระบิณฑบาตเฉพาะตอนเช้า 6:00–11:00 กลับมาทำภารกิจนี้ตอนเช้านะ", "Monks walk the alms round only in the morning, 6:00–11:00: come back in the morning for this one."))}</span>` : "";
+    const note = q.mealHours && !mealTime() ? `<br><span class="quiet">${esc(tx("พระฉันเช้า 7:00–9:00 และฉันเพล 11:00–12:00 กลับมาตอนนั้นนะ", "The monks eat 7:00–9:00 and 11:00–12:00: come back then."))}</span>` : q.morning && !almsTime() ? `<br><span class="quiet">${esc(tx("พระบิณฑบาตเฉพาะตอนเช้า 6:00–11:00 กลับมาทำภารกิจนี้ตอนเช้านะ", "Monks walk the alms round only in the morning, 6:00–11:00: come back in the morning for this one."))}</span>` : "";
     return `<li><button data-quest="${q.id}"><span class="ic">${q.icon}</span><span><strong>${esc(tx(...q.name))}</strong>${done ? " ✓" : ""}${on ? ` <span class="quiet">(${esc(tx("กำลังทำ", "in progress"))})</span>` : ""}${note}</span></button></li>`;
   }).join("");
   openDialog(tx("📜 ภารกิจ", "📜 Quests"), `<p>${esc(tx("เลือกภารกิจหนึ่งอย่าง แล้วทำตามขั้นตอนเหมือนที่วัดจริง ทำขั้นไหนก่อนก็ได้", "Choose a quest and do each step as you would at a real temple, in any order."))}</p>
@@ -4300,7 +4429,7 @@ function tick() {
 // one step of the world: movement, animation, camera and the picture
 function frame(dt) {
   timeStep(dt); placeLampLights(dt);
-  feedStep(dt); fishStep(dt); meritStep(dt); lifeStep(dt); eyesStep(dt); questsStep(dt); petStep(dt); petalStep(dt); rainStep(dt); dropsStep(dt);
+  feedStep(dt); fishStep(dt); meritStep(dt); lifeStep(dt); eyesStep(dt); questsStep(dt); mealStep(dt); petStep(dt); petalStep(dt); rainStep(dt); dropsStep(dt);
   if (broom.held && (alms.t >= 0 || kraap.t >= 0 || feed.t >= 0 || shoes.t >= 0 || sit.on || merit.t >= 0)) putBroomBack(); // hands needed elsewhere
   monkTime += dt;
   if (!settings.calmMotion) for (const m of monkFigures) { const b = Math.sin(monkTime * 1.25 + m.ph); m.o.scale.set(1 + b * 0.004, 1 + b * 0.008, 1 + b * 0.004); } // slow breathing
@@ -4316,14 +4445,14 @@ function frame(dt) {
     fx = fz = 0;
     const kBefore = kraap.t;
     kraap.t += dt;
-    if (kraap.recite && kraap.t >= kraap.recite.at) { const r = kraap.recite; recite(r.url, r.from, !!r.inside, r.text || null, r.secs || 10.4); if (r.who) r.who.talking = r.secs; kraap.recite = null; }
-    if (kraap.t > (kraap.keys ? kraap.dur : KRAAP_DUR)) { kraap.greet = false; kraapEnded(kraap.kathin ? "kathinDone" : kraap.merit ? null : kraap.keys === ALMS_KNEEL_KEYS ? "almsBless" : !kraap.keys ? "kraap" : null); kraap.t = -1; kraap.touch = null; kraap.keys = null; if (kraap.kathin) kraap.kathin.monk.lean.rotation.x = 0; endKneelingOffering(); }
-    const mv = kraap.kathin || kraap.merit;
+    if (kraap.recite && kraap.t >= kraap.recite.at) { const r = kraap.recite; recite(r.url, r.from, !!r.inside, r.blessing ? null : r.text || null, r.secs || 10.4); if (r.who) r.who.talking = r.secs; kraap.recite = null; }
+    if (kraap.t > (kraap.keys ? kraap.dur : KRAAP_DUR)) { kraap.greet = false; if (kraap.meal) { mealEnded(kraap.meal); kraap.meal = null; } else kraapEnded(kraap.kathin ? "kathinDone" : kraap.merit ? null : kraap.keys === ALMS_KNEEL_KEYS ? "almsBless" : !kraap.keys ? "kraap" : null); kraap.t = -1; kraap.touch = null; kraap.keys = null; if (kraap.kathin) kraap.kathin.monk.lean.rotation.x = 0; endKneelingOffering(); }
+    const mv = kraap.kathin || kraap.merit || kraap.meal;
     if (mv && kraap.keys && kraap.t >= 0) { // Kathina and kneeling offerings: kneel close to offer, then move back on the knees to bow
       const b = kraapState(kraap.t).back;
       kraap.spot = { x: mv.near.x + (mv.far.x - mv.near.x) * b, z: mv.near.z + (mv.far.z - mv.near.z) * b };
       if (kraap.t >= 0.8) { player.x = kraap.spot.x; player.z = kraap.spot.z; }
-      if (kraap.kathin) kathinStep(); else kneelStep(kBefore, kraap.t);
+      if (kraap.kathin) kathinStep(); else if (kraap.meal) mealOfferStep(); else kneelStep(kBefore, kraap.t);
     }
     if (kraap.spot && kraap.t >= 0 && kraap.t < 0.8) { player.x += (kraap.spot.x - player.x) * Math.min(1, dt * 8); player.z += (kraap.spot.z - player.z) * Math.min(1, dt * 8); }
     if (kraap.faceYaw != null) { let dy = kraap.faceYaw - player.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); player.yaw += dy * Math.min(1, dt * 8); }
@@ -4490,7 +4619,7 @@ function frame(dt) {
   if (Math.hypot(player.x - BELL[0], player.z - BELL[1]) < 4.4 && 3 < bestD) { best = BELL_PLACE; bestD = 3; } // reachable from the road
   { const d = Math.hypot(player.x - DONATE.x, player.z - (DONATE.z + 0.6)); if (d < 2.4 && d < bestD) { best = DONATE_PLACE; bestD = d; } } // only when standing at the box
   { const h = salas.learn; if (h && h.senior && kraap.t < 0) { const sp = kathinSpots(h), d = Math.hypot(player.x - sp.near.x, player.z - sp.near.z); if (d < 1.3 && d < bestD) { best = { ...KATHIN_PLACE, hall: h }; bestD = d; } } }
-  { const h = salas.learn; if (h && h.teachers && kraap.t < 0) for (const s of h.teachers) { if (!s.rig || !TEACHER_TALK[s.name]) continue; const sp = greetSpot(h, s), d = Math.hypot(player.x - sp.x, player.z - sp.z); if (d < 0.9 && d < bestD) { best = { ...GREET_PLACE, hall: h, monk: s }; bestD = d; } } }
+  { const h = salas.learn; if (h && h.teachers && kraap.t < 0) for (const s of h.teachers) { if (!s.rig || !TEACHER_TALK[s.name]) continue; const sp = greetSpot(h, s), d = Math.hypot(player.x - sp.x, player.z - sp.z); if (d < 0.9 && d < bestD) { best = { ...(s.meal && !s.meal.offered ? MEAL_PLACE : GREET_PLACE), hall: h, monk: s }; bestD = d; } } }
   if (onBridge(player.x, player.z) && feed.t < 0 && 2.5 < bestD) { best = FISH_PLACE; bestD = 2.5; }
   if (merit.t < 0 && kraap.t < 0) { const mh = meritHere(); if (mh) { best = { ...MERIT[mh.kind].place, merit: mh }; bestD = 0.5; } } // standing at it: the offering comes first
   if (catNear() && 1.9 < bestD) { best = CAT_PLACE; bestD = 1.9; }
@@ -4537,7 +4666,7 @@ document.fonts.load("64px Itim").then(() => document.fonts.load("36px Mali")).ca
 });
 camYaw = 0; camera.position.set(0, 8, 105);
 restoreSpot(); // back from a page of the site: stand where you were
-if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, almsScene, almsShow, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, gardenSpots, paths, floors, ponds, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startKathin, kathinSpots, feed, startFeed, fishes, food, onBridge, merit, startMerit, meritHere, broom, fallenLeaves, altars, gildImage, bodhiBands, lane, novice, birds, cat, rain, petals, catShow, catPlan, pet, startPetDog, startPetCat, petStroke, look: (eye, at) => { camera.position.set(...eye); camera.lookAt(...at); if (composer) composer.render(); else renderer.render(scene, camera); }, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
+if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, meal, setMealTime: (v) => { mealForce = v; }, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, almsScene, almsShow, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, gardenSpots, paths, floors, ponds, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startKathin, kathinSpots, feed, startFeed, fishes, food, onBridge, merit, startMerit, meritHere, broom, fallenLeaves, altars, gildImage, bodhiBands, lane, novice, birds, cat, rain, petals, catShow, catPlan, pet, startPetDog, startPetCat, petStroke, look: (eye, at) => { camera.position.set(...eye); camera.lookAt(...at); if (composer) composer.render(); else renderer.render(scene, camera); }, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
 Promise.race([Promise.all(propJobs), new Promise((r) => setTimeout(r, 7000))]).then(() => {
   $("loading").hidden = true;
   canvas.focus();
