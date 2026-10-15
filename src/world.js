@@ -688,7 +688,7 @@ function shrine(h, monks = [], { gifts = false } = {}) {
   monks.forEach(([name, lx]) => {
     const rigged = gifts && TEACHER_RIGS[name]; // the teachers in the main hall are rigged
     const lean = seatMonk(rigged ? null : name, g, lx, top + 0.17, pz + SEAT_Z);
-    const seat = { lean, lx, lz: pz + SEAT_Z, top: top + 0.06, edge: pz + PD / 2 };
+    const seat = { name, lean, lx, lz: pz + SEAT_Z, top: top + 0.06, edge: pz + PD / 2 };
     if (rigged) { loadSeated(rigged, seat, name); (h.teachers = h.teachers || []).push(seat); }
     if (name === "monk-elder") { // the senior monk: he receives offerings, and blesses with holy water
       h.senior = seat;
@@ -2759,13 +2759,60 @@ const BLESSING_TEXT = () => tx(
   ["อะภิวาทะนะสีลิสสะ นิจจัง วุฑฒาปะจายิโน จัตตาโร ธัมมา วัฑฒันติ อายุ วัณโณ สุขัง พะลัง", "ผู้ที่กราบไหว้และอ่อนน้อมต่อผู้ใหญ่อยู่เป็นนิตย์ ธรรมสี่ประการย่อมเจริญแก่เขา คือ อายุ วรรณะ สุขะ พละ"],
   ["Abhivādanasīlissa niccaṃ vuḍḍhāpacāyino, cattāro dhammā vaḍḍhanti: āyu vaṇṇo sukhaṃ balaṃ", "For one who always honours and respects the elders, four things grow: long life, beauty, happiness and strength."]);
 let subtitleOff = 0;
-function recite(url, at, inside) {
+function recite(url, at, inside, text = null) {
   sound.blessing(url, at.x, at.y, at.z, inside).then((secs) => {
     const el = document.getElementById("subtitle"); if (!el) return;
-    const [pali, meaning] = BLESSING_TEXT();
-    el.innerHTML = `<span class="pali">${pali}</span><span>${meaning}</span>`; el.hidden = false;
+    if (text) el.innerHTML = `<span>${esc(text)}</span>`;
+    else { const [pali, meaning] = BLESSING_TEXT(); el.innerHTML = `<span class="pali">${pali}</span><span>${meaning}</span>`; }
+    el.hidden = false;
     clearTimeout(subtitleOff); subtitleOff = setTimeout(() => { el.hidden = true; }, ((secs || 14) + 0.8) * 1000);
   });
+}
+/* ---------------- the teachers speak ---------------- */
+// A child greets a seated monk kneeling with a wai (always, before a seated monk). He looks up at the child and says a
+// few words: a different line each time, in turn (the lines checked by a former monk in Thailand). The child bows the
+// head a little and stands. Recorded voices, heard from where he sits; his words shown beneath.
+const TEACHER_TALK = {
+  "monk-elder": { file: "senior", lines: [
+    ["เจริญพร หนูมาวัดวันนี้ ดีแล้วนะ", "Blessings to you. It is good that you came to the temple today."],
+    ["ใจที่สงบ เหมือนน้ำที่นิ่ง มองเห็นทุกอย่างได้ชัด", "A calm mind is like still water: in it you can see everything clearly."],
+    ["คิดดี พูดดี ทำดี แล้วความสุขจะตามไปเหมือนเงาตามตัว", "Think good thoughts, speak kindly, do good, and happiness follows you like your shadow."],
+    ["ก่อนนอนคืนนี้ ลองนึกถึงความดีที่ทำวันนี้สักหนึ่งอย่างนะ", "Before you sleep tonight, remember one good thing you did today."]] },
+  "monk": { file: "middle", lines: [
+    ["เจริญพร วันนี้ช่วยงานพ่อแม่แล้วหรือยัง", "Blessings. Have you helped your parents today?"],
+    ["เวลาโกรธ ลองหายใจเข้าช้า ๆ สามครั้งก่อนพูดนะ", "When you feel angry, breathe in slowly three times before you speak."],
+    ["การให้ไม่จำเป็นต้องเป็นสิ่งของ รอยยิ้มและคำพูดดี ๆ ก็เป็นการให้", "Giving doesn't have to be things: a smile and kind words are gifts too."],
+    ["ศีลข้อแรก คือไม่ทำร้ายสิ่งมีชีวิต แม้แต่มดตัวเล็ก ๆ", "The first precept is not to harm living beings, not even a tiny ant."]] },
+  "monk-young": { file: "junior", lines: [
+    ["เจริญพร ชอบอ่านหนังสือไหม ห้องสมุดของวัดมีนิทานชาดกเยอะเลย", "Blessings. Do you like reading? The temple library has many Jataka tales."],
+    ["ความเพียรเหมือนน้ำหยดลงหิน ทีละนิด แต่ไม่หยุด", "Effort is like water dripping on stone: a little at a time, but it never stops."],
+    ["พระพุทธเจ้าสอนให้คบเพื่อนดี เพราะเพื่อนดีพาเราไปในทางที่ดี", "The Buddha taught us to keep good friends, because good friends lead us on a good path."],
+    ["ลองนั่งสมาธิดูไหม แค่รู้ว่าหายใจเข้า และหายใจออก", "Would you like to try meditation? Just know: breathing in, breathing out."]] },
+};
+// each recording's length in seconds (audio/talk-<file>-<n>-<th|en>.mp3)
+const TALK_DUR = {
+  senior: { th: [4.31, 5.78, 6.29, 4.88], en: [4.58, 4.88, 7.53, 4.04] }, // Alistair
+  middle: { th: [3.05, 3.86, 5.09, 4.88], en: [2.97, 3.91, 4.42, 4.75] }, // Harrison
+  junior: { th: [5.52, 4.29, 5.74, 5.71], en: [6.61, 5.82, 5.26, 7.66] }, // Brooks
+};
+const GREET_PLACE = { id: "greet", icon: "🙏", th: "ไหว้พระสงฆ์", en: "Greet the monk", sub: ["คุกเข่าพนมมือ แล้วฟังท่าน", "Kneel with a wai, and listen to him"] };
+const GREET_BACK = 1.3; // where the child kneels: this far before the platform
+function greetSpot(h, s) { const [x, z] = h.toWorld(s.lx, s.edge + GREET_BACK); return { x, z }; }
+const talkTurn = read("talk", {});
+function startGreet(h, s) {
+  const T = TEACHER_TALK[s.name]; if (kraap.t >= 0 || alms.t >= 0 || !T) return;
+  if (sit.on) { sit.on = false; sit.rise = 0; sit.faceYaw = null; }
+  wai.t = -1;
+  const i = (talkTurn[s.name] || 0) % T.lines.length; talkTurn[s.name] = i + 1; write("talk", talkTurn);
+  const secs = ((TALK_DUR[T.file] || {})[L] || [])[i] || 5, sp = greetSpot(h, s), [mx, mz] = h.toWorld(s.lx, s.lz);
+  const k0 = 1.4, end = k0 + 0.4 + secs + 0.6; // kneel, listen, then a small bow of the head, and up
+  kraap.merit = null; kraap.kathin = null; kraap.greet = true;
+  kraap.keys = [[0, 0, 0, 0, 0, 0], [0.3, 0, 1, 0, 0, 0], [k0, 1, 1, 0, 0, 0], [end, 1, 1, 0, 0, 0], [end + 0.5, 1, 1, 0, 0, 0.3], [end + 1.2, 1, 1, 0, 0, 0], [end + 2.7, 0, 0, 0, 0, 0]];
+  kraap.dur = end + 2.7; kraap.spot = sp; kraap.faceYaw = Math.atan2(mx - sp.x, mz - sp.z); kraap.floorY = groundAt(sp.x, sp.z); kraap.t = 0;
+  const from = s.rig ? s.rig.B.Head.getWorldPosition(new THREE.Vector3()) : s.lean.getWorldPosition(new THREE.Vector3());
+  kraap.recite = { at: k0 + 0.4, url: `audio/talk-${T.file}-${i + 1}-${L}.mp3`, from, inside: true, text: tx(...T.lines[i]), who: s, secs };
+  if (player.mixer) playClip("idle", 0.4);
+  questEvent("waiMonk");
 }
 const dropGeo = new THREE.SphereGeometry(0.02, 6, 4), dropMat = new THREE.MeshBasicMaterial({ color: 0xd9f2ff, transparent: true, opacity: 0.85 });
 const drops = [];
@@ -2819,6 +2866,7 @@ function teacherStep(h, s, dt) {
   const g = h.g, toW = (v) => g.localToWorld(v.clone()), dirW = (v) => v.clone().transformDirection(g.matrixWorld);
   const fwd = dirW(new THREE.Vector3(0, 0, 1)), left = dirW(new THREE.Vector3(1, 0, 0)), up = new THREE.Vector3(0, 1, 0);
   waiBegin(RB); teacherSit(R, s); teacherGaze(s, R, dt, fwd, left, up);
+  if (s.talking > 0) { s.talking -= dt; s.talkT = (s.talkT || 0) + dt; turnBone(RB.Head, _q2.setFromAxisAngle(left, -0.1 + 0.035 * Math.sin(s.talkT * 4.2) * Math.sin(s.talkT * 1.3))); } // looking up at the child as he speaks
   // receiving the robe: both hands reach out and rest on the tray's rim a moment
   const recv = k ? smooth(KATHIN_RELEASE - 0.2, KATHIN_RELEASE + 0.4, t) * (1 - smooth(KATHIN_RELEASE + 1.4, KATHIN_RELEASE + 2.1, t)) : 0;
   if (recv > 0.001 && k.tray) {
@@ -3238,7 +3286,7 @@ function eyesStep(dt) {
   const PL = player.model && player.model.userData.lids;
   if (PL) {
     let shut = sit.on && sit.w > 0.9;
-    if (kraap.t >= 0) { const k = kraapState(kraap.t); shut = k.kneel > 0.9 && k.tray + k.lift + k.place + k.reach < 0.05 && k.chest + k.high + k.floor + k.bow > 0.3; }
+    if (kraap.t >= 0) { const k = kraapState(kraap.t); shut = !kraap.greet && k.kneel > 0.9 && k.tray + k.lift + k.place + k.reach < 0.05 && k.chest + k.high + k.floor + k.bow > 0.3; }
     PL.want = shut ? 1 : 0;
   }
   if (dog.lids) dog.lids.want = dogAnim.lie.value > 0.6 ? 1 : 0;
@@ -3899,7 +3947,7 @@ function showPrompt(p) {
   if (!p) { el.hidden = true; return; }
   $("prompt-name").textContent = p.icon + " " + placeName(p);
   $("prompt-sub").textContent = p.stone != null ? (p.board ? tx("ป้ายเรื่องที่ ", "Story board ") : tx("เรื่องที่ ", "Story ")) + (p.stone + 1) : p.sub[L === "en" ? 1 : 0];
-  $("prompt-go").textContent = p.id === "bell" ? tx("ตี", "Strike") : p.id === "donate" ? tx("เปิด", "Open") : p.id === "alms" ? tx("ใส่บาตร", "Offer") : p.id === "fish" ? tx("ให้อาหาร", "Feed") : p.merit ? tx("ทำบุญ", "Offer") : p.id === "broom" ? (broom.held ? tx("วาง", "Put back") : tx("หยิบ", "Pick up")) : p.id === "kathin" ? tx("ถวาย", "Offer") : p.id === "cat" ? tx("ลูบ", "Pet") : tx("เข้า", "Visit");
+  $("prompt-go").textContent = p.id === "bell" ? tx("ตี", "Strike") : p.id === "donate" ? tx("เปิด", "Open") : p.id === "alms" ? tx("ใส่บาตร", "Offer") : p.id === "fish" ? tx("ให้อาหาร", "Feed") : p.merit ? tx("ทำบุญ", "Offer") : p.id === "broom" ? (broom.held ? tx("วาง", "Put back") : tx("หยิบ", "Pick up")) : p.id === "kathin" ? tx("ถวาย", "Offer") : p.id === "greet" ? tx("ไหว้", "Greet") : p.id === "cat" ? tx("ลูบ", "Pet") : tx("เข้า", "Visit");
   el.hidden = false;
 }
 $("prompt-go").addEventListener("click", () => near && openPlace(near));
@@ -3958,6 +4006,7 @@ function openPlace(p) {
   if (p.id === "cat") { startPetCat(); return; }
   if (p.id === "broom") { broom.held = !broom.held; near = null; return; }
   if (p.id === "kathin") { startKathin(p.hall); return; }
+  if (p.id === "greet") { startGreet(p.hall, p.monk); return; }
   if (p.stone != null) {
     const n = p.stone + 1;
     openDialog(`👣 ${n} · ${esc(L === "en" ? JOURNEY[p.stone][1] : JOURNEY[p.stone][0])}`,
@@ -4266,8 +4315,8 @@ function frame(dt) {
     fx = fz = 0;
     const kBefore = kraap.t;
     kraap.t += dt;
-    if (kraap.recite && kraap.t >= kraap.recite.at) { recite(kraap.recite.url, kraap.recite.from, false); kraap.recite = null; }
-    if (kraap.t > (kraap.keys ? kraap.dur : KRAAP_DUR)) { kraapEnded(kraap.kathin ? "kathinDone" : kraap.merit ? null : kraap.keys === ALMS_KNEEL_KEYS ? "almsBless" : !kraap.keys ? "kraap" : null); kraap.t = -1; kraap.touch = null; kraap.keys = null; if (kraap.kathin) kraap.kathin.monk.lean.rotation.x = 0; endKneelingOffering(); }
+    if (kraap.recite && kraap.t >= kraap.recite.at) { const r = kraap.recite; recite(r.url, r.from, !!r.inside, r.text || null); if (r.who) r.who.talking = r.secs; kraap.recite = null; }
+    if (kraap.t > (kraap.keys ? kraap.dur : KRAAP_DUR)) { kraap.greet = false; kraapEnded(kraap.kathin ? "kathinDone" : kraap.merit ? null : kraap.keys === ALMS_KNEEL_KEYS ? "almsBless" : !kraap.keys ? "kraap" : null); kraap.t = -1; kraap.touch = null; kraap.keys = null; if (kraap.kathin) kraap.kathin.monk.lean.rotation.x = 0; endKneelingOffering(); }
     const mv = kraap.kathin || kraap.merit;
     if (mv && kraap.keys && kraap.t >= 0) { // Kathina and kneeling offerings: kneel close to offer, then move back on the knees to bow
       const b = kraapState(kraap.t).back;
@@ -4440,6 +4489,7 @@ function frame(dt) {
   if (Math.hypot(player.x - BELL[0], player.z - BELL[1]) < 4.4 && 3 < bestD) { best = BELL_PLACE; bestD = 3; } // reachable from the road
   { const d = Math.hypot(player.x - DONATE.x, player.z - (DONATE.z + 0.6)); if (d < 2.4 && d < bestD) { best = DONATE_PLACE; bestD = d; } } // only when standing at the box
   { const h = salas.learn; if (h && h.senior && kraap.t < 0) { const sp = kathinSpots(h), d = Math.hypot(player.x - sp.near.x, player.z - sp.near.z); if (d < 1.3 && d < bestD) { best = { ...KATHIN_PLACE, hall: h }; bestD = d; } } }
+  { const h = salas.learn; if (h && h.teachers && kraap.t < 0) for (const s of h.teachers) { if (!s.rig || !TEACHER_TALK[s.name]) continue; const sp = greetSpot(h, s), d = Math.hypot(player.x - sp.x, player.z - sp.z); if (d < 0.9 && d < bestD) { best = { ...GREET_PLACE, hall: h, monk: s }; bestD = d; } } }
   if (onBridge(player.x, player.z) && feed.t < 0 && 2.5 < bestD) { best = FISH_PLACE; bestD = 2.5; }
   if (merit.t < 0 && kraap.t < 0) { const mh = meritHere(); if (mh) { best = { ...MERIT[mh.kind].place, merit: mh }; bestD = 0.5; } } // standing at it: the offering comes first
   if (catNear() && 1.9 < bestD) { best = CAT_PLACE; bestD = 1.9; }
