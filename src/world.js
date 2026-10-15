@@ -161,7 +161,7 @@ function fitTo(obj, h) {
 }
 const propJobs = [];
 // place copies of a prop: list of [x, z, rotY, y?]; fallback() runs if the model is missing
-function props(name, h, list, { fallback, shadow = true, parent = scene, extra = false, each = null } = {}) {
+function props(name, h, list, { fallback, shadow = true, parent = scene, extra = false } = {}) {
   if (extra && !HIGH) return Promise.resolve(); // purely decorative: skipped in light mode
   const job = loadProp(name).then((src) => {
     if (!src) { if (fallback) fallback(); return; }
@@ -169,7 +169,7 @@ function props(name, h, list, { fallback, shadow = true, parent = scene, extra =
     const copy = src.clone();
     copy.traverse((o) => { if (o.isMesh) { o.castShadow = shadow; o.receiveShadow = true; if (o.material) o.material.envMapIntensity = 1; } });
     const base = fitTo(copy, h);
-    list.forEach(([x, z, r = 0, y = 0]) => { const c = base.clone(); c.position.set(x, y, z); c.rotation.y = r; parent.add(c); if (each) each(c); });
+    list.forEach(([x, z, r = 0, y = 0]) => { const c = base.clone(); c.position.set(x, y, z); c.rotation.y = r; parent.add(c); });
   });
   propJobs.push(job); return job;
 }
@@ -694,18 +694,25 @@ function blessingSet(g, lx, top, lz) {
   whisk.position.copy(rest.pos); whisk.rotation.copy(rest.rot);
   return { whisk, rest, hold, dip, g, flicked: [] };
 }
-// deep green polished stone above, its lotus throne gilded below (one mesh: split by height, in the shader)
-const EMERALD = new THREE.MeshStandardMaterial({ color: 0x0c6a43, roughness: 0.16, metalness: 0.05 });
-EMERALD.userData.cut = { value: 0 };
-EMERALD.onBeforeCompile = (sh) => {
-  sh.uniforms.uCut = EMERALD.userData.cut;
-  sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying float vWY;").replace("#include <worldpos_vertex>", "#include <worldpos_vertex>\nvWY = (modelMatrix * vec4(transformed, 1.0)).y;");
-  sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying float vWY;\nuniform float uCut;")
-    .replace("#include <color_fragment>", "#include <color_fragment>\nbool gilt = vWY < uCut; if (gilt) diffuseColor.rgb = vec3(0.83, 0.62, 0.22);")
-    .replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\nif (gilt) roughnessFactor = 0.32;")
-    .replace("#include <metalnessmap_fragment>", "#include <metalnessmap_fragment>\nif (gilt) metalnessFactor = 0.85;");
-};
-const EMERALD_THRONE = 0.2; // the lotus throne: this share of the image's height, from the bottom
+// The Universal Hall's image is made after the Emerald Buddha (พระแก้วมรกต): green stone on a tall gilded throne, in
+// the golden costume of the season, changed three times a year the day after the full moons of the 4th, 8th and 12th
+// lunar months: the hot season's royal attire (~March), the rainy season's gilded robe (~July) and the cool season's
+// shawl of gold mesh (~November). A model for each (Higgsfield images, then Tripo image-to-3D: emerald-<season>.glb);
+// ?season=hot|rainy|cool shows each.
+function emeraldSeason(now = new Date()) {
+  const q = (location.search.match(/[?&]season=(hot|rainy|cool)\b/) || [])[1]; if (q) return q;
+  const day = (t) => Math.floor((t + 7 * 3600000) / 86400000); // (the date in Thailand)
+  const fm = (yr, mo, dd) => { // the day after the first full moon on or after this date
+    const from = Date.UTC(yr, mo, dd) - 7 * 3600000;
+    let k = Math.floor((from / 86400000 / 365.25 + 1970 - 2000) * 12.3685) - 2;
+    while (fullMoonUTC(k).getTime() < from) k++;
+    return day(fullMoonUTC(k).getTime()) + 1;
+  };
+  const today = day(now.getTime()), y = new Date(now.getTime() + 7 * 3600000).getUTCFullYear();
+  if (today >= fm(y, 9, 30) || today < fm(y, 2, 8)) return "cool"; // after Loy Krathong's full moon, until the 4th month's
+  return today >= fm(y, 6, 8) ? "rainy" : "hot";                     // from the day after Asalha Bucha
+}
+const EMERALD_SEASON = emeraldSeason(), EMERALD_H = 2.3; // (its height with the throne: the figure itself is smaller than the Learning Hall's image)
 function shrine(h, monks = [], { gifts = false } = {}) {
   const { g, FY, W, D } = h;
   const PH = 0.6, PD = 2.8, pz = -D / 2 + 0.2 + PD / 2;     // teachers' platform: height, depth, centre
@@ -745,22 +752,20 @@ function shrine(h, monks = [], { gifts = false } = {}) {
     y += th;
   });
   const statueY = y + 0.03;                                 // the Buddha image sits here, above everyone
+  const imgH = h === salas.learn ? 2.5 : 1.9, ik = imgH / 1.9; // the main hall's image is the larger
   // a gold arch (suum) behind the image and a red cloth on the wall
-  const arch = add(new THREE.TorusGeometry(1.05, 0.07, 10, 40, Math.PI), MAT.gold, 0, statueY + 1.05, az - 0.5, g, false);
+  const arch = add(new THREE.TorusGeometry(1.05 * ik, 0.07, 10, 40, Math.PI), MAT.gold, 0, statueY + 1.05 * ik, az - 0.5, g, false);
   arch.scale.y = 1.25;
   add(new THREE.BoxGeometry(3.6, 4.4, 0.05), S(0x9b2a1d, { roughness: 0.9 }), 0, top + 2.3, -D / 2 + 0.24, g, false);
   add(new THREE.BoxGeometry(3.7, 0.12, 0.07), MAT.gold, 0, top + 4.5, -D / 2 + 0.25, g, false);
   { const [bx, bz] = h.toWorld(0, az - 0.24), [sx, sz] = h.toWorld(0, pz + PD / 2 + KRAAP_BACK); // bowed head and hands reach ~1.45 m forward, clear of the incense table
     buddhaImages.push({ x: bx, z: bz, hall: h, spot: { x: sx, z: sz } }); }
-  infoSpot("buddha", ...WP(0, statueY + 0.95, az - 0.24), 1.3); infoSpot("altar", ...WP(0, top + 0.5, az + 0.2), 1.0);
+  infoSpot(h === salas.access ? "emerald" : "buddha", ...WP(0, statueY + 0.95 * ik, az - 0.24), 1.3 * ik); infoSpot("altar", ...WP(0, top + 0.5, az + 0.2), 1.0);
   [-1.15, 1.15].forEach((x) => infoSpot("phanphum", ...WP(x, top + 0.95, az + 0.15), 0.45)); // the wai turns toward it; the kraap is made from the spot
   // the model is built facing +x; a quarter turn makes the image face the entrance
-  // the Universal Hall's image is green, like the Emerald Buddha (พระแก้วมรกต): polished green stone
-  const emerald = h === salas.access ? (c) => {
-    c.traverse((o) => { if (o.isMesh) o.material = EMERALD; });
-    c.updateWorldMatrix(true, true); const b = new THREE.Box3().setFromObject(c); EMERALD.userData.cut.value = b.min.y + (b.max.y - b.min.y) * EMERALD_THRONE;
-  } : null;
-  props("buddha", 1.9, [[0, az - 0.12 * 2, -Math.PI / 2, statueY]], { parent: g, each: emerald, fallback: () => {
+  // the Universal Hall's image: the Emerald Buddha in its seasonal costume, high on its own throne
+  const emerald = h === salas.access;
+  props(emerald ? `emerald-${EMERALD_SEASON}` : "buddha", emerald ? EMERALD_H : imgH, [[0, az - 0.12 * 2, -Math.PI / 2, statueY]], { parent: g, fallback: () => {
     // if the image can't load, a lotus throne stays rather than nothing
     add(new THREE.CylinderGeometry(0.55, 0.45, 0.35, 24), MAT.gold, 0, statueY + 0.18, az - 0.24, g);
   } });
@@ -4449,6 +4454,9 @@ const INFO_TEXT = {
   lotus: { icon: "🪷", t: ["ดอกบัว", "The lotus"], d: ["ดอกบัวงอกจากโคลน แต่บานสะอาดพ้นน้ำ เหมือนใจที่ฝึกดีแล้ว อยู่ในโลกได้โดยไม่แปดเปื้อน", "The lotus grows from the mud but opens clean above the water, like a well-trained mind that lives in the world without being stained."] },
   bigbuddha: { icon: "🙏", t: ["พระพุทธรูปองค์ใหญ่", "The great Buddha image"], d: ["พระพุทธรูปเตือนให้เราระลึกถึงพระพุทธเจ้าและคำสอนของท่าน เราไม่ได้บูชาก้อนหิน แต่บูชาความดีที่ท่านสอน", "A Buddha image reminds us of the Buddha and his teaching. We honour not the stone, but the goodness he taught."] },
   buddha: { icon: "🙏", t: ["พระประธาน", "The main Buddha image"], d: ["พระพุทธรูปองค์หลักของศาลา เมื่อเข้ามา เรานั่งคุกเข่าและกราบสามครั้ง เพื่อระลึกถึงพระพุทธ พระธรรม และพระสงฆ์", "The hall's main Buddha image. When we come in, we kneel and bow three times, remembering the Buddha, the Dhamma and the Sangha."] },
+  emerald: { icon: "💚", t: ["พระพุทธรูปสีเขียวมรกต", "The emerald-green Buddha image"], d: [
+    `พระพุทธรูปองค์นี้ทำตามแบบพระแก้วมรกต (พระพุทธมหามณีรัตนปฏิมากร) พระพุทธรูปที่คนไทยเคารพยิ่ง ประดิษฐานที่วัดพระศรีรัตนศาสดาราม กรุงเทพฯ องค์จริงแกะจากหินสีเขียวเนื้อเดียว ปีละ 3 ครั้ง เมื่อเปลี่ยนฤดู พระมหากษัตริย์ทรงเปลี่ยนเครื่องทรงทองคำให้ตามฤดู คือ ฤดูร้อน ฤดูฝน และฤดูหนาว ตอนนี้ทรงเครื่อง${{ hot: "ฤดูร้อน", rainy: "ฤดูฝน", cool: "ฤดูหนาว" }[EMERALD_SEASON]}`,
+    `This image is made after the Emerald Buddha (Phra Kaeo Morakot), the most revered Buddha image in Thailand, kept at Wat Phra Kaew in Bangkok. The real image is carved from a single block of green stone. Three times a year, at the change of the seasons, the King changes its golden costume: one for the hot season, one for the rainy season and one for the cool season. Now it wears the ${{ hot: "hot", rainy: "rainy", cool: "cool" }[EMERALD_SEASON]}-season costume.`] },
   altar: { icon: "🕯️", t: ["โต๊ะหมู่บูชา", "The altar"], d: ["โต๊ะหมู่บูชาเป็นที่ตั้งพระพุทธรูป เราถวายธูป เทียน และดอกไม้ เพื่อบูชาพระพุทธ พระธรรม และพระสงฆ์", "The stepped altar holds the Buddha image. We offer incense, candles and flowers to honour the Buddha, the Dhamma and the Sangha."] },
   phanphum: { icon: "🏵️", t: ["พานพุ่ม", "The phan phum"], d: ["พานพุ่มคือดอกไม้หรือใบไม้ที่จัดเป็นทรงพุ่มบนพาน วางบนโต๊ะบูชาเพื่อความงามและความเคารพ", "A phan phum is flowers or leaves shaped into a cone on a stand, set on the altar for beauty and respect."] },
   kathin: { icon: "🟫", t: ["เครื่องกฐิน", "The Kathina gifts"], d: ["เครื่องกฐินมีผ้าไตรจีวร บาตร และของใช้จำเป็นของพระ ถวายปีละครั้งหลังออกพรรษา", "The Kathina gifts are a set of robes, an alms bowl and things a monk needs, offered once a year after the rains retreat."] },
