@@ -1358,7 +1358,7 @@ function feedStep(dt) {
       }
       feed.until = feed.t + 9; feed.thrown++;
     }
-    if (feed.t > FEED_DUR) { feed.t = -1; feed.hand = null; feedLeft = 8; }
+    if (feed.t > FEED_DUR) { feed.t = -1; feed.hand = null; feedLeft = 8; questEvent("feed"); }
   } else if (feedLeft > 0) feedLeft -= dt;
   // pellets fall; where they meet the water they ripple and become food
   for (let i = pellets.length - 1; i >= 0; i--) {
@@ -1521,7 +1521,7 @@ function kneelStep(before, t) {
   }
   if (m.kind === "gild" && at(E.leaf)) gildLeaf();
 }
-function endKneelingOffering() { const m = kraap.merit; if (m && m.items && !m.placed) scene.remove(m.items); if (m && m.kind === "pet") petDone(); kraap.merit = null; }
+function endKneelingOffering() { const m = kraap.merit; if (m && m.items && !m.placed) scene.remove(m.items); if (m && m.kind === "pet") petDone(); else if (m) questEvent(m.kind); kraap.merit = null; }
 // the hand's target and turn for a reach (fingers forward and down, palm down), as in poseKraap
 function kneelHand(model, fwd, up, t) {
   const shape = handShape(model); if (!shape) return null;
@@ -2612,8 +2612,8 @@ function petStep(dt) {
   }
 }
 function petDone() {
-  if (pet.who === "dog") { pet.phase = "after"; pet.t = 0; pet.from = { x: player.x, z: player.z }; }
-  else { pet.phase = null; catPetted(); }
+  if (pet.who === "dog") { pet.phase = "after"; pet.t = 0; pet.from = { x: player.x, z: player.z }; questEvent("petDog"); }
+  else { pet.phase = null; catPetted(); questEvent("petCat"); }
 }
 // where his stroking hand goes: over the top of the dog's head (worked out from the model and the same sitting and
 // nuzzling the dog's shader does), moving back and forth; for the cat, along her back
@@ -2735,13 +2735,14 @@ function startKathin(h) {
   kraap.keys = KATHIN_KEYS; kraap.dur = KATHIN_KEYS[KATHIN_KEYS.length - 1][0];
   kraap.t = 0;
   if (player.mixer) playClip("idle", 0.4);
+  if (phabphiap()) hint("women");
 }
 const TRAY_GRIP = 0.21, TRAY_HALF = 0.27; // where his hands hold the tray: height above its foot, half its width
 // after he lets go: the senior monk leans in and draws the tray to himself
 function kathinStep() {
   const k = kraap.kathin; if (!k) return;
   const s = k.monk, t = kraap.t;
-  if (!k.released && t >= KATHIN_RELEASE) { k.released = true; k.h.g.attach(k.tray); k.from = k.tray.position.clone(); }
+  if (!k.released && t >= KATHIN_RELEASE) { k.released = true; questEvent("kathinOffer"); k.h.g.attach(k.tray); k.from = k.tray.position.clone(); }
   if (k.released) { // it stays where he set it, before the monk's cushion; the monk leans in and touches it to receive it
     k.tray.rotation.set(0, 0, 0);
     s.lean.rotation.x = 0.08 * smooth(KATHIN_RELEASE, KATHIN_RELEASE + 0.7, t) * (1 - smooth(KATHIN_RELEASE + 1.6, KATHIN_RELEASE + 2.4, t));
@@ -2940,6 +2941,7 @@ function startAlms(m) {
   alms.item = riceBall(); alms.item.visible = false; scene.add(alms.item); alms.placed = false;
   alms.t = 0;
   if (player.mixer) playClip("idle", 0.4);
+  if (phabphiap()) hint("women");
 }
 function almsStep(dt) {
   alms.t += dt;
@@ -2952,7 +2954,7 @@ function almsStep(dt) {
     alms.item.position.set(Math.sin(a) * d, m.bowl.y - RICE_R * 0.35 + Math.min(k, 3) * 0.02, m.bowl.f + Math.cos(a) * d);
     alms.item.visible = true; alms.item.scale.set(1, 0.85, 1);
     m.rice.push(alms.item); if (m.rice.length > 4) m.lean.remove(m.rice.shift()); // a full bowl stays a full bowl
-    alms.placed = true;
+    alms.placed = true; questEvent("giveAlms");
   }
   if (alms.t > ALMS_DUR) {                                               // then the high wai to the monk
     if (!alms.placed && alms.item) scene.remove(alms.item);
@@ -3050,6 +3052,12 @@ function startWai() {
   wai.level = here.level; wai.dur = WAI_LEVELS[here.level].dur;
   wai.faceYaw = here.face ? Math.atan2(here.face.x - player.x, here.face.z - player.z) : null;
   wai.t = 0;
+  if (monksNear() || teacherNear(4)) questEvent("waiMonk");
+}
+// a teacher seated within d of the child (the main hall's monks)
+function teacherNear(d) {
+  const h = salas.learn; if (!h || !h.teachers) return false;
+  return h.teachers.some((s) => { const [x, z] = h.toWorld(s.lx, s.lz); return Math.hypot(x - player.x, z - player.z) < d; });
 }
 function waiWeights() {
   const t = wai.t, d = wai.dur; if (t < 0) return [0, 0];
@@ -3337,6 +3345,7 @@ function poseOverlays(model, hands, bow, sitW) {
   if (feed.t >= 0) { waiBegin(B); poseFeed(model, B); waiMark(B); return; }
   if (merit.t >= 0) { waiBegin(B); poseMerit(model, B); waiMark(B); return; }
   if (broom.held && hands <= 0 && sitW <= 0.001) { waiBegin(B); poseBroom(model, B); waiMark(B); return; }
+  if (stoop.w > 0.01 && hands <= 0 && bow <= 0 && sitW <= 0.001) { waiBegin(B); poseStoop(model, B, stoop.w); waiMark(B); return; } // passing before the monks
   if (hands <= 0 && bow <= 0 && sitW <= 0.001) { waiEnd(B); return; }
   waiBegin(B);
   if (sitW > 0.001) { if (phabphiap()) posePhabphiap(model, B, sitW); else poseSit(model, B, sitW); }
@@ -3765,7 +3774,7 @@ function shoesStep(dt) {
       // the pair is left where he stood, a little to his right, toes turned out from the hall
       const rx = -Math.cos(player.yaw), rz = Math.sin(player.yaw);
       placePair(player.x + rx * 0.32, player.z + rz * 0.32, player.yaw + Math.PI);
-      wearKit("socks"); shoes.on = false;
+      wearKit("socks"); shoes.on = false; questEvent("shoesOff");
     } else { removePair(); wearKit("shod"); shoes.on = true; }
   }
   if (shoes.t > SHOES_DUR) { shoes.t = -1; shoes.mode = null; }
@@ -3980,12 +3989,137 @@ function teleport(id) {
   dog.x = player.x + 1.5; dog.z = player.z + 1.5;
   camYaw = id === "journey" || id === "exit" ? Math.atan2(player.x, player.z) : (Math.atan2(player.x - x, player.z - z) || camYaw);
 }
+/* ---------------- quests and gentle hints ---------------- */
+// A quest is one custom, done as at a real temple: a short checklist that ticks itself as the child does each thing,
+// with a line on why it is done. No scores and no failing; the steps may be done in any order. Progress is kept on
+// this device only.
+const QUESTS = [
+  { id: "visit", icon: "🛕", name: ["มาวัดครั้งแรก", "A first visit to the temple"], steps: [
+    { ev: "shoesOff", t: ["ถอดรองเท้าก่อนขึ้นศาลา", "Take off your shoes at the steps of a hall"], why: ["รองเท้าใช้เดินข้างนอก ในศาลาเราใส่ถุงเท้าหรือเดินเท้าเปล่า เพื่อรักษาความสะอาดและแสดงความเคารพ", "Shoes are for outside: in a hall we go in socks or barefoot, to keep it clean and to show respect."] },
+    { ev: "kraap", t: ["กราบพระ 3 ครั้ง หน้าพระพุทธรูป", "Bow three times before the Buddha image"], why: ["กราบครั้งที่หนึ่งระลึกถึงพระพุทธ ครั้งที่สองพระธรรม ครั้งที่สามพระสงฆ์", "The first bow is for the Buddha, the second for the Dhamma, the third for the Sangha."] },
+    { ev: "waiMonk", t: ["ไหว้พระสงฆ์", "Greet a monk with a wai"], why: ["เราไหว้พระสงฆ์อย่างสูงที่สุด ให้นิ้วโป้งจรดระหว่างคิ้ว", "Monks receive the highest wai: the thumbs touch the brow."] },
+    { ev: "sitHall", t: ["นั่งสงบ ๆ บนเบาะในศาลา", "Sit quietly on a cushion in a hall"], why: ["ศาลาเป็นที่สงบ เรานั่งเรียบร้อยและพูดเบา ๆ", "A hall is a place of calm: we sit neatly and speak softly."] },
+  ] },
+  { id: "alms", icon: "🍚", name: ["ใส่บาตรตอนเช้า", "Giving alms in the morning"], morning: true, steps: [
+    { ev: "giveAlms", t: ["ใส่ข้าวลงในบาตรของพระ", "Put rice into a monk's bowl"], why: ["พระฉันอาหารที่ญาติโยมถวาย และฉันก่อนเที่ยงวันเท่านั้น", "Monks eat only what is offered to them, and only before midday."] },
+    { ev: "almsBless", t: ["คุกเข่าพนมมือรับพร", "Kneel with a wai for the blessing"], why: ["เมื่อพระให้พร เรานั่งคุกเข่า พนมมือ และตั้งใจฟังด้วยความเคารพ", "When the monk gives the blessing, we kneel with our hands in a wai and listen with respect."] },
+  ] },
+  { id: "merit", icon: "🪷", name: ["ทำบุญในศาลา", "Making merit in the halls"], steps: [
+    { ev: "offer", t: ["ถวายธูปเทียนดอกไม้หน้าพระพุทธรูป", "Offer incense, candles and a lotus before the Buddha"], why: ["เราถวายธูปเทียนดอกไม้ เพื่อบูชาพระพุทธ พระธรรม และพระสงฆ์", "We offer incense, candles and a lotus to honour the Buddha, the Dhamma and the Sangha."] },
+    { ev: "gild", t: ["ปิดทองพระพุทธรูปในศาลาสากล", "Press gold leaf on the Buddha image in the Universal Hall"], why: ["การปิดทองพระเป็นการบูชาพระพุทธเจ้า", "Pressing gold leaf on the image is a way of honouring the Buddha."] },
+  ] },
+  { id: "kathin", icon: "🟫", name: ["ทอดกฐิน", "The Kathina"], steps: [
+    { ev: "kathinOffer", t: ["ถวายผ้ากฐินแด่พระสงฆ์ในศาลาเรียนรู้", "Offer the Kathina robe to the senior monk in the Learning Hall"], why: ["ผ้ากฐินถวายแก่คณะสงฆ์ทั้งหมด ไม่ได้ถวายแก่พระรูปใดรูปหนึ่ง", "The Kathina robe is given to the whole community of monks, not to one monk."] },
+    { ev: "kathinDone", t: ["กราบ 3 ครั้ง แล้วรับน้ำมนต์และพร", "Bow three times, then receive the holy water and the blessing"], why: ["พระประพรมน้ำมนต์และให้พร อวยพรให้เรามีความสุข", "The monk sprinkles holy water and gives a blessing, wishing us well."] },
+  ] },
+  { id: "friends", icon: "🐾", name: ["เพื่อนในวัด", "Friends in the temple"], steps: [
+    { ev: "feed", t: ["ให้อาหารปลาจากสะพาน", "Feed the fish from the bridge"], why: ["การให้อาหารสัตว์อย่างอ่อนโยนเป็นการฝึกความเมตตา", "Feeding animals gently is a way of practising kindness (mettā)."] },
+    { ev: "petDog", t: ["ลูบหัวหมาวัด", "Stroke the temple dog"], why: ["หมาวัดอยู่กับพระและคนที่มาวัด เราลูบเบา ๆ ด้วยความใจดี", "The temple dog lives with the monks and the visitors: we stroke it gently and kindly."] },
+    { ev: "petCat", t: ["ลูบแมววัด", "Stroke the temple cat"], why: ["เราลูบแมวเบา ๆ และปล่อยให้เธอพักเมื่อเธออยากพัก", "We stroke the cat gently, and let her rest when she wants to."] },
+  ] },
+];
+const HINTS = {
+  run: ["เดินช้า ๆ ในศาลาและใกล้พระสงฆ์นะ", "Walk calmly in a hall and near the monks."],
+  stoop: ["เวลาเดินผ่านหน้าพระสงฆ์ เราก้มตัวลงเล็กน้อยเพื่อแสดงความเคารพ", "When we pass in front of monks, we lower our body a little to show respect."],
+  women: ["ผู้หญิงไม่สัมผัสตัวพระ และไม่ส่งของให้ท่านจากมือถึงมือ จึงใส่ข้าวลงในบาตร และวางผ้าไว้ให้ท่าน", "Women do not touch a monk or hand things to him directly: the rice goes into the bowl, and the robe is set down for him."],
+  back: ["เมื่อกราบพระเสร็จ ค่อย ๆ ถอยออกมาสักสองสามก้าวก่อนหันหลังกลับ", "After bowing, step back a few paces before you turn away from the Buddha image."],
+};
+const questState = { active: null, ticks: {}, done: [], ...read("quests", {}) };
+const saveQuests = () => write("quests", questState);
+const questOf = (id) => QUESTS.find((q) => q.id === id);
+// small notes near the top of the screen, one after another
+const toasts = []; let toastBusy = false;
+function toast(html, secs = 7) { toasts.push([html, secs]); if (!toastBusy) nextToast(); }
+function nextToast() {
+  const el = $("toast"), n = toasts.shift(); if (!el) return;
+  if (!n) { el.hidden = true; toastBusy = false; return; }
+  toastBusy = true; el.innerHTML = n[0]; el.hidden = false; setTimeout(nextToast, n[1] * 1000);
+}
+const hintShown = {}; // once per visit
+function hint(k) { if (hintShown[k]) return; hintShown[k] = true; toast(`💡 ${esc(tx(...HINTS[k]))}`, 8); }
+function questEvent(ev) {
+  const q = questOf(questState.active); if (!q) return;
+  const ticks = questState.ticks[q.id] || (questState.ticks[q.id] = []), i = q.steps.findIndex((s) => s.ev === ev);
+  if (i < 0 || ticks.includes(i)) return;
+  ticks.push(i); const s = q.steps[i];
+  toast(`<strong>✓ ${esc(tx(...s.t))}</strong><br>${esc(tx(...s.why))}`, 8);
+  if (ticks.length === q.steps.length) {
+    if (!questState.done.includes(q.id)) questState.done.push(q.id);
+    toast(`🌸 <strong>${esc(tx("ทำภารกิจสำเร็จแล้ว:", "Quest complete:"))} ${esc(tx(...q.name))}</strong><br>${esc(tx("อนุโมทนาสาธุ ลองภารกิจอื่นได้ที่ปุ่ม 📜", "Well done. Try another quest with the 📜 button."))}`, 9);
+    questState.active = null;
+  }
+  saveQuests(); renderQuest();
+}
+function startQuest(id) { questState.active = id; questState.ticks[id] = []; saveQuests(); renderQuest(); }
+function renderQuest() {
+  const box = $("questbox"), q = questOf(questState.active); if (!box) return;
+  if (!q) { box.hidden = true; return; }
+  const ticks = questState.ticks[q.id] || [], next = q.steps.findIndex((s, i) => !ticks.includes(i));
+  box.hidden = false;
+  $("quest-head").innerHTML = `${q.icon} ${esc(tx(...q.name))} <span class="quiet">${ticks.length}/${q.steps.length}</span>`;
+  $("quest-steps").innerHTML = q.steps.map((s, i) => `<li class="${ticks.includes(i) ? "done" : i === next ? "next" : ""}">${ticks.includes(i) ? "✓" : "○"} ${esc(tx(...s.t))}</li>`).join("");
+}
+function openQuests() {
+  const items = QUESTS.map((q) => {
+    const done = questState.done.includes(q.id), on = questState.active === q.id;
+    const note = q.morning && !almsTime() ? `<br><span class="quiet">${esc(tx("พระบิณฑบาตเฉพาะตอนเช้า 6:00–11:00 กลับมาทำภารกิจนี้ตอนเช้านะ", "Monks walk the alms round only in the morning, 6:00–11:00: come back in the morning for this one."))}</span>` : "";
+    return `<li><button data-quest="${q.id}"><span class="ic">${q.icon}</span><span><strong>${esc(tx(...q.name))}</strong>${done ? " ✓" : ""}${on ? ` <span class="quiet">(${esc(tx("กำลังทำ", "in progress"))})</span>` : ""}${note}</span></button></li>`;
+  }).join("");
+  openDialog(tx("📜 ภารกิจ", "📜 Quests"), `<p>${esc(tx("เลือกภารกิจหนึ่งอย่าง แล้วทำตามขั้นตอนเหมือนที่วัดจริง ทำขั้นไหนก่อนก็ได้", "Choose a quest and do each step as you would at a real temple, in any order."))}</p>
+    <ul class="places">${items}</ul>
+    <div class="row">${questState.active ? `<button class="chip" data-quest-stop>${esc(tx("หยุดภารกิจ", "Stop the quest"))}</button>` : ""}<button class="chip" data-close>${esc(tx("ปิด", "Close"))}</button></div>`);
+}
+// Passing in front of the seated monks, the child walks with the body lowered (เดินก้ม); from the hall's own layout:
+// the monks face +z from their seats, and the floor before the platform is "in front"
+const stoop = { w: 0, near: false, lastX: null, lastZ: null };
+function stoopTarget() {
+  const h = salas.learn; if (!h || !h.teachers || !insideHall(player.x, player.z)) return 0;
+  const p = h.g.worldToLocal(new THREE.Vector3(player.x, 0, player.z));
+  return h.teachers.some((s) => p.z > s.edge - 0.1 && p.z < s.edge + 2.6 && Math.abs(p.x - s.lx) < 1.4) ? 1 : 0;
+}
+const STOOP_BOW = 0.38; // how far the back bends forward (radians)
+function poseStoop(model, B, w) {
+  model.updateMatrixWorld(true);
+  const up = new THREE.Vector3(0, 1, 0), side = B.LeftArm.getWorldPosition(new THREE.Vector3()).sub(B.RightArm.getWorldPosition(new THREE.Vector3())).setY(0).normalize();
+  const fwd = new THREE.Vector3().crossVectors(side, up).normalize(), axis = new THREE.Vector3().crossVectors(up, fwd).normalize();
+  applyBow(B, axis, STOOP_BOW * w, w, 0);
+}
+let backWatch = null; // after a kraap: watching whether he turns straight away from the image
+function questsStep(dt) {
+  // walking low before the monks
+  const t = stoopTarget(); stoop.w += (t - stoop.w) * Math.min(1, dt * 4);
+  if (t && kraap.t < 0 && !sit.on) hint("stoop");
+  // running in a hall or near the monks
+  if (stoop.lastX != null && dt > 0) {
+    const v = Math.hypot(player.x - stoop.lastX, player.z - stoop.lastZ) / dt;
+    if (v > 4.2 && v < 15 && (insideHall(player.x, player.z) || monksNear())) hint("run"); // (not a jump to another place)
+  }
+  stoop.lastX = player.x; stoop.lastZ = player.z;
+  if (backWatch) {
+    backWatch.t += dt;
+    const fx = Math.sin(player.yaw), fz = Math.cos(player.yaw), dx = backWatch.img.x - player.x, dz = backWatch.img.z - player.z, d = Math.hypot(dx, dz) || 1;
+    if (backWatch.t > 6 || Math.hypot(player.x - backWatch.spot.x, player.z - backWatch.spot.z) > 3) backWatch = null;
+    else if ((fx * dx + fz * dz) / d < -0.5 && Math.hypot(player.x - backWatch.spot.x, player.z - backWatch.spot.z) > 0.25) { hint("back"); backWatch = null; }
+  }
+  // sitting in a hall
+  if (sit.on && sit.w > 0.98 && insideHall(player.x, player.z)) questEvent("sitHall");
+}
+// the end of a kraap-timed act: which one it was
+function kraapEnded(kind) {
+  if (kind === "kraap") { questEvent("kraap"); const img = buddhaImages.find((b) => b.spot === kraap.spot); if (img) backWatch = { t: 0, img, spot: kraap.spot }; }
+  else if (kind) questEvent(kind);
+}
 $("dlg").addEventListener("click", (e) => {
+  const qs = e.target.closest("[data-quest]"); if (qs) { startQuest(qs.dataset.quest); closeDialog(); return; }
+  if (e.target.closest("[data-quest-stop]")) { questState.active = null; saveQuests(); renderQuest(); closeDialog(); return; }
   const go = e.target.closest("[data-go]"); if (go) { teleport(go.dataset.go); closeDialog(); return; }
   if (e.target.closest("[data-pet]")) { closeDialog(); startPetDog(); return; }
   if (e.target.closest("[data-close]")) closeDialog();
 });
 $("btn-places").addEventListener("click", () => openPlaces(false));
+$("btn-quest").addEventListener("click", openQuests);
+$("quest-head").addEventListener("click", () => $("questbox").classList.toggle("folded"));
+renderQuest();
 $("btn-help").addEventListener("click", () => openDialog(tx("❔ วิธีเดินในวัด", "❔ How to walk around"),
   `<p>${tx("⌨️ W A S D หรือปุ่มลูกศร = เดิน • Shift = วิ่ง • Space = กระโดด • E = เข้าศาลาที่อยู่ใกล้ • G = เรียกหมาวัด • Q = ไหว้ 🙏 • C = นั่งสมาธิ 🧘 (เดินเพื่อลุก) • K = กราบพระ 🙇 (หน้าพระพุทธรูป) • P = ลูบหัวหมา 🐾 • ใส่บาตร 🍚: ยืนหน้าพระที่ถนนหน้าประตูวัด แล้วกด E (พระบิณฑบาตเฉพาะตอนเช้า 6:00–11:00 ตามนาฬิกาเครื่องนี้)", "⌨️ W A S D or arrow keys = walk • Shift = run • Space = jump • E = visit the nearby hall • G = call the temple dog • Q = wai 🙏 • C = sit 🧘 (walk to stand up) • K = pay tribute 🙇 (before a Buddha image) • P = pet the dog 🐾 • give alms 🍚: stand before a monk on the road outside the gate and press E (monks go on the alms round only in the morning, 6:00–11:00 by this device's clock)")}</p>
    <p>${tx("🖱️ ลากเมาส์ = หมุนมุมมอง • ล้อเมาส์ = ซูม • คลิกหมาวัดหรือศาลา = เปิด", "🖱️ Drag = turn the view • Wheel = zoom • Click the dog or a hall = open it")}</p>
@@ -4116,7 +4250,7 @@ function tick() {
 // one step of the world: movement, animation, camera and the picture
 function frame(dt) {
   timeStep(dt); placeLampLights(dt);
-  feedStep(dt); fishStep(dt); meritStep(dt); lifeStep(dt); eyesStep(dt); petStep(dt); petalStep(dt); rainStep(dt); dropsStep(dt);
+  feedStep(dt); fishStep(dt); meritStep(dt); lifeStep(dt); eyesStep(dt); questsStep(dt); petStep(dt); petalStep(dt); rainStep(dt); dropsStep(dt);
   if (broom.held && (alms.t >= 0 || kraap.t >= 0 || feed.t >= 0 || shoes.t >= 0 || sit.on || merit.t >= 0)) putBroomBack(); // hands needed elsewhere
   monkTime += dt;
   if (!settings.calmMotion) for (const m of monkFigures) { const b = Math.sin(monkTime * 1.25 + m.ph); m.o.scale.set(1 + b * 0.004, 1 + b * 0.008, 1 + b * 0.004); } // slow breathing
@@ -4133,7 +4267,7 @@ function frame(dt) {
     const kBefore = kraap.t;
     kraap.t += dt;
     if (kraap.recite && kraap.t >= kraap.recite.at) { recite(kraap.recite.url, kraap.recite.from, false); kraap.recite = null; }
-    if (kraap.t > (kraap.keys ? kraap.dur : KRAAP_DUR)) { kraap.t = -1; kraap.touch = null; kraap.keys = null; if (kraap.kathin) kraap.kathin.monk.lean.rotation.x = 0; endKneelingOffering(); }
+    if (kraap.t > (kraap.keys ? kraap.dur : KRAAP_DUR)) { kraapEnded(kraap.kathin ? "kathinDone" : kraap.merit ? null : kraap.keys === ALMS_KNEEL_KEYS ? "almsBless" : !kraap.keys ? "kraap" : null); kraap.t = -1; kraap.touch = null; kraap.keys = null; if (kraap.kathin) kraap.kathin.monk.lean.rotation.x = 0; endKneelingOffering(); }
     const mv = kraap.kathin || kraap.merit;
     if (mv && kraap.keys && kraap.t >= 0) { // Kathina and kneeling offerings: kneel close to offer, then move back on the knees to bow
       const b = kraapState(kraap.t).back;
@@ -4174,7 +4308,7 @@ function frame(dt) {
   const mag = Math.min(1, Math.hypot(fx, fz));
   // a calm walk, like the boy in the film; Shift (or the touch stick pushed to its edge) runs
   const running = keys.ShiftLeft || keys.ShiftRight || Math.hypot(joy.x, joy.y) > 0.92;
-  const speed = (running ? (player.clips.walk && !player.clips.run && player.gait.walk ? Math.min(6, player.gait.walk.speed * 2.2) : 6) : 2.6) * mag; // a 10-year-old's natural walking and running pace at this scale (the girl: a brisk walk her stride keeps up with)
+  const speed = (running ? (player.clips.walk && !player.clips.run && player.gait.walk ? Math.min(6, player.gait.walk.speed * 2.2) : 6) : 2.6) * mag * (1 - 0.35 * stoop.w); // (slower, walking low before the monks) a 10-year-old's natural walking and running pace at this scale (the girl: a brisk walk her stride keeps up with)
   if (mag > 0.05) {
     const s = Math.sin(camYaw), c = Math.cos(camYaw);
     const nx = fx / (Math.hypot(fx, fz) || 1), nz = fz / (Math.hypot(fx, fz) || 1);

@@ -41,6 +41,19 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .prompt.away { display: none; } /* out of the way while he is doing something, until he walks on */
 .key { display: inline-grid; place-items: center; min-width: 26px; height: 26px; border: 1.5px solid var(--ink); border-radius: 6px; background: var(--cream); font-family: var(--display); }
 
+/* quests: the checklist (tap its title to fold it) and the notes that tick a step or give a hint */
+.questbox { position: fixed; left: 10px; top: calc(62px + env(safe-area-inset-top, 0px)); width: min(300px, calc(100% - 20px)); padding: 8px 12px; z-index: 4; font-size: .9rem; }
+.questbox > button { all: unset; cursor: pointer; display: block; font-family: var(--display); font-size: 1.05rem; }
+.questbox ol { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.questbox li { color: var(--muted); line-height: 1.4; }
+.questbox li.next { color: var(--ink); font-weight: 600; }
+.questbox li.done { color: var(--leaf); text-decoration: line-through; }
+.questbox > button:focus-visible { outline: 3px solid var(--saffron-deep); outline-offset: 2px; }
+.questbox.folded ol { display: none; }
+.toast { position: fixed; left: 50%; top: calc(62px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); width: min(460px, calc(100% - 24px)); padding: 10px 14px; z-index: 6; line-height: 1.5; font-size: .95rem; pointer-events: none; }
+@media (max-width: 760px) { .questbox { top: auto; bottom: calc(40px + env(safe-area-inset-bottom, 0px)); } .toast { top: calc(var(--prompt-top, 124px) + 46px); } }
+@media (pointer: coarse) { .questbox { left: calc(12px + env(safe-area-inset-left, 0px)); top: auto; bottom: calc(176px + env(safe-area-inset-bottom, 0px)); width: min(236px, calc(100% - 136px)); font-size: .85rem; } } /* above the joystick, clear of the round buttons */
+
 /* the monks' blessing: the verse and its meaning while it is recited */
 .subtitle { position: fixed; left: 50%; bottom: calc(110px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: min(720px, calc(100% - 32px)); padding: 10px 16px; text-align: center; display: flex; flex-direction: column; gap: 4px; z-index: 5; pointer-events: none; background: rgba(58, 42, 29, .78); color: var(--cream); border-radius: 14px; line-height: 1.5; }
 .subtitle .pali { font-family: var(--display); font-size: 1.1rem; color: var(--gold); }
@@ -100,6 +113,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
   <a class="brand panel" href="index.html">☸ วัดสัมโพธายะ</a>
   <div class="hud-tools">
     <button class="chip" id="btn-places">🗺️ <span class="label" data-th="ที่ต่าง ๆ ในวัด" data-en="Places">ที่ต่าง ๆ ในวัด</span></button>
+    <button class="chip" id="btn-quest">📜 <span class="label" data-th="ภารกิจ" data-en="Quests">ภารกิจ</span></button>
     <button class="chip" id="btn-avatar">🧍 <span class="label" data-th="ตัวละครของฉัน" data-en="My avatar">ตัวละครของฉัน</span></button>
     <button class="chip" id="btn-quality">✨ <span class="label">ภาพ: ละเอียด</span></button>
     <button class="chip" id="btn-wai">🙏 <span class="label" data-th="ไหว้" data-en="Wai">ไหว้</span></button>
@@ -121,6 +135,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
   <button class="btn" id="prompt-go">เข้า</button>
 </div>
 
+<div class="questbox panel" id="questbox" hidden><button id="quest-head" aria-label="ภารกิจ"></button><ol id="quest-steps"></ol></div>
+<div class="toast panel" id="toast" role="status" aria-live="polite" hidden></div>
 <div class="subtitle" id="subtitle" role="status" aria-live="polite" hidden></div>
 
 <div class="dialog panel" id="dlg" role="dialog" aria-modal="true" aria-labelledby="dlg-title" hidden>
