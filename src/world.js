@@ -2296,7 +2296,7 @@ function applyTime() {
   hemi.color.copy(tone(0xfff2d6, 0x8fa6d8, 0xffb070, 0.8)); hemi.groundColor.copy(tone(0x6f8f4a, 0x1c2433, 0x7a5a3a, 0.5)); hemi.intensity = mix(skyHdr ? 0.45 : 0.9, 0.32);
   sun.color.copy(tone(0xffd4a0, 0xa9bcff, 0xff7a30, 0.95)); sun.intensity = mix(2.3, 0.45) + gold * 0.5;
   scene.fog.color.copy(tone(0xf3d2a4, 0x0c1428, 0xe8915a, 0.85)); scene.fog.near = mix(90, 60); scene.fog.far = mix(290, 230);
-  Object.assign(lightBase, { sun: sun.intensity, hemi: hemi.intensity, far: scene.fog.far, bg: scene.backgroundIntensity }); // (a passing shower dims these)
+  Object.assign(lightBase, { sun: sun.intensity, hemi: hemi.intensity, far: scene.fog.far, near: scene.fog.near, fogColor: scene.fog.color.clone(), bg: scene.backgroundIntensity }); // (a passing shower dims these, and the morning mist)
   hallLamps.forEach((l) => { l.light.intensity = l.night + (l.day - l.night) * smoothT(0.3, 0.75, d); }); // the halls light up as dusk deepens
   lampGlows.forEach((q) => { q.on = smoothT(q.at + 0.03, q.at - 0.03, d); q.h.material.opacity = q.on; q.p.material.opacity = q.on; q.h.visible = q.p.visible = q.on > 0.001; });
   if (d > 0.7) lampLights.forEach((l) => { l.intensity = 0; });
@@ -4271,6 +4271,43 @@ function infoNear() {
   for (const c of INFO) { if (!c.near || (c.when && !c.when())) continue; const d = Math.hypot(player.x - c.x, player.z - c.z); if (d < c.near && (!best || d < best.d)) best = { id: c.id, d }; }
   return best;
 }
+/* ---------------- morning mist ---------------- */
+// At dawn a soft mist lies over the temple, as it does in the Thai countryside in the cool season: by the visitor's
+// clock it rises from 5:00, is thickest from about 5:45 to 7:15 and has lifted by 8:45. The distance fades into a pale
+// haze, and low banks of mist drift slowly over the lawns and the moat (never through the halls). world.html?mist
+// shows it at any hour.
+const MIST_COLOR = new THREE.Color(0xdde4e6);
+const mistClock = () => { if (/[?&]mist\b/.test(location.search)) return 1; const n = new Date(), m = n.getHours() * 60 + n.getMinutes(); return smoothT(300, 345, m) * (1 - smoothT(435, 525, m)); };
+const mist = { m: mistClock(), banks: [] };
+{
+  const c = document.createElement("canvas"); c.width = c.height = 128; const gx = c.getContext("2d");
+  const gr = gx.createRadialGradient(64, 64, 4, 64, 64, 62); gr.addColorStop(0, "rgba(255,255,255,0.9)"); gr.addColorStop(0.55, "rgba(255,255,255,0.35)"); gr.addColorStop(1, "rgba(255,255,255,0)");
+  gx.fillStyle = gr; gx.fillRect(0, 0, 128, 128);
+  const tex = new THREE.CanvasTexture(c);
+  const clear = (x, z) => Object.values(salas).every((h) => { if (!h || !h.g) return true; const p = h.g.worldToLocal(new THREE.Vector3(x, 0, z)); return Math.abs(p.x) > h.W / 2 + 4 || Math.abs(p.z) > h.D / 2 + 4; });
+  for (let i = 0, tries = 0; i < (HIGH ? 42 : 20) && tries < 400; tries++) {
+    const a = Math.random() * Math.PI * 2, r = 8 + Math.random() * 78, x = Math.sin(a) * r, z = Math.cos(a) * r;
+    if (!clear(x, z)) continue;
+    const mat = new THREE.SpriteMaterial({ map: tex, color: MIST_COLOR, transparent: true, depthWrite: false, opacity: 0 });
+    const sp = new THREE.Sprite(mat); const w = 14 + Math.random() * 14; sp.scale.set(w, w * 0.22, 1); sp.position.set(x, 0.9 + Math.random() * 0.9, z);
+    sp.userData = { x, z, a: Math.random() * 6.28, op: 0.22 + Math.random() * 0.2 }; sp.visible = false; scene.add(sp); mist.banks.push(sp); i++;
+  }
+}
+function mistStep(dt) {
+  mist.m += (mistClock() - mist.m) * Math.min(1, dt / 20);
+  const m = mist.m;
+  if (lightBase.sun != null) {
+    if (lightBase.near == null) { lightBase.near = scene.fog.near; lightBase.fogColor = scene.fog.color.clone(); }
+    scene.fog.near = lightBase.near * (1 - 0.85 * m); scene.fog.far = Math.min(scene.fog.far, lightBase.far * (1 - 0.62 * m));
+    scene.fog.color.copy(lightBase.fogColor).lerp(MIST_COLOR, 0.55 * m * Math.max(0.2, night.d));
+  }
+  for (const b of mist.banks) {
+    b.visible = m > 0.01; if (!b.visible) continue;
+    const u = b.userData; u.a += dt * 0.03;
+    b.position.x = u.x + Math.sin(u.a) * 3; b.position.z = u.z + Math.cos(u.a * 0.7) * 2;
+    b.material.opacity = u.op * m;
+  }
+}
 /* ---------------- the meditation corner ---------------- */
 // Sitting on a cushion in a hall, or anywhere in the Practice Garden, the child may follow a short guided sitting:
 // about one minute or three. A calm voice (Mark) says a few lines with long quiet between them, a small bowl is rung
@@ -4592,7 +4629,7 @@ function tick() {
 // one step of the world: movement, animation, camera and the picture
 function frame(dt) {
   timeStep(dt); placeLampLights(dt);
-  feedStep(dt); fishStep(dt); meritStep(dt); lifeStep(dt); eyesStep(dt); questsStep(dt); mealStep(dt); mediStep(dt); petStep(dt); petalStep(dt); rainStep(dt); dropsStep(dt);
+  feedStep(dt); fishStep(dt); meritStep(dt); lifeStep(dt); eyesStep(dt); questsStep(dt); mealStep(dt); mediStep(dt); petStep(dt); petalStep(dt); rainStep(dt); mistStep(dt); dropsStep(dt);
   if (broom.held && (alms.t >= 0 || kraap.t >= 0 || feed.t >= 0 || shoes.t >= 0 || sit.on || merit.t >= 0)) putBroomBack(); // hands needed elsewhere
   monkTime += dt;
   if (!settings.calmMotion) for (const m of monkFigures) { const b = Math.sin(monkTime * 1.25 + m.ph); m.o.scale.set(1 + b * 0.004, 1 + b * 0.008, 1 + b * 0.004); } // slow breathing
