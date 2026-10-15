@@ -35,6 +35,18 @@ const PLACES = [
   { id: "journey", icon: "👣", th: "เส้นทางของฉัน", en: "My Journey", sub: ["ตามรอยเรื่องของพระพุทธเจ้าทีละก้าว", "Follow the Buddha's story step by step"], href: "index.html#journey", pos: [27, 47], r: 3 },
   { id: "exit", icon: "🚪", th: "ประตูออกจากวัด", en: "Exit gate", sub: ["เมื่อพร้อมแล้ว ออกจากวัดได้เสมอ", "When you're ready, you can always leave"], href: "index.html#exit", pos: [7, 37], r: 4 },
 ];
+// Each story's painting on its board in the Learning Hall: symbols from its source record, in the manner of Thai
+// temple murals, with no figures (img/murals/u01–u08.jpg); what each shows, for those who can't see it
+const MURAL_ALT = [
+  ["ผ้าจีวรสีกรักพับไว้กับบาตร บนทางที่ออกจากบ้านไปสู่ป่า", "A folded ochre robe and an alms bowl on a path leading from a house out to the forest"],
+  ["ใบลานสองมัดบนแท่นเตี้ย ใต้ต้นไม้ และทางที่ทอดยาวต่อไป", "Two bundles of palm-leaf texts on a low stand under a tree, and the path going on beyond"],
+  ["ต้นไม้ไร้ใบบนดินแห้ง กับตะเกียงดวงเล็กที่ยังส่องแสง", "A bare tree on dry ground, with a small lamp still burning"],
+  ["ต้นชมพู่ที่ให้ร่มเงาเย็น กับชามข้าว", "A rose-apple tree giving cool shade, and a bowl of rice"],
+  ["ธรรมจักรในป่าอิสิปตนะ กับกวางสองตัว", "The wheel of Dhamma in the deer park at Isipatana, with two deer"],
+  ["ธรรมจักรแปดซี่เหนือดอกบัว กับคัมภีร์ใบลาน", "An eight-spoked wheel above a lotus, with palm-leaf texts"],
+  ["ตะเกียงที่ส่องสว่าง ข้างคัมภีร์ใบลานพระธรรมและพระวินัย", "A burning lamp beside palm-leaf texts of the Dhamma and the Vinaya"],
+  ["ต้นสาละคู่ออกดอก ดอกร่วงโปรยลงมา", "Twin sal trees in bloom, their blossoms falling"],
+];
 // The eight U01–U08 stepping stones of My Journey (titles from the Library's Child Output Records).
 const JOURNEY = [
   ["ออกแสวงหา", "Going forth to seek"], ["อาฬาระและอุทกะ", "Āḷāra and Uddaka"], ["ทดลองทางที่หนักเกินไป", "Trying a path that was too harsh"],
@@ -385,7 +397,7 @@ function wrapText(gx, text, maxW) {
   if (cur.trim()) lines.push(cur.trim()); return lines;
 }
 // a framed board: small heading, a round icon, a title and an optional footnote
-function boardTexture({ head = "", icon = "", title = "", foot = "", wide = false }) {
+function boardTexture({ head = "", icon = "", title = "", foot = "", wide = false, picture = null }) {
   const Wd = wide ? 768 : 512, Hd = 640;
   const c = document.createElement("canvas"); c.width = Wd; c.height = Hd;
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
@@ -396,6 +408,15 @@ function boardTexture({ head = "", icon = "", title = "", foot = "", wide = fals
     gx.fillStyle = "#fdf3dc"; gx.fillRect(30, 30, Wd - 60, Hd - 60);
     gx.strokeStyle = "#c9963a"; gx.lineWidth = 3; gx.strokeRect(46, 46, Wd - 92, Hd - 92);
     gx.textAlign = "center"; gx.textBaseline = "middle";
+    if (pic && pic.complete && pic.naturalWidth) { // a painting: the number above, the title and the note below
+      if (head) { gx.fillStyle = "#a5560f"; gx.font = "40px Itim, sans-serif"; gx.fillText(head, Wd / 2, 92); }
+      const pw = Wd - 112, ph = pw * 3 / 4, px = 56, py = 124;
+      gx.fillStyle = "#c9963a"; gx.fillRect(px - 6, py - 6, pw + 12, ph + 12); gx.drawImage(pic, px, py, pw, ph);
+      gx.font = "46px Itim, sans-serif"; gx.fillStyle = "#3a2a1d";
+      wrapText(gx, title, Wd - 132).slice(0, 2).forEach((ln, i) => gx.fillText(ln, Wd / 2, py + ph + 52 + i * 52));
+      if (foot) { gx.font = "26px Mali, sans-serif"; gx.fillStyle = "#6e5c4c"; gx.fillText(wrapText(gx, foot, Wd - 132)[0] || "", Wd / 2, Hd - 64); }
+      t.needsUpdate = true; return;
+    }
     if (head) { gx.fillStyle = "#a5560f"; gx.font = "44px Itim, sans-serif"; gx.fillText(head, Wd / 2, 118); }
     if (icon) { gx.beginPath(); gx.arc(Wd / 2, 228, 64, 0, Math.PI * 2); gx.fillStyle = "#f2cc62"; gx.fill(); gx.font = "70px sans-serif"; gx.fillStyle = "#3a2a1d"; gx.fillText(icon, Wd / 2, 232); }
     gx.font = "52px Itim, sans-serif"; gx.fillStyle = "#3a2a1d";
@@ -403,6 +424,8 @@ function boardTexture({ head = "", icon = "", title = "", foot = "", wide = fals
     if (foot) { gx.font = "28px Mali, sans-serif"; gx.fillStyle = "#6e5c4c"; wrapText(gx, foot, Wd - 132).slice(0, 2).forEach((ln, i) => gx.fillText(ln, Wd / 2, 552 + i * 36)); }
     t.needsUpdate = true;
   };
+  // (the painting arrives later; until then the board shows its icon)
+  const pic = picture ? new Image() : null; if (pic) { pic.onload = draw; pic.src = picture; }
   draw(); signDraws.push(draw); return t;
 }
 // hang a board on a sala wall: side = "back" | "left" | "right", at offset u along that wall
@@ -761,7 +784,7 @@ function shrine(h, monks = [], { gifts = false } = {}) {
   shrine(h, [["monk-elder", -2.6], ["monk", 2.6], ["monk-young", 4.6]], { gifts: true }); // the main hall, where the monks sit: Kathina is offered here
   const spots = [["left", 4.2], ["left", 2.2], ["left", 0.2], ["left", -1.8], ["right", -1.8], ["right", 0.2], ["right", 2.2], ["right", 4.2]];
   spots.forEach(([side, u], i) => {
-    const tex = boardTexture({ head: tx("เรื่องที่ ", "Story ") + (i + 1), icon: "👣", title: L === "en" ? JOURNEY[i][1] : JOURNEY[i][0], foot: tx("เดินมาใกล้ ๆ แล้วกด E", "Walk close and press E") });
+    const tex = boardTexture({ head: tx("เรื่องที่ ", "Story ") + (i + 1), icon: "👣", title: L === "en" ? JOURNEY[i][1] : JOURNEY[i][0], foot: tx("เดินมาใกล้ ๆ แล้วกด E", "Walk close and press E"), picture: `img/murals/u0${i + 1}.jpg` });
     boards.push({ ...wallBoard(h, side, u, tex), i });
   });
   // students and visitors sit on the floor, facing the platform
@@ -4179,7 +4202,8 @@ function openPlace(p) {
   if (p.stone != null) {
     const n = p.stone + 1;
     openDialog(`👣 ${n} · ${esc(L === "en" ? JOURNEY[p.stone][1] : JOURNEY[p.stone][0])}`,
-      `<p>${p.board ? tx("ป้ายเรื่องที่ " + n + " ในศาลาเรียนรู้ เปิดอ่านเรื่องนี้ได้ พร้อมต้นทางและกระจกอีกบาน", "Story board " + n + " in the Learning Hall. Open the story, with its source and the other mirror.") : tx("หินก้อนที่ " + n + " บนเส้นทางของฉัน เรื่องนี้อ่านได้ในศาลาเรียนรู้ พร้อมต้นทางและกระจกอีกบาน", "Stone " + n + " on My Journey. Read this story in the Learning Hall, with its source and the other mirror.")}</p>
+      `<img class="mural" src="img/murals/u0${n}.jpg" alt="${esc(tx(...MURAL_ALT[p.stone]))}">
+       <p>${p.board ? tx("ป้ายเรื่องที่ " + n + " ในศาลาเรียนรู้ เปิดอ่านเรื่องนี้ได้ พร้อมต้นทางและกระจกอีกบาน", "Story board " + n + " in the Learning Hall. Open the story, with its source and the other mirror.") : tx("หินก้อนที่ " + n + " บนเส้นทางของฉัน เรื่องนี้อ่านได้ในศาลาเรียนรู้ พร้อมต้นทางและกระจกอีกบาน", "Stone " + n + " on My Journey. Read this story in the Learning Hall, with its source and the other mirror.")}</p>
        <div class="row"><a class="btn" href="${to2d("u0" + n)}">${tx("เปิดเรื่องนี้ →", "Open this story →")}</a><button class="chip" data-close>${tx("เดินต่อ", "Keep walking")}</button></div>`);
   } else {
     openDialog(`${p.icon} ${esc(placeName(p))}`,
