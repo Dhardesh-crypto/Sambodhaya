@@ -17,6 +17,8 @@ const read = (k, d) => { try { const v = localStorage.getItem("sambodhaya-" + k)
 const write = (k, v) => { try { localStorage.setItem("sambodhaya-" + k, JSON.stringify(v)); return true; } catch (e) { return false; } };
 const settings = { lang: "th", calmMotion: false, mute: false, guide: true, ...read("settings", {}) };
 if (matchMedia("(prefers-reduced-motion: reduce)").matches) settings.calmMotion = true;
+// world.html?lang=en (or ?lang=th) chooses the language, and keeps it (the 2D pages read the same setting)
+{ const q = (location.search.match(/[?&]lang=(th|en)\b/) || [])[1]; if (q) { settings.lang = q; write("settings", { ...read("settings", {}), lang: q }); } }
 const L = settings.lang === "en" ? "en" : "th";
 const tx = (th, en) => (L === "en" ? en : th);
 document.documentElement.lang = L;

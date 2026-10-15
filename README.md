@@ -151,3 +151,12 @@ Deployed as-is (no build step on Netlify; see `netlify.toml`) to https://sambodh
 **The Universal Hall's image** is made after the Emerald Buddha (พระแก้วมรกต): green stone, high on a tall gilded throne, in the golden costume of the season, changed as in Bangkok the day after the full moons of the 4th, 8th and 12th lunar months (worked out in the page): royal attire with a tall crown for the hot season (~March), a gilded robe with blue enamel and the right shoulder bare for the rainy season (~July), and a shawl of gold mesh for the cool season (~November). Each is its own model (`emerald-hot|rainy|cool.glb`: Higgsfield images approved by the user, then Tripo image-to-3D); `world.html?season=hot|rainy|cool` shows each. Its card (💚) says what it is and which costume it wears now. The Learning Hall's golden image is the larger of the two (2.5 m against the green figure's smaller size on its throne).
 
 **The Learning Hall's spire (ยอดปราสาท):** the main hall, where the monks sit, has a spire astride the ridge of its upper roof, after a photo from a Thai temple: a white square base with gilded corners and a small gabled porch roof on each side, five stacked gold tiers with points at the corners and edges, a gold bell, a long ringed taper, and a slender spike with a small bulb near its tip. It is seen from across the temple.
+
+**URL options for `world.html`** (combine with `&`, e.g. `world.html?lang=en&alms&mist`):
+- `?lang=en` / `?lang=th`: the language; it is kept, and the 2D pages follow it
+- `?alms`: the alms round at any hour (normally 6:00–11:00)
+- `?meal`: the monks' meal at any hour (normally 7:00–9:00 and 11:00–12:00)
+- `?mist`: the morning mist (normally at dawn)
+- `?loykrathong`, `?bucha`: a festival at any time (normally by the full moon)
+- `?season=hot|rainy|cool`: the Emerald Buddha's costume (normally by the season)
+- `?debug`: a test console for development (`window.__w`); `?return=1` is set by the site itself on the way back from a 2D page
