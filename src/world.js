@@ -161,7 +161,7 @@ function fitTo(obj, h) {
 }
 const propJobs = [];
 // place copies of a prop: list of [x, z, rotY, y?]; fallback() runs if the model is missing
-function props(name, h, list, { fallback, shadow = true, parent = scene, extra = false } = {}) {
+function props(name, h, list, { fallback, shadow = true, parent = scene, extra = false, each = null } = {}) {
   if (extra && !HIGH) return Promise.resolve(); // purely decorative: skipped in light mode
   const job = loadProp(name).then((src) => {
     if (!src) { if (fallback) fallback(); return; }
@@ -169,7 +169,7 @@ function props(name, h, list, { fallback, shadow = true, parent = scene, extra =
     const copy = src.clone();
     copy.traverse((o) => { if (o.isMesh) { o.castShadow = shadow; o.receiveShadow = true; if (o.material) o.material.envMapIntensity = 1; } });
     const base = fitTo(copy, h);
-    list.forEach(([x, z, r = 0, y = 0]) => { const c = base.clone(); c.position.set(x, y, z); c.rotation.y = r; parent.add(c); });
+    list.forEach(([x, z, r = 0, y = 0]) => { const c = base.clone(); c.position.set(x, y, z); c.rotation.y = r; parent.add(c); if (each) each(c); });
   });
   propJobs.push(job); return job;
 }
@@ -694,6 +694,18 @@ function blessingSet(g, lx, top, lz) {
   whisk.position.copy(rest.pos); whisk.rotation.copy(rest.rot);
   return { whisk, rest, hold, dip, g, flicked: [] };
 }
+// deep green polished stone above, its lotus throne gilded below (one mesh: split by height, in the shader)
+const EMERALD = new THREE.MeshStandardMaterial({ color: 0x0c6a43, roughness: 0.16, metalness: 0.05 });
+EMERALD.userData.cut = { value: 0 };
+EMERALD.onBeforeCompile = (sh) => {
+  sh.uniforms.uCut = EMERALD.userData.cut;
+  sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying float vWY;").replace("#include <worldpos_vertex>", "#include <worldpos_vertex>\nvWY = (modelMatrix * vec4(transformed, 1.0)).y;");
+  sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying float vWY;\nuniform float uCut;")
+    .replace("#include <color_fragment>", "#include <color_fragment>\nbool gilt = vWY < uCut; if (gilt) diffuseColor.rgb = vec3(0.83, 0.62, 0.22);")
+    .replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\nif (gilt) roughnessFactor = 0.32;")
+    .replace("#include <metalnessmap_fragment>", "#include <metalnessmap_fragment>\nif (gilt) metalnessFactor = 0.85;");
+};
+const EMERALD_THRONE = 0.2; // the lotus throne: this share of the image's height, from the bottom
 function shrine(h, monks = [], { gifts = false } = {}) {
   const { g, FY, W, D } = h;
   const PH = 0.6, PD = 2.8, pz = -D / 2 + 0.2 + PD / 2;     // teachers' platform: height, depth, centre
@@ -743,7 +755,12 @@ function shrine(h, monks = [], { gifts = false } = {}) {
   infoSpot("buddha", ...WP(0, statueY + 0.95, az - 0.24), 1.3); infoSpot("altar", ...WP(0, top + 0.5, az + 0.2), 1.0);
   [-1.15, 1.15].forEach((x) => infoSpot("phanphum", ...WP(x, top + 0.95, az + 0.15), 0.45)); // the wai turns toward it; the kraap is made from the spot
   // the model is built facing +x; a quarter turn makes the image face the entrance
-  props("buddha", 1.9, [[0, az - 0.12 * 2, -Math.PI / 2, statueY]], { parent: g, fallback: () => {
+  // the Universal Hall's image is green, like the Emerald Buddha (พระแก้วมรกต): polished green stone
+  const emerald = h === salas.access ? (c) => {
+    c.traverse((o) => { if (o.isMesh) o.material = EMERALD; });
+    c.updateWorldMatrix(true, true); const b = new THREE.Box3().setFromObject(c); EMERALD.userData.cut.value = b.min.y + (b.max.y - b.min.y) * EMERALD_THRONE;
+  } : null;
+  props("buddha", 1.9, [[0, az - 0.12 * 2, -Math.PI / 2, statueY]], { parent: g, each: emerald, fallback: () => {
     // if the image can't load, a lotus throne stays rather than nothing
     add(new THREE.CylinderGeometry(0.55, 0.45, 0.35, 24), MAT.gold, 0, statueY + 0.18, az - 0.24, g);
   } });

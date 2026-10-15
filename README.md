@@ -145,3 +145,5 @@ python3 src/build.py      # content.js + app.jsx -> index.html (needs Node for n
 ```
 
 Deployed as-is (no build step on Netlify; see `netlify.toml`) to https://sambodhaya.netlify.app.
+
+**The Universal Hall's image** is green, like the Emerald Buddha (พระแก้วมรกต): deep green polished stone, seated on a gilded lotus throne (the same model as the Learning Hall's golden image, coloured in the shader: green above, gold below).
