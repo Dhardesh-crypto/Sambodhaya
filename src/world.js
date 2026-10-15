@@ -1028,7 +1028,8 @@ const almsMonks = [];
 // Monks eat only between dawn and midday, so the alms round is a morning sight: the monks and the rice table are
 // on the road from 6:00 until 11:00 by the visitor's own clock, and not in the afternoon, evening or night.
 const ALMS_HOURS = [6, 11];
-const almsTime = () => { const h = new Date().getHours(); return h >= ALMS_HOURS[0] && h < ALMS_HOURS[1]; };
+// (world.html?alms shows the alms round at any hour, to preview it)
+const almsTime = () => { if (/[?&]alms\b/.test(location.search)) return true; const h = new Date().getHours(); return h >= ALMS_HOURS[0] && h < ALMS_HOURS[1]; };
 const almsScene = { on: true, table: new THREE.Group(), cols: [] };
 scene.add(almsScene.table);
 const RICE_R = 0.1, riceGeo = new THREE.SphereGeometry(RICE_R, 16, 12), riceMat = S(0xf7f1e1, { roughness: 0.95 });
@@ -2777,7 +2778,7 @@ function recite(url, at, inside, text = null, length = 11) {
 // not hand things to a monk directly). When all three are offered the child stays kneeling with a wai and the senior
 // monk gives the blessing; then the monks eat, quietly and slowly, the plate in the left hand and a spoon in the right.
 const MEAL_HOURS = [[7, 9], [11, 12]];
-let mealForce = null; // (for testing: true or false overrides the clock)
+let mealForce = /[?&]meal\b/.test(location.search) ? true : null; // (world.html?meal shows a meal at any hour, to preview it; true or false overrides the clock)
 const mealTime = () => { if (mealForce != null) return mealForce; const h = new Date().getHours(); return MEAL_HOURS.some(([a, b]) => h >= a && h < b); };
 const MEAL_RELEASE = 4.3, MEAL_TABLE = { x: 3.6, back: 2.6 }; // when the monk takes it; the low table: across, and before the platform edge
 // keys as the Kathina's: [t, kneel, chest wai, high wai, floor, bow, tray, lift, place, back, reach]
