@@ -42,6 +42,10 @@ const JOURNEY = [
   ["ช่วงสุดท้าย", "The final period"], ["ปรินิพพาน", "Parinibbāna"],
 ];
 
+// Things in the temple that have a card (what it is and why), marked where each is built: see openInfo
+const INFO = [];
+function infoSpot(id, x, y, z, r, near = 0, when = null) { INFO.push({ id, x, y, z, r, near, when }); }
+
 /* ---------------- renderer, scene, camera ---------------- */
 // Quality: "high" = sunset sky lighting, soft shadows, glow and detailed models; "light" = for weaker phones.
 // Chosen automatically the first time, then remembered on this device only.
@@ -248,7 +252,7 @@ const LANE = { x1: 22, z1: -9, x2: 34, z2: -9, w: 1.5 };
     add(new THREE.IcosahedronGeometry(r, 1), i % 2 ? MAT.leaf : MAT.leafLight, x, y, z, simple));
   // the Bodhi tree model replaces the simple one once it has loaded
   loadProp("bodhi").then((m) => { if (m) simple.visible = false; });
-  props("bodhi", 18, [[0, 0, 0.6, 1.4]]);
+  props("bodhi", 18, [[0, 0, 0.6, 1.4]]); infoSpot("bodhi", 0, 5, 0, 8, 4.2);
   colliders.push({ x: 0, z: 0, r: 7 });
 }
 
@@ -671,6 +675,7 @@ function shrine(h, monks = [], { gifts = false } = {}) {
   const { g, FY, W, D } = h;
   const PH = 0.6, PD = 2.8, pz = -D / 2 + 0.2 + PD / 2;     // teachers' platform: height, depth, centre
   const top = FY + PH;
+  const WP = (x, y, z) => { const [wx, wz] = h.toWorld(x, z); return [wx, y, wz]; }; // (a point in the hall, in the world)
   add(new THREE.BoxGeometry(W - 0.8, PH, PD), MAT.lacquer, 0, FY + PH / 2, pz, g);
   add(new THREE.BoxGeometry(W - 0.7, 0.08, PD + 0.1), MAT.floor, 0, top + 0.02, pz, g, false);
   add(new THREE.BoxGeometry(W - 0.75, 0.1, 0.06), MAT.gold, 0, FY + PH - 0.12, pz + PD / 2 + 0.01, g, false);
@@ -681,9 +686,9 @@ function shrine(h, monks = [], { gifts = false } = {}) {
   const triGeo = new THREE.ExtrudeGeometry(tri, { depth: 0.22, bevelEnabled: false }); triGeo.translate(0, 0, -0.11);
   const seatGeo = new THREE.BoxGeometry(1.5, 0.14, 1.5), seatMat = S(0xb8862e, { roughness: 0.9 }), backMat = S(0x9b2a1d, { roughness: 0.9 });
   [-4.6, -2.6, 2.6, 4.6].forEach((lx) => {
-    if (gifts && lx === -4.6) { kathinGifts(g, lx, top + 0.06, pz + SEAT_Z); return; } // the Kathina gifts stand in this seat's place
+    if (gifts && lx === -4.6) { kathinGifts(g, lx, top + 0.06, pz + SEAT_Z); infoSpot("kathin", ...WP(lx, top + 0.5, pz + SEAT_Z), 1.0); return; } // the Kathina gifts stand in this seat's place
     add(seatGeo, seatMat, lx, top + 0.1, pz + SEAT_Z, g);
-    add(triGeo, backMat, lx, top + 0.03, pz + SEAT_Z - 0.9, g);
+    add(triGeo, backMat, lx, top + 0.03, pz + SEAT_Z - 0.9, g); infoSpot("cushion", ...WP(lx, top + 0.6, pz + SEAT_Z - 0.9), 0.75);
   });
   monks.forEach(([name, lx]) => {
     const rigged = gifts && TEACHER_RIGS[name]; // the teachers in the main hall are rigged
@@ -692,7 +697,7 @@ function shrine(h, monks = [], { gifts = false } = {}) {
     if (rigged) { loadSeated(rigged, seat, name); (h.teachers = h.teachers || []).push(seat); }
     if (name === "monk-elder") { // the senior monk: he receives offerings, and blesses with holy water
       h.senior = seat;
-      h.senior.bless = blessingSet(g, lx, top + 0.06, pz + SEAT_Z);
+      h.senior.bless = blessingSet(g, lx, top + 0.06, pz + SEAT_Z); infoSpot("holywater", ...WP(lx - 0.92, top + 0.2, pz + SEAT_Z + 0.3), 0.5);
     }
   });
   // the stepped altar (to mu bucha) in the middle of the platform
@@ -711,7 +716,9 @@ function shrine(h, monks = [], { gifts = false } = {}) {
   add(new THREE.BoxGeometry(3.6, 4.4, 0.05), S(0x9b2a1d, { roughness: 0.9 }), 0, top + 2.3, -D / 2 + 0.24, g, false);
   add(new THREE.BoxGeometry(3.7, 0.12, 0.07), MAT.gold, 0, top + 4.5, -D / 2 + 0.25, g, false);
   { const [bx, bz] = h.toWorld(0, az - 0.24), [sx, sz] = h.toWorld(0, pz + PD / 2 + KRAAP_BACK); // bowed head and hands reach ~1.45 m forward, clear of the incense table
-    buddhaImages.push({ x: bx, z: bz, hall: h, spot: { x: sx, z: sz } }); } // the wai turns toward it; the kraap is made from the spot
+    buddhaImages.push({ x: bx, z: bz, hall: h, spot: { x: sx, z: sz } }); }
+  infoSpot("buddha", ...WP(0, statueY + 0.95, az - 0.24), 1.3); infoSpot("altar", ...WP(0, top + 0.5, az + 0.2), 1.0);
+  [-1.15, 1.15].forEach((x) => infoSpot("phanphum", ...WP(x, top + 0.95, az + 0.15), 0.45)); // the wai turns toward it; the kraap is made from the spot
   // the model is built facing +x; a quarter turn makes the image face the entrance
   props("buddha", 1.9, [[0, az - 0.12 * 2, -Math.PI / 2, statueY]], { parent: g, fallback: () => {
     // if the image can't load, a lotus throne stays rather than nothing
@@ -938,7 +945,7 @@ const BIG_BUDDHA_H = 21, BIG_BUDDHA_TURN = -Math.PI / 2; // the great white Budd
   add(new THREE.BoxGeometry(17, 1.2, 9), MAT.rock, 0, 9.6, -67.5).rotation.y = 0.05;         // its uneven top
   blockers.push({ x: 0, z: -67.25, c: 1, s: 0, hx: 12, hz: 5.75 });
   props("boulder", 4.5, [[-10.5, -61.6, 0.7, 8.6], [10.4, -62, 2.1, 8.6], [-11.2, -70, 3, 8.6], [11, -70.5, 1, 8.6]]);
-  props("buddha-white", BIG_BUDDHA_H, [[0, -67.5, BIG_BUDDHA_TURN, 10.2]]);
+  props("buddha-white", BIG_BUDDHA_H, [[0, -67.5, BIG_BUDDHA_TURN, 10.2]]); infoSpot("bigbuddha", 0, 17, -67.5, 11);
   if (HIGH) [-1, 1].forEach((sg) => { // (real lights are costly: light mode leaves it unlit at night)
     const l = new THREE.SpotLight(0xfff0d8, 0, 60, 0.42, 0.6, 1.2); l.position.set(sg * 12, 3, -50.5); l.target.position.set(0, 21, -67); scene.add(l, l.target); // (behind the halls, so their insides stay out of the beam)
     hallLamps.push({ light: l, day: 0, night: 140 });
@@ -1040,6 +1047,7 @@ ALMS_MONKS.forEach(([name, H], i) => {
   const lean = new THREE.Group(); pivot.add(lean);                   // a slight bow toward the giver as he receives
   const [bf, by, br] = ALMS_BOWL[name];
   const m = { name, x, z, yaw, pivot, lean, bowl: { f: bf * H, y: by * H, r: br * H }, rice: [] };
+  infoSpot("bowl", x + Math.sin(yaw) * bf * H, groundAt(x, z) + by * H, z + Math.cos(yaw) * bf * H, 0.55, 0, () => almsScene.on);
   almsMonks.push(m); const col = { x, z, r: 0.75, r0: 0.75 }; colliders.push(col); almsScene.cols.push(col);
   propJobs.push(loadProp(name).then((src) => {
     if (!src) { pivot.visible = false; almsMonks.splice(almsMonks.indexOf(m), 1); return; }
@@ -1131,7 +1139,7 @@ const YAKSHA_H = 6.2; // the guardians stand about as tall as the gateway's post
   [[-1, "yaksha-green"], [1, "yaksha-white"]].forEach(([sg, name]) => {
     add(new THREE.BoxGeometry(2.3, 0.7, 1.9), wallMat, sg * YX, 0.35, YZ);
     add(new THREE.BoxGeometry(2.45, 0.12, 2.05), MAT.gold, sg * YX, 0.72, YZ, scene, false);
-    props(name, YAKSHA_H, [[sg * YX, YZ, MONK_TURN, 0.78]]);
+    props(name, YAKSHA_H, [[sg * YX, YZ, MONK_TURN, 0.78]]); infoSpot("yaksha", sg * YX, 3.2, YZ, 2.2, 2.8);
   });
   [-1, 1].forEach((sg) => {
     const e = gable(11.7, 0.25, 2.95, MAT.roofEdge); e.position.set(0, 6.85, GZ + sg * 1.5); scene.add(e);
@@ -1202,12 +1210,13 @@ const nagaScales = (() => {
       nagaHeads.push([x, ZC - u - out * NAGA_BACK, out > 0 ? -Math.PI / 2 : Math.PI / 2, y + 0.6]);
     });
   });
+  nagaHeads.forEach(([hx, hz, , hy]) => infoSpot("naga", hx, hy + 0.8, hz, 1.6));
   props("naga", NAGA_H, nagaHeads, { fallback: () => nagaHeads.forEach(([hx, hz, , hy]) => add(new THREE.ConeGeometry(0.35, 1.6, 8), MAT.gold, hx, hy + 0.8, hz)) });
 }
 
 /* ---------------- small things that make it feel lived in ---------------- */
 const BELL = [-6.8, 24.5]; // beside the entrance road: rung without stepping off the road
-props("bell", 4.6, [[BELL[0], BELL[1], 0.9]]); colliders.push({ x: BELL[0], z: BELL[1], r: 1.6 });
+props("bell", 4.6, [[BELL[0], BELL[1], 0.9]]); infoSpot("bell", BELL[0], 2.6, BELL[1], 2.6); colliders.push({ x: BELL[0], z: BELL[1], r: 1.6 });
 const jars = [[-33, 7], [-19, 21], [-11, 39], [11, 39], [22, 19], [-36, -8]];
 props("jar", 1.1, jars.map(([x, z], i) => [x, z, i]), { extra: true }); jars.forEach(([x, z]) => colliders.push({ x, z, r: 0.7 }));
 const bushes = [[-9, 18], [9, 18], [-19, -5], [19, -5], [-24, -36], [24, -36], [-40, 0], [40, -4], [22, 52], [36, 40], [-8, -52], [8, -52]];
@@ -1215,7 +1224,7 @@ props("bougainvillea", 2.4, bushes.map(([x, z], i) => [x, z, i * 2]), { extra: t
 const pots = [[-5.2, 15.8], [5.2, 15.8]];
 props("potplant", 1.6, pots.map(([x, z], i) => [x, z, i]), { extra: true }); pots.forEach(([x, z]) => colliders.push({ x, z, r: 0.6 }));
 const blooms = [[-9.5, 12], [9.5, 12]];
-props("lotus", 1, blooms.map(([x, z], i) => [x, z, i]), { extra: true }); blooms.forEach(([x, z]) => colliders.push({ x, z, r: 0.8 }));
+props("lotus", 1, blooms.map(([x, z], i) => [x, z, i]), { extra: true }); blooms.forEach(([x, z]) => infoSpot("lotus", x, 0.6, z, 1.3, 2.2)); blooms.forEach(([x, z]) => colliders.push({ x, z, r: 0.8 }));
 
 /* ---------------- the garden: Thai temple planting and rock formations ---------------- */
 const gardenSpots = []; // (for ?debug checks)
@@ -4061,6 +4070,10 @@ function pickAt(x, y) {
   const v = new THREE.Vector2((x / innerWidth) * 2 - 1, -(y / innerHeight) * 2 + 1);
   ray.setFromCamera(v, camera);
   if (dog.obj.visible && ray.intersectObject(dog.obj, true).length) { openPlaces(true); return; }
+  { const h = salas.learn; // a seated monk: what can be done before him (the child goes to him to do it)
+    const s = h && h.teachers && kraap.t < 0 && alms.t < 0 && h.teachers.find((t) => t.rig && TEACHER_TALK[t.name] && ray.intersectObject(t.rig.holder, true).length);
+    if (s) { openMonk(monkPlace(h, s)); return; } }
+  const info = infoAtRay(); if (info) { openInfo(info.id); return; }
   if (insideHall(player.x, player.z)) return; // inside a hall, clicks just turn the view
   for (const id of Object.keys(halls)) { if (ray.intersectObject(halls[id], true).length) { openPlace(PLACES.find((p) => p.id === id)); return; } }
 }
@@ -4103,7 +4116,7 @@ function showPrompt(p) {
   if (!p) { el.hidden = true; return; }
   $("prompt-name").textContent = p.icon + " " + placeName(p);
   $("prompt-sub").textContent = p.stone != null ? (p.board ? tx("ป้ายเรื่องที่ ", "Story board ") : tx("เรื่องที่ ", "Story ")) + (p.stone + 1) : p.sub[L === "en" ? 1 : 0];
-  $("prompt-go").textContent = p.id === "bell" ? tx("ตี", "Strike") : p.id === "donate" ? tx("เปิด", "Open") : p.id === "alms" ? tx("ใส่บาตร", "Offer") : p.id === "fish" ? tx("ให้อาหาร", "Feed") : p.merit ? tx("ทำบุญ", "Offer") : p.id === "broom" ? (broom.held ? tx("วาง", "Put back") : tx("หยิบ", "Pick up")) : p.id === "monk" ? (p.acts.length > 1 ? tx("เลือก", "Choose") : tx("ไหว้", "Greet")) : p.id === "cat" ? tx("ลูบ", "Pet") : tx("เข้า", "Visit");
+  $("prompt-go").textContent = p.id === "bell" ? tx("ตี", "Strike") : p.id === "donate" ? tx("เปิด", "Open") : p.id === "alms" ? tx("ใส่บาตร", "Offer") : p.id === "fish" ? tx("ให้อาหาร", "Feed") : p.merit ? tx("ทำบุญ", "Offer") : p.id === "broom" ? (broom.held ? tx("วาง", "Put back") : tx("หยิบ", "Pick up")) : p.id === "info" ? tx("อ่าน", "Read") : p.id === "monk" ? (p.acts.length > 1 ? tx("เลือก", "Choose") : tx("ไหว้", "Greet")) : p.id === "cat" ? tx("ลูบ", "Pet") : tx("เข้า", "Visit");
   el.hidden = false;
 }
 $("prompt-go").addEventListener("click", () => near && openPlace(near));
@@ -4162,6 +4175,7 @@ function openPlace(p) {
   if (p.id === "cat") { startPetCat(); return; }
   if (p.id === "broom") { broom.held = !broom.held; near = null; return; }
   if (p.id === "monk") { openMonk(p); return; }
+  if (p.id === "info") { openInfo(p.info); return; }
   if (p.stone != null) {
     const n = p.stone + 1;
     openDialog(`👣 ${n} · ${esc(L === "en" ? JOURNEY[p.stone][1] : JOURNEY[p.stone][0])}`,
@@ -4192,6 +4206,46 @@ function teleport(id) {
   [player.x, player.z] = collide(player.x, player.z);
   dog.x = player.x + 1.5; dog.z = player.z + 1.5;
   camYaw = id === "journey" || id === "exit" ? Math.atan2(player.x, player.z) : (Math.atan2(player.x - x, player.z - z) || camYaw);
+}
+/* ---------------- cards: what things in the temple are, and why ---------------- */
+// Click or tap a thing (or walk up to one outdoors and press E) for a short card. Spots are marked where each thing is
+// built (infoSpot); a click finds the nearest spot to where it touched the world.
+const INFO_TEXT = {
+  bodhi: { icon: "🌳", t: ["ต้นโพธิ์", "The Bodhi tree"], d: ["พระพุทธเจ้าตรัสรู้ใต้ต้นโพธิ์ คนไทยจึงเคารพต้นโพธิ์ และผูกผ้าสีที่ลำต้นเพื่อบูชา", "The Buddha became enlightened under a Bodhi tree, so Thai people honour Bodhi trees and tie coloured cloths round them as an offering."] },
+  yaksha: { icon: "🛡️", t: ["ยักษ์ทวารบาล", "The guardian giants"], d: ["ยักษ์ยืนเฝ้าประตูวัด เป็นผู้พิทักษ์พระพุทธศาสนา ไม่ใช่ปีศาจที่น่ากลัว", "The giants stand guard at the temple gate. They protect the Buddha's teaching: they are guardians, not monsters."] },
+  naga: { icon: "🐉", t: ["พญานาค", "The naga"], d: ["นาคเป็นงูใหญ่ในตำนาน เชื่อว่าคุ้มครองพระพุทธศาสนา จึงเฝ้าราวบันไดและสะพานของวัด มีเรื่องเล่าว่าพญานาคมุจลินท์แผ่พังพานกันฝนให้พระพุทธเจ้า", "Nagas are great serpents of legend, protectors of the Buddha's teaching, so they guard temple stairs and bridges. A story tells how the naga king Mucalinda sheltered the Buddha from the rain with his hood."] },
+  bell: { icon: "🔔", t: ["ระฆัง", "The bell"], d: ["ระฆังใช้ตีบอกเวลาให้พระมาทำวัตรสวดมนต์เช้าและเย็น เสียงระฆังยังเตือนให้เรามีสติ", "The bell is struck to call the monks to morning and evening chanting. Its sound also reminds us to be mindful."] },
+  lotus: { icon: "🪷", t: ["ดอกบัว", "The lotus"], d: ["ดอกบัวงอกจากโคลน แต่บานสะอาดพ้นน้ำ เหมือนใจที่ฝึกดีแล้ว อยู่ในโลกได้โดยไม่แปดเปื้อน", "The lotus grows from the mud but opens clean above the water, like a well-trained mind that lives in the world without being stained."] },
+  bigbuddha: { icon: "🙏", t: ["พระพุทธรูปองค์ใหญ่", "The great Buddha image"], d: ["พระพุทธรูปเตือนให้เราระลึกถึงพระพุทธเจ้าและคำสอนของท่าน เราไม่ได้บูชาก้อนหิน แต่บูชาความดีที่ท่านสอน", "A Buddha image reminds us of the Buddha and his teaching. We honour not the stone, but the goodness he taught."] },
+  buddha: { icon: "🙏", t: ["พระประธาน", "The main Buddha image"], d: ["พระพุทธรูปองค์หลักของศาลา เมื่อเข้ามา เรานั่งคุกเข่าและกราบสามครั้ง เพื่อระลึกถึงพระพุทธ พระธรรม และพระสงฆ์", "The hall's main Buddha image. When we come in, we kneel and bow three times, remembering the Buddha, the Dhamma and the Sangha."] },
+  altar: { icon: "🕯️", t: ["โต๊ะหมู่บูชา", "The altar"], d: ["โต๊ะหมู่บูชาเป็นที่ตั้งพระพุทธรูป เราถวายธูป เทียน และดอกไม้ เพื่อบูชาพระพุทธ พระธรรม และพระสงฆ์", "The stepped altar holds the Buddha image. We offer incense, candles and flowers to honour the Buddha, the Dhamma and the Sangha."] },
+  phanphum: { icon: "🏵️", t: ["พานพุ่ม", "The phan phum"], d: ["พานพุ่มคือดอกไม้หรือใบไม้ที่จัดเป็นทรงพุ่มบนพาน วางบนโต๊ะบูชาเพื่อความงามและความเคารพ", "A phan phum is flowers or leaves shaped into a cone on a stand, set on the altar for beauty and respect."] },
+  kathin: { icon: "🟫", t: ["เครื่องกฐิน", "The Kathina gifts"], d: ["เครื่องกฐินมีผ้าไตรจีวร บาตร และของใช้จำเป็นของพระ ถวายปีละครั้งหลังออกพรรษา", "The Kathina gifts are a set of robes, an alms bowl and things a monk needs, offered once a year after the rains retreat."] },
+  cushion: { icon: "🔺", t: ["หมอนสามเหลี่ยม", "The triangle cushion"], d: ["หมอนสามเหลี่ยม (หมอนขวาน) ใช้พิงหลังเวลานั่งนาน ๆ เป็นหมอนแบบไทยดั้งเดิม", "The triangle cushion (mon khwan) supports the back during long sittings: a traditional Thai cushion."] },
+  holywater: { icon: "💧", t: ["ขันน้ำมนต์และไม้พรม", "The holy water and the whisk"], d: ["พระสวดมนต์ให้น้ำ แล้วใช้ไม้พรมประพรมน้ำมนต์ให้พร เพื่อความเป็นสิริมงคล", "The monks chant over the water, then sprinkle it with the whisk as a blessing for good fortune."] },
+  bowl: { icon: "🥣", t: ["บาตร", "The alms bowl"], d: ["บาตรเป็นภาชนะของพระ ใช้รับอาหารที่ญาติโยมใส่บาตรตอนเช้า พระดูแลบาตรของตนเป็นอย่างดี", "The alms bowl is the monk's bowl for receiving food on the morning alms round. Monks take good care of their bowls."] },
+};
+const seenInfo = new Set(read("info-seen", []));
+function openInfo(id) {
+  const T = INFO_TEXT[id]; if (!T) return;
+  if (!seenInfo.has(id)) { seenInfo.add(id); write("info-seen", [...seenInfo]); }
+  openDialog(`${T.icon} ${esc(tx(...T.t))}`, `<p>${esc(tx(...T.d))}</p><div class="row"><button class="chip" data-close>${esc(tx("ปิด", "Close"))}</button></div>`);
+}
+const isShown = (o) => { for (; o; o = o.parent) if (!o.visible) return false; return true; };
+// the card for the first thing the click touches: the nearest marked spot to that point, if it is near enough
+function infoAtRay() {
+  const hit = ray.intersectObjects(scene.children, true).find((x) => isShown(x.object) && !(player.model && isUnder(x.object, player.model)));
+  if (!hit) return null;
+  let best = null, bd = Infinity;
+  for (const c of INFO) { if (c.when && !c.when()) continue; const d = hit.point.distanceTo(_v1.set(c.x, c.y, c.z)); if (d < c.r && d < bd) { best = c; bd = d; } }
+  return best;
+}
+const isUnder = (o, root) => { for (; o; o = o.parent) if (o === root) return true; return false; };
+// outdoors, walking up to a thing that has a card
+function infoNear() {
+  let best = null;
+  for (const c of INFO) { if (!c.near || (c.when && !c.when())) continue; const d = Math.hypot(player.x - c.x, player.z - c.z); if (d < c.near && (!best || d < best.d)) best = { id: c.id, d }; }
+  return best;
 }
 /* ---------------- quests and gentle hints ---------------- */
 // A quest is one custom, done as at a real temple: a short checklist that ticks itself as the child does each thing,
@@ -4650,6 +4704,7 @@ function frame(dt) {
   if (Math.hypot(player.x - BELL[0], player.z - BELL[1]) < 4.4 && 3 < bestD) { best = BELL_PLACE; bestD = 3; } // reachable from the road
   { const d = Math.hypot(player.x - DONATE.x, player.z - (DONATE.z + 0.6)); if (d < 2.4 && d < bestD) { best = DONATE_PLACE; bestD = d; } } // only when standing at the box
   { const m = monkHere(); if (m && m.d < bestD) { best = monkPlace(m.h, m.s); bestD = m.d; } }
+  { const c = infoNear(); if (c && c.d + 1 < bestD) { const T = INFO_TEXT[c.id]; best = { id: "info", icon: "ℹ️", th: T.t[0], en: T.t[1], sub: ["เรื่องน่ารู้", "Good to know"], info: c.id, key: c.id }; bestD = c.d + 1; } } // (anything else here comes first)
   if (onBridge(player.x, player.z) && feed.t < 0 && 2.5 < bestD) { best = FISH_PLACE; bestD = 2.5; }
   if (merit.t < 0 && kraap.t < 0) { const mh = meritHere(); if (mh) { best = { ...MERIT[mh.kind].place, merit: mh }; bestD = 0.5; } } // standing at it: the offering comes first
   if (catNear() && 1.9 < bestD) { best = CAT_PLACE; bestD = 1.9; }
