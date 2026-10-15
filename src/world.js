@@ -1586,6 +1586,7 @@ function startKneelingOffering(here) {
   kraap.keys = kneelKeys(here.kind, here); kraap.dur = kraap.keys[kraap.keys.length - 1][0];
   kraap.t = 0;
   if (player.mixer) playClip("idle", 0.4);
+  joinKraap();
 }
 // where the right hand reaches, by the time in the offering
 function kneelReach(t) {
@@ -2930,6 +2931,7 @@ function startKathin(h) {
   kraap.t = 0;
   if (player.mixer) playClip("idle", 0.4);
   if (phabphiap()) hint("women");
+  joinKraap();
 }
 const TRAY_GRIP = 0.21, TRAY_HALF = 0.27; // where his hands hold the tray: height above its foot, half its width
 // after he lets go: the senior monk leans in and draws the tray to himself
@@ -3032,6 +3034,7 @@ function startMealOffer(h, s) {
   kraap.spot = near; kraap.faceYaw = Math.atan2(mx - near.x, mz - near.z); kraap.floorY = groundAt(near.x, near.z); kraap.t = 0;
   if (last) kraap.recite = { at: 7.2, url: "audio/bless-hall.mp3", from: h.senior.rig ? h.senior.rig.B.Head.getWorldPosition(new THREE.Vector3()) : h.senior.lean.getWorldPosition(new THREE.Vector3()), inside: true, secs: 11.0, blessing: true };
   if (player.mixer) playClip("idle", 0.4);
+  joinKraap();
 }
 // after he lets go: the monk holds it a moment, then sets it down before him (and his cloth goes with it)
 function mealOfferStep() {
@@ -3170,6 +3173,7 @@ function startGreet(h, s) {
   kraap.recite = { at: k0 + 0.4, url: `audio/talk-${T.file}-${i + 1}-${L}.mp3`, from, inside: true, text: tx(...T.lines[i]), who: s, secs };
   if (player.mixer) playClip("idle", 0.4);
   questEvent("waiMonk"); stamp(s.name);
+  joinKraap();
 }
 const dropGeo = new THREE.SphereGeometry(0.02, 6, 4), dropMat = new THREE.MeshBasicMaterial({ color: 0xd9f2ff, transparent: true, opacity: 0.85 });
 const drops = [];
@@ -3319,6 +3323,7 @@ function startKraap() {
   kraap.floorY = groundAt(here.face.spot.x, here.face.spot.z);
   kraap.t = 0;
   if (player.mixer) playClip("idle", 0.4);
+  joinKraap();
 }
 
 /* ---------------- giving alms (ตักบาตร) ---------------- */
@@ -3340,8 +3345,8 @@ function almsState(t) {
     place: smooth(2.3, 3.0, t) * (1 - smooth(3.3, 3.9, t)),  // into the bowl
   };
 }
-function startAlms(m) {
-  if (busyElsewhere()) return; // (the other child is in a ceremony)
+function startAlms(m, joining = false) {
+  if (!joining && busyElsewhere()) return; // (the other child is in a ceremony)
   if (alms.t >= 0 || kraap.t >= 0 || !m) return;
   if (sit.on) { sit.on = false; sit.rise = 0; sit.faceYaw = null; }
   wai.t = -1;
@@ -3351,6 +3356,7 @@ function startAlms(m) {
   alms.t = 0;
   if (player.mixer) playClip("idle", 0.4);
   if (phabphiap()) hint("women");
+  if (!joining) joinAlms(m);
 }
 function almsStep(dt) {
   alms.t += dt;
@@ -3370,7 +3376,7 @@ function almsStep(dt) {
     alms.t = -1; alms.item = null; if (alms.m) alms.m.lean.rotation.x = 0;
     kraap.merit = null; kraap.kathin = null; kraap.keys = ALMS_KNEEL_KEYS; kraap.dur = ALMS_KNEEL_KEYS[ALMS_KNEEL_KEYS.length - 1][0];
     kraap.spot = alms.spot; kraap.faceYaw = alms.faceYaw; kraap.floorY = groundAt(alms.spot.x, alms.spot.z); kraap.t = 0; // (the dog keeps sitting through it)
-    if (alms.m) kraap.recite = { at: ALMS_KNEEL, url: "audio/bless.mp3", from: alms.m.lean.localToWorld(new THREE.Vector3(0, 2.9, 0)) }; // once he kneels, the monk gives the blessing
+    if (alms.m && !kid.joined) kraap.recite = { at: ALMS_KNEEL, url: "audio/bless.mp3", from: alms.m.lean.localToWorld(new THREE.Vector3(0, 2.9, 0)) }; // once he kneels, the monk gives the blessing
   }
 }
 const ALMS_CHEST = { fwd: 0.42, up: -0.2 };  // where the rice is held, from the upper spine
@@ -3750,7 +3756,7 @@ function boneMap(model) {
 function poseOverlays(model, hands, bow, sitW) {
   const B = boneMap(model);
   if (!B.Spine || !B.LeftArm || !B.RightArm || !B.Head) return;
-  if (kraap.t >= 0 && kraap.spot) { waiBegin(B); poseKraap(model, B, kraapState(kraap.t)); waiMark(B); return; }
+  if (kraap.t >= 0 && kraap.spot) { waiBegin(B); if (kraap.join) poseJoined(model, B); else poseKraap(model, B, kraapState(kraap.t)); waiMark(B); return; }
   if (alms.t >= 0 && alms.m) { waiBegin(B); poseAlms(model, B, almsState(alms.t)); waiMark(B); return; }
   if (shoes.t >= 0) { waiBegin(B); poseShoes(model, B, shoes.t); waiMark(B); return; }
   if (feed.t >= 0) { waiBegin(B); poseFeed(model, B); waiMark(B); return; }
@@ -4666,6 +4672,7 @@ function startFloat() {
   kraap.keys = floatKeys; kraap.dur = floatKeys[floatKeys.length - 1][0];
   kraap.spot = spot; kraap.faceYaw = sg > 0 ? Math.PI / 2 : -Math.PI / 2; kraap.floorY = deck; kraap.t = 0;
   if (player.mixer) playClip("idle", 0.4);
+  joinKraap();
 }
 function floatStep() {
   const k = kraap.float; if (!k || k.released || kraap.t < k.release) return;
@@ -5162,23 +5169,24 @@ function tick() {
 // the broom, the watering can, the folding mat. The other child meanwhile has an idle stand-in. One shared view keeps
 // both in frame; player 1 has W A S D (E, Q, C, K, P, Shift, Space) and the left stick, player 2 the arrow keys (Enter
 // to act, . to wai, , to sit, / to jump, right Shift to walk briskly) and the right stick. One passport for the device.
-const SHARED = { kraap, alms, merit, broom, can, fold };
-const P1 = { n: 1, player, sit, wai, feed, shoes, pet, stoop, boyKits, walkPhase: 0, near: null, promptRest: null, promptAway: false, backWatch: null, drop: 0 };
+const SHARED = { kraap, merit, broom, can, fold };
+const P1 = { n: 1, player, sit, wai, feed, shoes, pet, stoop, boyKits, alms, walkPhase: 0, near: null, promptRest: null, promptAway: false, backWatch: null, drop: 0 };
 let kid = P1, P2 = null, twoP = false;
-const owner = { kraap: P1, alms: P1, merit: P1, broom: P1, can: P1, fold: P1 };
-const inUse = { kraap: () => SHARED.kraap.t >= 0, alms: () => SHARED.alms.t >= 0, merit: () => SHARED.merit.t >= 0, broom: () => SHARED.broom.held, can: () => SHARED.can.held || SHARED.can.t >= 0, fold: () => SHARED.fold.on };
+const owner = { kraap: P1, merit: P1, broom: P1, can: P1, fold: P1 };
+const inUse = { kraap: () => SHARED.kraap.t >= 0, merit: () => SHARED.merit.t >= 0, broom: () => SHARED.broom.held, can: () => SHARED.can.held || SHARED.can.t >= 0, fold: () => SHARED.fold.on };
 const idleSet = () => ({ // the stand-ins: the shared things as they are when nobody is using them
   kraap: { ...SHARED.kraap, t: -1, keys: null, kathin: null, merit: null, meal: null, float: null, greet: false, recite: null, spot: null, faceYaw: null },
-  alms: { ...SHARED.alms, t: -1, m: null, item: null }, merit: { ...SHARED.merit, t: -1, items: null },
+  merit: { ...SHARED.merit, t: -1, items: null },
   broom: { ...SHARED.broom, held: false }, can: { ...SHARED.can, held: false, t: -1 }, fold: { ...SHARED.fold, on: false, lotus: null },
 });
 function bindKid(P) {
   if (kid === P) return;
   Object.assign(kid, { walkPhase, near, promptRest, promptAway, backWatch });
   kid = P;
-  ({ player, sit, wai, feed, shoes, pet, stoop, boyKits, walkPhase, near, promptRest, promptAway, backWatch } = P);
+  ({ player, sit, wai, feed, shoes, pet, stoop, boyKits, alms, walkPhase, near, promptRest, promptAway, backWatch } = P);
   const own = (k) => (owner[k] === P ? SHARED[k] : P.idle[k]);
-  kraap = own("kraap"); alms = own("alms"); merit = own("merit"); broom = own("broom"); can = own("can"); fold = own("fold");
+  kraap = owner.kraap === P ? SHARED.kraap : P.joined === "kraap" && SHARED.kraap.t >= 0 ? joinView(P) : P.idle.kraap; // (joined: the giver's ceremony, from beside them)
+  merit = own("merit"); broom = own("broom"); can = own("can"); fold = own("fold");
 }
 const kids = () => (twoP ? [P1, P2] : [P1]);
 const other = () => (kid === P1 ? P2 : P1);
@@ -5189,9 +5197,9 @@ function actFor(P) {
   bindKid(P);
 }
 function releaseIdle() { for (const k in owner) if (!inUse[k]()) owner[k] = P1; }
-const leadKid = () => (twoP ? (["kraap", "alms", "merit"].map((k) => inUse[k]() && owner[k]).find(Boolean) || P1) : P1);
+const leadKid = () => (twoP ? ["kraap", "merit"].map((k) => inUse[k]() && owner[k]).find(Boolean) || kids().find((P) => P.alms.t >= 0) || P1 : P1);
 const mediKid = () => (medi.on ? medi.kid || P1 : kids().find((P) => P.sit.on && P.sit.w > 0.9) || P1);
-const busyElsewhere = () => twoP && ["kraap", "alms", "merit"].some((k) => inUse[k]() && owner[k] !== kid);
+const busyElsewhere = () => twoP && (["kraap", "merit"].some((k) => inUse[k]() && owner[k] !== kid) || kids().some((P) => P !== kid && P.alms.t >= 0));
 const heldElsewhere = (k) => twoP && inUse[k]() && owner[k] !== kid;
 const animalTaken = (who) => twoP && kids().some((P) => P !== kid && P.pet.who === who && P.pet.phase);
 const seatTaken = (c) => twoP && kids().some((P) => P !== kid && P.sit.on && P.sit.spot === c);
@@ -5259,7 +5267,7 @@ function startTwo(kind2) {
   const a = P1.player, pl = { obj: new THREE.Group(), x: a.x, z: a.z, y: a.y, vy: 0, yaw: a.yaw, model: null, mixer: null, clips: {}, current: null, vrm: null };
   scene.add(pl.obj); pl.obj.add(kidRing(0x3d7fd1));
   P2 = { n: 2, player: pl, sit: { on: false, w: 0, rise: 0, spot: null, faceYaw: null }, wai: { t: -1, dur: 2.9, level: "peer", faceYaw: null, plane: { normal: new THREE.Vector3(), point: new THREE.Vector3(), on: 0 } },
-    feed: { t: -1, side: 1, stand: null, faceYaw: 0, spot: null, until: -1, thrown: 0 }, shoes: { on: true, t: -1, mode: null, pair: null },
+    feed: { t: -1, side: 1, stand: null, faceYaw: 0, spot: null, until: -1, thrown: 0 }, alms: { t: -1, m: null, spot: null, faceYaw: 0, item: null, placed: false }, shoes: { on: true, t: -1, mode: null, pair: null },
     pet: { who: null, phase: null, t: 0, yaw: 0, spot: null }, stoop: { w: 0, near: false, lastX: null, lastZ: null }, boyKits: { kind: kind2, shod: null, socks: null },
     walkPhase: 0, near: null, promptRest: null, promptAway: false, backWatch: null, drop: 0, kind: kind2 };
   P1.idle = idleSet(); P2.idle = idleSet();
@@ -5273,7 +5281,7 @@ function startTwo(kind2) {
 }
 function stopTwo() {
   if (!twoP) return;
-  if (["kraap", "alms", "merit", "broom", "can", "fold"].some((k) => inUse[k]() && owner[k] === P2)) { toast(esc(tx("รอให้ผู้เล่นคนที่สองทำให้เสร็จก่อนนะ", "Let player 2 finish first."))); return; }
+  if (["kraap", "merit", "broom", "can", "fold"].some((k) => inUse[k]() && owner[k] === P2) || P2.alms.t >= 0 || P2.joined) { toast(esc(tx("รอให้ผู้เล่นคนที่สองทำให้เสร็จก่อนนะ", "Let player 2 finish first."))); return; }
   bindKid(P2); standUp(); removePair(); bindKid(P1);
   scene.remove(P2.player.obj); P1.player.obj.remove(ring1); $("prompt2").hidden = true;
   for (const k in owner) owner[k] = P1;
@@ -5290,6 +5298,57 @@ $("btn-two").addEventListener("click", () => {
 });
 $("dlg").addEventListener("click", () => actFor(dialogKid || P1), true); // first, before the dialog's own handlers
 $("dlg").addEventListener("click", (e) => { const b = e.target.closest("[data-two]"); if (b) { closeDialog(); startTwo(b.dataset.two); } });
+
+// Ceremonies together (as a former monk in Thailand described them): when one child begins a kneeling ceremony, the
+// other comes and kneels at their left, a little behind, and follows the same timeline: the wai and the bows together.
+// While the giver hands something over (the Kathina robe, the meal, the incense and candles, the gold leaf), the other
+// child's right hand rests on the giver's arm, sharing in the merit. At the alms round each gives to a monk of their own,
+// and they kneel for the one blessing together.
+const JOIN_SIDE = 0.85, JOIN_BACK = 0.2;
+function joinView(P) { // the giver's ceremony, as seen from beside them
+  const R = SHARED.kraap, G = owner.kraap.player, j = P.jk || (P.jk = { touch: null });
+  const fy = R.faceYaw != null ? R.faceYaw : G.yaw, sp = R.spot || G;
+  const spot = { x: sp.x + Math.cos(fy) * JOIN_SIDE - Math.sin(fy) * JOIN_BACK, z: sp.z - Math.sin(fy) * JOIN_SIDE - Math.cos(fy) * JOIN_BACK };
+  return Object.assign(j, { t: R.t, keys: R.keys, dur: R.dur, greet: false, kathin: null, merit: null, meal: null, float: null, recite: null, join: R, spot, faceYaw: fy, floorY: groundAt(spot.x, spot.z) });
+}
+function canJoin(F) {
+  const a = F.player; return Math.hypot(a.x - player.x, a.z - player.z) < 12 && F.feed.t < 0 && F.shoes.t < 0 && F.alms.t < 0 && !F.pet.phase && !F.joined
+    && !(owner.can === F && inUse.can()) && !(owner.fold === F && inUse.fold());
+}
+function prepJoin(F, how) {
+  F.joined = how; const was = kid; bindKid(F);
+  if (sit.on) { sit.on = false; sit.rise = 0; sit.faceYaw = null; }
+  wai.t = -1; if (broom === SHARED.broom) putBroomBack();
+  if (player.mixer) playClip("idle", 0.4);
+  bindKid(was);
+}
+function joinKraap() { if (twoP && SHARED.kraap.t >= 0 && owner.kraap === kid && canJoin(other())) prepJoin(other(), "kraap"); }
+function joinAlms(m) {
+  if (!twoP || !canJoin(other())) return;
+  const d = (q) => Math.hypot(q.x - m.x, q.z - m.z), m2 = almsMonks.filter((q) => q !== m).sort((a, b) => d(a) - d(b))[0]; if (!m2) return;
+  const F = other(), was = kid; prepJoin(F, "alms"); bindKid(F); startAlms(m2, true); bindKid(was);
+}
+// the joined child's pose: the giver's ceremony, but where the giver holds or hands over something, a hand on their arm
+function poseJoined(model, B) {
+  const st = { ...kraapState(kraap.t) }, R = kraap.join;
+  const w = R.kathin || R.merit || R.meal ? Math.max(st.tray, st.reach) : 0;
+  st.tray = st.lift = st.place = st.reach = 0; st.chest *= 1 - w; st.high *= 1 - w;
+  poseKraap(model, B, st);
+  if (w > 0.001) touchGiver(model, B, w);
+}
+function touchGiver(model, B, w) {
+  const G = owner.kraap.player.model; if (!G) return;
+  const gb = G.userData.bones || (G.userData.bones = {}); if (!gb.LeftArm) G.traverse((o) => { if (o.isBone) gb[o.name] = o; });
+  const shape = handShape(model); if (!gb.LeftArm || !gb.LeftForeArm || !shape) return;
+  const up = new THREE.Vector3(0, 1, 0), fwd = new THREE.Vector3(Math.sin(player.yaw), 0, Math.cos(player.yaw)), side = new THREE.Vector3(Math.cos(player.yaw), 0, -Math.sin(player.yaw));
+  const scale = model.getWorldScale(new THREE.Vector3()).y, hs = shape.Right;
+  G.updateMatrixWorld(true); model.updateMatrixWorld(true);
+  // the giver's upper arm, on the side towards this child; the palm rests on it, fingers forward and down
+  const F = fwd.clone().multiplyScalar(0.5).addScaledVector(up, -0.85).normalize(), P = side.clone().negate().addScaledVector(F, side.dot(F)).normalize();
+  const at = gb.LeftArm.getWorldPosition(new THREE.Vector3()).lerp(gb.LeftForeArm.getWorldPosition(new THREE.Vector3()), 0.45).addScaledVector(side, 0.07 * scale).addScaledVector(F, -0.08 * scale);
+  armTo(B, "Right", at, basisQuat(hs.finger, hs.palm, F, P), up.clone().negate().addScaledVector(side, -0.4), w);
+}
+function endJoins() { for (const P of kids()) if (P.joined && !(P.joined === "kraap" && SHARED.kraap.t >= 0) && P.alms.t < 0 && P.idle.kraap.t < 0) P.joined = null; }
 
 // one step of the world: movement, animation, camera and the picture
 function frame(dt) {
@@ -5377,7 +5436,7 @@ function frame(dt) {
   sound.update(camera.position, camFwd, insideHall(player.x, player.z) && Math.hypot(camera.position.x - player.x, camera.position.z - player.z) < 14, dt);
 
   if (composer) composer.render(); else renderer.render(scene, camera);
-  if (twoP) { releaseIdle(); bindKid(P1); } // between frames, the buttons and menus act for player 1
+  if (twoP) { endJoins(); releaseIdle(); bindKid(P1); } // between frames, the buttons and menus act for player 1
 }
 // one child's part of the step: their own actions, walking, animation, the poses layered on it, and their note
 function kidStep(dt) {
@@ -5394,7 +5453,8 @@ function kidStep(dt) {
     const kBefore = kraap.t;
     kraap.t += dt;
     if (kraap.recite && kraap.t >= kraap.recite.at) { const r = kraap.recite; recite(r.url, r.from, !!r.inside, r.blessing ? null : r.text || null, r.secs || 10.4); if (r.who) r.who.talking = r.secs; kraap.recite = null; }
-    if (kraap.t > (kraap.keys ? kraap.dur : KRAAP_DUR)) { kraap.greet = false; if (kraap.float) kraap.float = null; else if (kraap.meal) { mealEnded(kraap.meal); kraap.meal = null; } else kraapEnded(kraap.kathin ? "kathinDone" : kraap.merit ? null : kraap.keys === ALMS_KNEEL_KEYS ? "almsBless" : !kraap.keys ? "kraap" : null); kraap.t = -1; kraap.touch = null; kraap.keys = null; if (kraap.kathin) kraap.kathin.monk.lean.rotation.x = 0; endKneelingOffering(); }
+    if (kraap.join) { if (kraap.t >= 0.8 && kraap.spot) { player.x = kraap.spot.x; player.z = kraap.spot.z; } } // (beside the giver, moving with them; the giver's step ends it)
+    else if (kraap.t > (kraap.keys ? kraap.dur : KRAAP_DUR)) { kraap.greet = false; if (kraap.float) kraap.float = null; else if (kraap.meal) { mealEnded(kraap.meal); kraap.meal = null; } else kraapEnded(kraap.kathin ? "kathinDone" : kraap.merit ? null : kraap.keys === ALMS_KNEEL_KEYS ? "almsBless" : !kraap.keys ? "kraap" : null); kraap.t = -1; kraap.touch = null; kraap.keys = null; if (kraap.kathin) kraap.kathin.monk.lean.rotation.x = 0; endKneelingOffering(); }
     const mv = kraap.kathin || kraap.merit || kraap.meal || kraap.float;
     if (mv && kraap.keys && kraap.t >= 0) { // Kathina and kneeling offerings: kneel close to offer, then move back on the knees to bow
       const b = kraapState(kraap.t).back;
