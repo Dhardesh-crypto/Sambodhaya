@@ -2664,7 +2664,7 @@ const toggleSit = () => (sit.on ? standUp() : startSit());
 // them, coming back up into the high wai each time. Then he lowers his hands and stands. No animation for
 // this exists, so it is posed on his skeleton: the knee, hip and forehead heights come from his measured
 // body, and the bow is solved so the forehead really reaches the floor.
-const kraap = { t: -1, spot: null, faceYaw: null, floorY: 0, touch: null, keys: null, dur: 0, kathin: null, merit: null };
+const kraap = { t: -1, spot: null, faceYaw: null, floorY: 0, touch: null, keys: null, dur: 0, kathin: null, merit: null, recite: null };
 // keyframes: [time, kneel, chest wai, high wai, palms on the floor, bow]
 const KRAAP_KEYS = (() => {
   const k = [[0, 0, 0, 0, 0, 0], [0.6, 0, 0, 0, 0, 0], [2.0, 1, 1, 0, 0, 0], [2.7, 1, 0, 1, 0, 0], [3.0, 1, 0, 1, 0, 0]];
@@ -2917,7 +2917,13 @@ function startKraap() {
 // places it in the bowl (bending a little, his eyes on the bowl), lowers his hands and then gives the high wai.
 // The monk leans in slightly to receive. Posed on the skeleton, like the wai.
 const alms = { t: -1, m: null, spot: null, faceYaw: 0, item: null, placed: false };
-const ALMS_DUR = 4.0, ALMS_RELEASE = 3.05, ALMS_BLESS = 11.4; // (the high wai is held through the monk's blessing, 10.4 s)
+const ALMS_DUR = 4.0, ALMS_RELEASE = 3.05;
+// then he kneels with his hands in a wai at the chest and his head a little bowed while the monk gives the blessing
+// (10.4 s), and stands again. Keyed as the kraap: [t, kneel, chest wai, high wai, floor, bow]
+const ALMS_KNEEL = 1.4, ALMS_KNEEL_KEYS = (() => {
+  const end = ALMS_KNEEL + 0.4 + 10.6;
+  return [[0, 0, 0, 0, 0, 0], [0.3, 0, 1, 0, 0, 0], [ALMS_KNEEL, 1, 1, 0, 0, 0], [ALMS_KNEEL + 0.4, 1, 1, 0, 0, 0.14], [end, 1, 1, 0, 0, 0.14], [end + 0.5, 1, 1, 0, 0, 0], [end + 2.0, 0, 0, 0, 0, 0]];
+})();
 function almsState(t) {
   return {
     hold: smooth(0.4, 1.0, t) * (1 - smooth(3.3, 3.9, t)),   // the rice in both hands
@@ -2951,8 +2957,9 @@ function almsStep(dt) {
   if (alms.t > ALMS_DUR) {                                               // then the high wai to the monk
     if (!alms.placed && alms.item) scene.remove(alms.item);
     alms.t = -1; alms.item = null; if (alms.m) alms.m.lean.rotation.x = 0;
-    wai.level = "buddha"; wai.dur = Math.max(WAI_LEVELS.buddha.dur, ALMS_BLESS); wai.faceYaw = alms.faceYaw; wai.t = 0; wai.fromAlms = true; // the dog keeps sitting through it
-    if (alms.m) recite("audio/bless.mp3", alms.m.lean.localToWorld(new THREE.Vector3(0, 2.9, 0)), false); // and the monk gives the blessing meanwhile
+    kraap.merit = null; kraap.kathin = null; kraap.keys = ALMS_KNEEL_KEYS; kraap.dur = ALMS_KNEEL_KEYS[ALMS_KNEEL_KEYS.length - 1][0];
+    kraap.spot = alms.spot; kraap.faceYaw = alms.faceYaw; kraap.floorY = groundAt(alms.spot.x, alms.spot.z); kraap.t = 0; // (the dog keeps sitting through it)
+    if (alms.m) kraap.recite = { at: ALMS_KNEEL, url: "audio/bless.mp3", from: alms.m.lean.localToWorld(new THREE.Vector3(0, 2.9, 0)) }; // once he kneels, the monk gives the blessing
   }
 }
 const ALMS_CHEST = { fwd: 0.42, up: -0.2 };  // where the rice is held, from the upper spine
@@ -3040,7 +3047,7 @@ function waiLevelHere() {
 function startWai() {
   if (wai.t >= 0 && wai.t < wai.dur - 0.6) return;
   const here = waiLevelHere();
-  wai.level = here.level; wai.dur = WAI_LEVELS[here.level].dur; wai.fromAlms = false;
+  wai.level = here.level; wai.dur = WAI_LEVELS[here.level].dur;
   wai.faceYaw = here.face ? Math.atan2(here.face.x - player.x, here.face.z - player.z) : null;
   wai.t = 0;
 }
@@ -4124,7 +4131,9 @@ function frame(dt) {
   if (kraap.t >= 0) { // paying tribute: stay put (it ends by itself); glide to the spot and face the image first
     fx = fz = 0;
     const kBefore = kraap.t;
-    kraap.t += dt; if (kraap.t > (kraap.keys ? kraap.dur : KRAAP_DUR)) { kraap.t = -1; kraap.touch = null; kraap.keys = null; if (kraap.kathin) kraap.kathin.monk.lean.rotation.x = 0; endKneelingOffering(); }
+    kraap.t += dt;
+    if (kraap.recite && kraap.t >= kraap.recite.at) { recite(kraap.recite.url, kraap.recite.from, false); kraap.recite = null; }
+    if (kraap.t > (kraap.keys ? kraap.dur : KRAAP_DUR)) { kraap.t = -1; kraap.touch = null; kraap.keys = null; if (kraap.kathin) kraap.kathin.monk.lean.rotation.x = 0; endKneelingOffering(); }
     const mv = kraap.kathin || kraap.merit;
     if (mv && kraap.keys && kraap.t >= 0) { // Kathina and kneeling offerings: kneel close to offer, then move back on the knees to bow
       const b = kraapState(kraap.t).back;
@@ -4251,11 +4260,11 @@ function frame(dt) {
     const fx2 = -Math.sin(camYaw), fz2 = -Math.cos(camYaw), rx = Math.cos(camYaw), rz = -Math.sin(camYaw);
     let bx = player.x + fx2 * 1.4 - rx * 2.6, bz = player.z + fz2 * 1.4 - rz * 2.6;
     // during the ceremonies (sitting, paying respect, Kathina, giving alms and its wai) the dog sits at his left side, facing the same way
-    const ceremony = sit.on || kraap.t >= 0 || alms.t >= 0 || (wai.t >= 0 && wai.fromAlms) || feed.t >= 0 || merit.t >= 0;
+    const ceremony = sit.on || kraap.t >= 0 || alms.t >= 0 || feed.t >= 0 || merit.t >= 0;
     if (ceremony) {
       // beside where he will be for the whole ceremony (the bowing spot, the spot before the monk), so the dog
       // sits down once and stays down while he steps up or moves back on his knees
-      const k = kraap.t >= 0 ? kraap : null, al = !k && (alms.t >= 0 || wai.fromAlms) ? alms : null, fd = feed.t >= 0 ? feed : merit.t >= 0 ? { stand: merit.spot, faceYaw: merit.faceYaw } : null;
+      const k = kraap.t >= 0 ? kraap : null, al = !k && alms.t >= 0 ? alms : null, fd = feed.t >= 0 ? feed : merit.t >= 0 ? { stand: merit.spot, faceYaw: merit.faceYaw } : null;
       const at = k ? ((k.kathin || k.merit) && k.keys ? (k.kathin || k.merit).far : k.spot) : al ? al.spot : fd ? fd.stand : null;
       const ax = at ? at.x : player.x, az = at ? at.z : player.z;
       const ay = k && k.faceYaw != null ? k.faceYaw : al ? al.faceYaw : fd ? fd.faceYaw : player.yaw;
