@@ -147,3 +147,5 @@ python3 src/build.py      # content.js + app.jsx -> index.html (needs Node for n
 Deployed as-is (no build step on Netlify; see `netlify.toml`) to https://sambodhaya.netlify.app.
 
 **The Universal Hall's image** is green, like the Emerald Buddha (พระแก้วมรกต): deep green polished stone, seated on a gilded lotus throne (the same model as the Learning Hall's golden image, coloured in the shader: green above, gold below).
+
+**The Learning Hall's spire (ยอดปราสาท):** the main hall, where the monks sit, has a spire astride the ridge of its upper roof, after a photo from a Thai temple: a white square base with gilded corners and a small gabled porch roof on each side, five stacked gold tiers with points at the corners and edges, a gold bell, a long ringed taper, and a slender spike with a small bulb near its tip. It is seen from across the temple.

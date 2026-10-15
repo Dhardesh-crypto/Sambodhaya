@@ -794,11 +794,48 @@ function shrine(h, monks = [], { gifts = false } = {}) {
   return pz + PD / 2;
 }
 
+// The main hall's spire (ยอดปราสาท), astride the ridge of the upper roof: a white square base with a small gabled
+// porch roof on each side, gold stacked tiers with points at the corners, a bell, then a long ringed taper and a
+// slender spike with a small bulb near its tip
+function spire(h, k = 0.85) {
+  const { g, H, FY } = h, sp = new THREE.Group(); sp.position.y = FY + 2 * H - 0.1; sp.scale.setScalar(k); g.add(sp);
+  const white = S(0xf3eee4, { roughness: 0.8 });
+  add(new THREE.BoxGeometry(2, 3.4, 2), white, 0, 0.5, 0, sp); // standing on the ridge, its walls reaching down into the roof
+  [-1, 1].forEach((a) => [-1, 1].forEach((b) => add(new THREE.BoxGeometry(0.12, 3.4, 0.12), MAT.gold, a * 0.98, 0.5, b * 0.98, sp, false)));
+  for (let i = 0; i < 4; i++) {
+    const p = new THREE.Group(); p.rotation.y = i * Math.PI / 2; sp.add(p);
+    const r = gable(1.5, 0.9, 0.75, MAT.roof); r.position.set(0, 1.0, 1.25); p.add(r);
+    const e = gable(1.66, 0.12, 0.84, MAT.roofEdge); e.position.set(0, 0.95, 1.72); p.add(e);
+    const pn = gable(0.9, 0.06, 0.45, MAT.gold); pn.position.set(0, 1.08, 1.79); p.add(pn);
+    const f = add(new THREE.ConeGeometry(0.07, 0.5, 6), MAT.gold, 0, 1.92, 1.72, p); f.rotation.x = 0.55; // the porch's chofa
+    add(new THREE.BoxGeometry(0.5, 0.75, 0.04), MAT.gold, 0, 1.75, 1.01, p, false); // a gilded window frame above the porch
+  }
+  add(new THREE.BoxGeometry(2.3, 0.16, 2.3), MAT.gold, 0, 2.28, 0, sp);
+  const spike = new THREE.ConeGeometry(0.06, 0.38, 5);
+  let y = 2.36;
+  for (let i = 0; i < 5; i++) { // the stacked tiers, each smaller, with points at the corners and mid-edges
+    const w = 1.95 - i * 0.3, th = 0.42;
+    add(new THREE.BoxGeometry(w, th, w), MAT.gold, 0, y + th / 2, 0, sp);
+    add(new THREE.BoxGeometry(w + 0.12, 0.06, w + 0.12), MAT.gold, 0, y + th, 0, sp, false);
+    [[-1, -1], [-1, 1], [1, -1], [1, 1], [0, -1], [0, 1], [-1, 0], [1, 0]].forEach(([a, b]) => add(spike, MAT.gold, a * w / 2, y + th + 0.2, b * w / 2, sp, false));
+    y += th + 0.04;
+  }
+  const bell = new THREE.LatheGeometry([[0, 0], [0.62, 0], [0.6, 0.25], [0.48, 0.6], [0.34, 0.95], [0.3, 1.05], [0, 1.05]].map(([r, z]) => new THREE.Vector2(r, z)), 16);
+  add(bell, MAT.gold, 0, y, 0, sp); y += 1.05;
+  add(new THREE.ConeGeometry(0.32, 3.2, 12), MAT.gold, 0, y + 1.6, 0, sp);
+  const ring = (r) => new THREE.TorusGeometry(r, 0.045, 6, 14);
+  for (let j = 0; j < 13; j++) { const t = ring(0.32 * (1 - j / 14) + 0.02); const m = add(t, MAT.gold, 0, y + 0.12 + j * 0.23, 0, sp, false); m.rotation.x = Math.PI / 2; }
+  y += 3.2;
+  add(new THREE.CylinderGeometry(0.025, 0.05, 2.6, 6), MAT.gold, 0, y + 1.3, 0, sp, false);
+  add(new THREE.SphereGeometry(0.1, 10, 8), MAT.gold, 0, y + 1.75, 0, sp, false).scale.y = 1.5; // the bulb (เม็ดน้ำค้าง)
+  add(new THREE.SphereGeometry(0.035, 8, 6), MAT.gold, 0, y + 2.62, 0, sp, false);
+}
 /* ---- Learning Hall: the shrine at the back, and eight story boards (U01–U08, approved titles)
         along the side walls that open the matching lesson ---- */
 {
   const h = salas.learn;
   shrine(h, [["monk-elder", -2.6], ["monk", 2.6], ["monk-young", 4.6]], { gifts: true }); // the main hall, where the monks sit: Kathina is offered here
+  spire(h);
   const spots = [["left", 4.2], ["left", 2.2], ["left", 0.2], ["left", -1.8], ["right", -1.8], ["right", 0.2], ["right", 2.2], ["right", 4.2]];
   spots.forEach(([side, u], i) => {
     const tex = boardTexture({ head: tx("เรื่องที่ ", "Story ") + (i + 1), icon: "👣", title: L === "en" ? JOURNEY[i][1] : JOURNEY[i][0], foot: tx("เดินมาใกล้ ๆ แล้วกด E", "Walk close and press E"), picture: `img/murals/u0${i + 1}.jpg` });
