@@ -3793,8 +3793,8 @@ function poseKraap(model, B, st) {
   const shape = handShape(model); if (!shape) return;
   // Kathina: the tray held in both hands at its rim, raised to the forehead or set on the platform edge
   let trayT = null;
-  if (st.tray > 0.001 && (kraap.kathin || kraap.meal)) {
-    const k = kraap.kathin || kraap.meal, s = k.monk;
+  if (st.tray > 0.001 && (kraap.kathin || kraap.meal || kraap.float)) {
+    const k = kraap.kathin || kraap.meal || kraap.float, s = k.monk;
     const chestP = B.Spine02.getWorldPosition(new THREE.Vector3()).addScaledVector(fwd, 0.45 * scale).addScaledVector(up, -0.25 * scale);
     const browP = B.Head.getWorldPosition(new THREE.Vector3()).addScaledVector(up, 0.12 * scale).addScaledVector(fwd, (0.3 + TRAY_HALF) * scale);
     const placeP = k.h.g.localToWorld(k.placeAt ? k.placeAt.clone() : new THREE.Vector3(s.lx, s.top + TRAY_GRIP, s.edge - 0.24)); // onto the platform, before the monk's cushion (or a meal tray into his hands)
@@ -4141,7 +4141,7 @@ function showPrompt(p) {
   if (!p) { el.hidden = true; return; }
   $("prompt-name").textContent = p.icon + " " + placeName(p);
   $("prompt-sub").textContent = p.stone != null ? (p.board ? tx("ป้ายเรื่องที่ ", "Story board ") : tx("เรื่องที่ ", "Story ")) + (p.stone + 1) : p.sub[L === "en" ? 1 : 0];
-  $("prompt-go").textContent = p.id === "bell" ? tx("ตี", "Strike") : p.id === "donate" ? tx("เปิด", "Open") : p.id === "alms" ? tx("ใส่บาตร", "Offer") : p.id === "fish" ? tx("ให้อาหาร", "Feed") : p.merit ? tx("ทำบุญ", "Offer") : p.id === "broom" ? (broom.held ? tx("วาง", "Put back") : tx("หยิบ", "Pick up")) : p.id === "info" ? tx("อ่าน", "Read") : p.id === "monk" ? (p.acts.length > 1 ? tx("เลือก", "Choose") : tx("ไหว้", "Greet")) : p.id === "cat" ? tx("ลูบ", "Pet") : tx("เข้า", "Visit");
+  $("prompt-go").textContent = p.id === "bell" ? tx("ตี", "Strike") : p.id === "donate" ? tx("เปิด", "Open") : p.id === "alms" ? tx("ใส่บาตร", "Offer") : p.id === "fish" ? tx("ให้อาหาร", "Feed") : p.merit ? tx("ทำบุญ", "Offer") : p.id === "broom" ? (broom.held ? tx("วาง", "Put back") : tx("หยิบ", "Pick up")) : p.id === "info" ? tx("อ่าน", "Read") : p.id === "bridge" ? tx("เลือก", "Choose") : p.id === "monk" ? (p.acts.length > 1 ? tx("เลือก", "Choose") : tx("ไหว้", "Greet")) : p.id === "cat" ? tx("ลูบ", "Pet") : tx("เข้า", "Visit");
   el.hidden = false;
 }
 $("prompt-go").addEventListener("click", () => near && openPlace(near));
@@ -4201,6 +4201,7 @@ function openPlace(p) {
   if (p.id === "broom") { broom.held = !broom.held; near = null; return; }
   if (p.id === "monk") { openMonk(p); return; }
   if (p.id === "info") { openInfo(p.info); return; }
+  if (p.id === "bridge") { openBridge(); return; }
   if (p.stone != null) {
     const n = p.stone + 1;
     openDialog(`👣 ${n} · ${esc(L === "en" ? JOURNEY[p.stone][1] : JOURNEY[p.stone][0])}`,
@@ -4249,6 +4250,9 @@ const INFO_TEXT = {
   kathin: { icon: "🟫", t: ["เครื่องกฐิน", "The Kathina gifts"], d: ["เครื่องกฐินมีผ้าไตรจีวร บาตร และของใช้จำเป็นของพระ ถวายปีละครั้งหลังออกพรรษา", "The Kathina gifts are a set of robes, an alms bowl and things a monk needs, offered once a year after the rains retreat."] },
   cushion: { icon: "🔺", t: ["หมอนสามเหลี่ยม", "The triangle cushion"], d: ["หมอนสามเหลี่ยม (หมอนขวาน) ใช้พิงหลังเวลานั่งนาน ๆ เป็นหมอนแบบไทยดั้งเดิม", "The triangle cushion (mon khwan) supports the back during long sittings: a traditional Thai cushion."] },
   holywater: { icon: "💧", t: ["ขันน้ำมนต์และไม้พรม", "The holy water and the whisk"], d: ["พระสวดมนต์ให้น้ำ แล้วใช้ไม้พรมประพรมน้ำมนต์ให้พร เพื่อความเป็นสิริมงคล", "The monks chant over the water, then sprinkle it with the whisk as a blessing for good fortune."] },
+  lanterns: { icon: "🏮", t: ["โคมไฟลอยกระทง", "The Loy Krathong lanterns"], d: ["ในคืนลอยกระทง ผู้คนแขวนโคมไฟประดับวัดและบ้านเรือน ให้แสงสว่างงดงามในคืนวันเพ็ญ", "On Loy Krathong night people hang lanterns in temples and homes, lighting up the full-moon night."] },
+  krathong: { icon: "🪷", t: ["ลอยกระทง", "Loy Krathong"], d: ["ในคืนวันเพ็ญเดือนสิบสอง ผู้คนลอยกระทงที่ทำจากใบตองและดอกไม้ จุดเทียนและธูป เพื่อขอบคุณและขอขมาแม่น้ำ บางคนลอยเพื่อบูชารอยพระพุทธบาท ก่อนลอยเรามักอธิษฐานขอสิ่งดี ๆ", "On the full-moon night of the twelfth month, people float krathongs of banana leaf and flowers, with a candle and incense, to thank the water and ask its forgiveness; some float them to honour the Buddha's footprint. Before floating one, we often make a quiet wish."] },
+  wiantian: { icon: "🕯️", t: ["เวียนเทียน", "The candle procession"], d: ["ในวันพระใหญ่ เช่น วันมาฆบูชา วิสาขบูชา และอาสาฬหบูชา ชาวพุทธถือธูป เทียน และดอกไม้ เดินเวียนขวารอบโบสถ์สามรอบ ระลึกถึงพระพุทธ พระธรรม และพระสงฆ์", "On the great Buddhist days, such as Makha, Visakha and Asalha Bucha, Buddhists walk three times clockwise around the hall carrying incense, candles and flowers, remembering the Buddha, the Dhamma and the Sangha."] },
   bowl: { icon: "🥣", t: ["บาตร", "The alms bowl"], d: ["บาตรเป็นภาชนะของพระ ใช้รับอาหารที่ญาติโยมใส่บาตรตอนเช้า พระดูแลบาตรของตนเป็นอย่างดี", "The alms bowl is the monk's bowl for receiving food on the morning alms round. Monks take good care of their bowls."] },
 };
 const seenInfo = new Set(read("info-seen", []));
@@ -4309,6 +4313,142 @@ function mistStep(dt) {
     b.position.x = u.x + Math.sin(u.a) * 3; b.position.z = u.z + Math.cos(u.a * 0.7) * 2;
     b.material.opacity = u.op * m;
   }
+}
+/* ---------------- festivals ---------------- */
+// The great days follow the Thai lunar calendar: each is kept on a full moon. The full moons are worked out here
+// (Meeus' method, to within about an hour), and each festival is the first full moon on or after a day of the year
+// (rules checked against the actual dates of 2023-2026, leap-month years included); its decorations stay from the
+// day before that full moon until the day after, by Thai time. world.html?loykrathong or ?bucha shows one at any time.
+function fullMoonUTC(k) { // the full moon of lunation k (k + 0.5 from 2000), as a Date
+  const K = k + 0.5, T = K / 1236.85, rad = Math.PI / 180;
+  const E = 1 - 0.002516 * T, M = (2.5534 + 29.1053567 * K) * rad, Mp = (201.5643 + 385.81693528 * K) * rad, F = (160.7108 + 390.67050284 * K) * rad;
+  const jde = 2451550.09766 + 29.530588861 * K + 0.00015437 * T * T
+    - 0.40614 * Math.sin(Mp) + 0.17302 * E * Math.sin(M) + 0.01614 * Math.sin(2 * Mp) + 0.01043 * Math.sin(2 * F)
+    + 0.00734 * E * Math.sin(Mp - M) - 0.00515 * E * Math.sin(Mp + M) + 0.00209 * E * E * Math.sin(2 * M) - 0.00111 * Math.sin(Mp - 2 * F);
+  return new Date((jde - 2440587.5) * 86400000);
+}
+const FESTIVALS = [ // [what, month (0-based), day: the festival is the first full moon on or after this day]
+  ["bucha", 1, 7],          // Makha Bucha
+  ["bucha", 4, 9],          // Visakha Bucha
+  ["bucha", 6, 8],          // Asalha Bucha
+  ["loykrathong", 9, 30],  // Loy Krathong (as early as 31 October in some years, e.g. 2020)
+];
+function festivalNow(now = new Date()) {
+  if (/[?&]loykrathong\b/.test(location.search)) return "loykrathong";
+  if (/[?&]bucha\b/.test(location.search)) return "bucha";
+  const thai = (d) => new Date(d.getTime() + 7 * 3600000); // (its date as in Thailand)
+  const day = (d) => Math.floor(thai(d).getTime() / 86400000);
+  const today = day(now), y = thai(now).getUTCFullYear();
+  for (const [what, mo, dd] of FESTIVALS) for (const yr of [y - 1, y]) {
+    const from = Date.UTC(yr, mo, dd) - 7 * 3600000;
+    let k = Math.floor((from / 86400000 / 365.25 + 1970 - 2000) * 12.3685) - 2;
+    while (fullMoonUTC(k).getTime() < from) k++;
+    if (Math.abs(day(fullMoonUTC(k)) - today) <= 1) return what;
+  }
+  return null;
+}
+const fest = { now: null, built: {}, lanternMat: null, krathongs: [], floating: null };
+const lanternBody = new THREE.MeshStandardMaterial({ color: 0xc8341f, emissive: 0xd8401c, emissiveIntensity: 0.3, roughness: 0.8 });
+function khom(parent, x, y, z) { // a Lanna paper lantern (โคม): a glowing drum with gold rims and a tassel
+  const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g);
+  add(new THREE.CylinderGeometry(0.2, 0.2, 0.36, 16), lanternBody, 0, 0, 0, g, false);
+  [-0.19, 0.19].forEach((yy) => add(new THREE.CylinderGeometry(0.22, 0.22, 0.03, 16), MAT.gold, 0, yy, 0, g, false));
+  add(new THREE.ConeGeometry(0.05, 0.3, 6), MAT.gold, 0, -0.38, 0, g, false).rotation.x = Math.PI;
+  return g;
+}
+const bananaMat = S(0x3e7a32, { roughness: 0.8 }), krPetalMat = S(0xf2a6c0, { roughness: 0.7 }), krIncenseMat = S(0x8a3b25, { roughness: 0.9 });
+function krathong() { // banana leaf, lotus petals, a candle and three incense sticks
+  const g = new THREE.Group();
+  add(new THREE.CylinderGeometry(0.2, 0.17, 0.07, 16), bananaMat, 0, 0.035, 0, g, false);
+  for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2, p = add(new THREE.ConeGeometry(0.045, 0.14, 6), krPetalMat, Math.sin(a) * 0.13, 0.12, Math.cos(a) * 0.13, g, false); p.rotation.set(Math.cos(a) * 0.5, 0, -Math.sin(a) * 0.5); }
+  add(new THREE.CylinderGeometry(0.025, 0.025, 0.12, 8), waxMat, 0, 0.13, 0, g, false);
+  const f = add(new THREE.SphereGeometry(0.025, 8, 6), flameMat, 0, 0.215, 0, g, false); f.scale.y = 1.8;
+  [-0.04, 0, 0.04].forEach((x) => add(new THREE.CylinderGeometry(0.005, 0.005, 0.2, 4), krIncenseMat, x, 0.17, 0.06, g, false));
+  return g;
+}
+function buildFestival(what) {
+  if (fest.built[what]) { fest.built[what].visible = true; return; }
+  const root = new THREE.Group(); scene.add(root); fest.built[what] = root;
+  if (what === "loykrathong") {
+    // strings of lanterns across the entrance road, between bamboo poles
+    for (const z of [20, 28, 36, 44, 52, 60]) {
+      [-1, 1].forEach((sg) => add(new THREE.CylinderGeometry(0.06, 0.07, 3.8, 8), S(0xb59a5a, { roughness: 0.9 }), sg * (ROAD / 2 + 0.6), 1.9, z, root));
+      add(new THREE.CylinderGeometry(0.01, 0.01, ROAD + 1.2, 4), S(0x3a2a1d), 0, 3.7, z, root, false).rotation.z = Math.PI / 2;
+      [-2.4, -0.8, 0.8, 2.4].forEach((x) => khom(root, x, 3.35 - Math.abs(x) * 0.05, z));
+      infoSpot("lanterns", 0, 3.4, z, 3.4, 0, () => fest.now === "loykrathong");
+    }
+    // krathongs drifting slowly round the moat
+    for (let i = 0, n = HIGH ? 56 : 28; i < n; i++) { // (half of them near the bridge, where they are floated)
+      const k = krathong(); k.scale.setScalar(1.3); root.add(k);
+      k.userData = { a: i < n / 2 ? (Math.random() - 0.5) * 0.5 : Math.random() * Math.PI * 2, r: MOAT.r1 + 1 + Math.random() * (MOAT.r2 - MOAT.r1 - 2), w: (0.0015 + Math.random() * 0.002) * (Math.random() < 0.5 ? -1 : 1), b: Math.random() * 6 };
+      fest.krathongs.push(k);
+    }
+  } else {
+    // the candle procession (เวียนเทียน): candles on low stands all round the outside of the main hall
+    const h = salas.learn, ox = h.W / 2 + 1.4, oz = h.D / 2 + 1.4;
+    const ring = [];
+    for (let x = -ox; x <= ox; x += 1.3) { ring.push([x, -oz]); if (Math.abs(x) > 2.2) ring.push([x, oz]); } // (the steps at the front are left clear)
+    for (let z = -oz + 1.3; z < oz; z += 1.3) ring.push([-ox, z], [ox, z]);
+    for (const [lx, lz] of ring) {
+      const [x, z] = h.toWorld(lx, lz), y = groundAt(x, z);
+      add(new THREE.CylinderGeometry(0.12, 0.14, 0.05, 12), MAT.gold, x, y + 0.025, z, root, false);
+      candle(root, x, y + 0.05, z, 0.35);
+    }
+    const [cx, cz] = h.toWorld(0, oz); infoSpot("wiantian", cx, 0.5, cz, 9, 0, () => fest.now === "bucha");
+  }
+}
+function festivalStep(dt) {
+  fest.t = (fest.t || 0) - dt;
+  if (fest.t <= 0) { fest.t = 60; const f = festivalNow(); if (f !== fest.now) { Object.values(fest.built).forEach((g) => { g.visible = false; }); fest.now = f; if (f) buildFestival(f); } }
+  if (!fest.now) return;
+  lanternBody.emissiveIntensity = 0.3 + 0.55 * (1 - night.d); // (a warm red glow, not a white one)
+  const tt = performance.now() / 1000;
+  for (const k of fest.krathongs) {
+    const u = k.userData;
+    if (u.sinking != null) { // floated by the child: down from the bridge onto the water first
+      u.sinking = Math.min(1, u.sinking + dt / 1.2); const s = u.sinking;
+      k.position.lerpVectors(u.from, u.to, s); k.position.y = u.from.y + (u.to.y - u.from.y) * s + Math.sin(s * Math.PI) * 0.3;
+      if (s >= 1) { u.sinking = null; u.a = Math.atan2(k.position.x, k.position.z); u.r = Math.hypot(k.position.x, k.position.z); }
+      continue;
+    }
+    u.a += u.w * dt * 10;
+    k.position.set(Math.sin(u.a) * u.r, MOAT.water + 0.01 + Math.sin(tt * 1.3 + u.b) * 0.015, Math.cos(u.a) * u.r); k.rotation.y += dt * 0.1;
+  }
+}
+// floating his own: kneeling at the bridge's edge, the krathong raised to the forehead (a wish), set down at the
+// edge, and from there down onto the water, where it drifts away with the others
+const FLOAT_RELEASE = 5.8;
+const floatKeys = [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0.6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  [2.2, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0], [3.0, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0], [4.4, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0], // to the forehead: a wish
+  [5.4, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0], [6.0, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0],                                   // set down at the edge
+  [6.7, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0], [7.4, 1, 1, 0, 0, 0.2, 0, 0, 0, 0, 0], [8.0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0], [9.5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]];
+function startFloat() {
+  if (kraap.t >= 0 || alms.t >= 0 || fest.now !== "loykrathong" || !onBridge(player.x, player.z)) return;
+  if (sit.on) { sit.on = false; sit.rise = 0; sit.faceYaw = null; }
+  wai.t = -1;
+  const sg = player.x >= 0 ? 1 : -1, deck = groundAt(player.x, player.z), spot = { x: sg * (ROAD / 2 - 1.0), z: player.z };
+  const tray = krathong(); tray.scale.setScalar(1.3); tray.visible = false; scene.add(tray);
+  kraap.merit = null; kraap.kathin = null; kraap.meal = null; kraap.greet = false;
+  kraap.float = { h: { g: scene }, monk: null, tray, released: false, near: spot, far: spot, placeAt: new THREE.Vector3(sg * (ROAD / 2 - 0.35), deck + TRAY_GRIP - 0.12, player.z), release: FLOAT_RELEASE, sg };
+  kraap.keys = floatKeys; kraap.dur = floatKeys[floatKeys.length - 1][0];
+  kraap.spot = spot; kraap.faceYaw = sg > 0 ? Math.PI / 2 : -Math.PI / 2; kraap.floorY = deck; kraap.t = 0;
+  if (player.mixer) playClip("idle", 0.4);
+}
+function floatStep() {
+  const k = kraap.float; if (!k || k.released || kraap.t < k.release) return;
+  k.released = true; const t = k.tray; t.rotation.set(0, 0, 0);
+  t.userData = { sinking: 0, from: t.position.clone(), to: new THREE.Vector3(k.sg * (ROAD / 2 + 1.4), MOAT.water + 0.01, t.position.z), b: Math.random() * 6, w: 0.002 * k.sg };
+  if (fest.built.loykrathong) fest.built.loykrathong.attach(t);
+  fest.krathongs.push(t); questEvent("floatKrathong");
+}
+function openBridge() {
+  monkActs = [
+    { icon: "🪷", t: ["ลอยกระทง", "Float a krathong"], run: startFloat },
+    { icon: "🐟", t: ["ให้อาหารปลา", "Feed the fish"], run: startFeed },
+    { icon: "ℹ️", t: ["ลอยกระทงคืออะไร", "What is Loy Krathong?"], run: () => openInfo("krathong") },
+  ];
+  openDialog(tx("🪷 คืนลอยกระทง", "🪷 Loy Krathong night"), `<ul class="places">${monkActs.map((x, i) => `<li><button data-monk-act="${i}"><span class="ic">${x.icon}</span><span>${esc(tx(...x.t))}</span></button></li>`).join("")}</ul>
+    <div class="row"><button class="chip" data-close>${esc(tx("ปิด", "Close"))}</button></div>`);
 }
 /* ---------------- the meditation corner ---------------- */
 // Sitting on a cushion in a hall, or anywhere in the Practice Garden, the child may follow a short guided sitting:
@@ -4631,7 +4771,7 @@ function tick() {
 // one step of the world: movement, animation, camera and the picture
 function frame(dt) {
   timeStep(dt); placeLampLights(dt);
-  feedStep(dt); fishStep(dt); meritStep(dt); lifeStep(dt); eyesStep(dt); questsStep(dt); mealStep(dt); mediStep(dt); petStep(dt); petalStep(dt); rainStep(dt); mistStep(dt); dropsStep(dt);
+  feedStep(dt); fishStep(dt); meritStep(dt); lifeStep(dt); eyesStep(dt); questsStep(dt); mealStep(dt); mediStep(dt); petStep(dt); petalStep(dt); rainStep(dt); mistStep(dt); festivalStep(dt); dropsStep(dt);
   if (broom.held && (alms.t >= 0 || kraap.t >= 0 || feed.t >= 0 || shoes.t >= 0 || sit.on || merit.t >= 0)) putBroomBack(); // hands needed elsewhere
   monkTime += dt;
   if (!settings.calmMotion) for (const m of monkFigures) { const b = Math.sin(monkTime * 1.25 + m.ph); m.o.scale.set(1 + b * 0.004, 1 + b * 0.008, 1 + b * 0.004); } // slow breathing
@@ -4648,13 +4788,13 @@ function frame(dt) {
     const kBefore = kraap.t;
     kraap.t += dt;
     if (kraap.recite && kraap.t >= kraap.recite.at) { const r = kraap.recite; recite(r.url, r.from, !!r.inside, r.blessing ? null : r.text || null, r.secs || 10.4); if (r.who) r.who.talking = r.secs; kraap.recite = null; }
-    if (kraap.t > (kraap.keys ? kraap.dur : KRAAP_DUR)) { kraap.greet = false; if (kraap.meal) { mealEnded(kraap.meal); kraap.meal = null; } else kraapEnded(kraap.kathin ? "kathinDone" : kraap.merit ? null : kraap.keys === ALMS_KNEEL_KEYS ? "almsBless" : !kraap.keys ? "kraap" : null); kraap.t = -1; kraap.touch = null; kraap.keys = null; if (kraap.kathin) kraap.kathin.monk.lean.rotation.x = 0; endKneelingOffering(); }
-    const mv = kraap.kathin || kraap.merit || kraap.meal;
+    if (kraap.t > (kraap.keys ? kraap.dur : KRAAP_DUR)) { kraap.greet = false; if (kraap.float) kraap.float = null; else if (kraap.meal) { mealEnded(kraap.meal); kraap.meal = null; } else kraapEnded(kraap.kathin ? "kathinDone" : kraap.merit ? null : kraap.keys === ALMS_KNEEL_KEYS ? "almsBless" : !kraap.keys ? "kraap" : null); kraap.t = -1; kraap.touch = null; kraap.keys = null; if (kraap.kathin) kraap.kathin.monk.lean.rotation.x = 0; endKneelingOffering(); }
+    const mv = kraap.kathin || kraap.merit || kraap.meal || kraap.float;
     if (mv && kraap.keys && kraap.t >= 0) { // Kathina and kneeling offerings: kneel close to offer, then move back on the knees to bow
       const b = kraapState(kraap.t).back;
       kraap.spot = { x: mv.near.x + (mv.far.x - mv.near.x) * b, z: mv.near.z + (mv.far.z - mv.near.z) * b };
       if (kraap.t >= 0.8) { player.x = kraap.spot.x; player.z = kraap.spot.z; }
-      if (kraap.kathin) kathinStep(); else if (kraap.meal) mealOfferStep(); else kneelStep(kBefore, kraap.t);
+      if (kraap.kathin) kathinStep(); else if (kraap.meal) mealOfferStep(); else if (kraap.float) floatStep(); else kneelStep(kBefore, kraap.t);
     }
     if (kraap.spot && kraap.t >= 0 && kraap.t < 0.8) { player.x += (kraap.spot.x - player.x) * Math.min(1, dt * 8); player.z += (kraap.spot.z - player.z) * Math.min(1, dt * 8); }
     if (kraap.faceYaw != null) { let dy = kraap.faceYaw - player.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); player.yaw += dy * Math.min(1, dt * 8); }
@@ -4827,7 +4967,7 @@ function frame(dt) {
   { const d = Math.hypot(player.x - DONATE.x, player.z - (DONATE.z + 0.6)); if (d < 2.4 && d < bestD) { best = DONATE_PLACE; bestD = d; } } // only when standing at the box
   { const m = monkHere(); if (m && m.d < bestD) { best = monkPlace(m.h, m.s); bestD = m.d; } }
   { const c = infoNear(); if (c && c.d + 1 < bestD) { const T = INFO_TEXT[c.id]; best = { id: "info", icon: "ℹ️", th: T.t[0], en: T.t[1], sub: ["เรื่องน่ารู้", "Good to know"], info: c.id, key: c.id }; bestD = c.d + 1; } } // (anything else here comes first)
-  if (onBridge(player.x, player.z) && feed.t < 0 && 2.5 < bestD) { best = FISH_PLACE; bestD = 2.5; }
+  if (onBridge(player.x, player.z) && feed.t < 0 && kraap.t < 0 && 2.5 < bestD) { best = fest.now === "loykrathong" ? { id: "bridge", icon: "🪷", th: "ลอยกระทง", en: "Loy Krathong", sub: ["ลอยกระทง · ให้อาหารปลา", "Float a krathong · feed the fish"] } : FISH_PLACE; bestD = 2.5; }
   if (merit.t < 0 && kraap.t < 0) { const mh = meritHere(); if (mh) { best = { ...MERIT[mh.kind].place, merit: mh }; bestD = 0.5; } } // standing at it: the offering comes first
   if (catNear() && 1.9 < bestD) { best = CAT_PLACE; bestD = 1.9; }
   if (Math.hypot(player.x - BROOM_AT.x, player.z - BROOM_AT.z) < 1.8 && 2.3 < bestD) { best = broom.held ? BROOM_BACK : BROOM_PLACE; bestD = 2.3; }
