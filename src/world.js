@@ -2944,16 +2944,23 @@ function monkActions(h, s) {
   if (s === h.senior) a.push({ icon: "🟫", t: ["ถวายผ้ากฐิน", "Offer the Kathina robe"], run: () => startKathin(h) });
   return a;
 }
+// the three teachers' names and titles (chosen by the user, a former monk in Thailand): หลวงพ่อ for the head monk
+const TEACHER_NAME = {
+  "monk-elder": ["หลวงพ่อเปลี่ยน", "Luang Por Plien"],
+  "monk": ["พระอาจารย์พิทยา", "Phra Ajahn Pittaya"],
+  "monk-young": ["พระวิโมกข์", "Phra Vimoke"],
+};
 function monkPlace(h, s) {
-  const acts = monkActions(h, s);
-  return { id: "monk", icon: "🙏", th: "พระสงฆ์", en: "A monk", hall: h, monk: s, acts, key: acts.length,
+  const acts = monkActions(h, s), n = TEACHER_NAME[s.name] || ["พระสงฆ์", "A monk"];
+  return { id: "monk", icon: "🙏", th: n[0], en: n[1], hall: h, monk: s, acts, key: acts.length,
     sub: [acts.map((x) => x.t[0]).join(" · "), acts.map((x) => x.t[1]).join(" · ")] };
 }
 let monkActs = [];
 function openMonk(p) {
   monkActs = monkActions(p.hall, p.monk);
   if (monkActs.length === 1) { monkActs[0].run(); return; }
-  openDialog(tx("🙏 หน้าพระสงฆ์", "🙏 Before the monk"), `<p>${esc(tx("คุกเข่าต่อหน้าท่าน แล้ว…", "Kneel before him, and…"))}</p>
+  const n = TEACHER_NAME[p.monk.name];
+  openDialog(n ? `🙏 ${tx(...n)}` : tx("🙏 หน้าพระสงฆ์", "🙏 Before the monk"), `<p>${esc(tx("คุกเข่าต่อหน้าท่าน แล้ว…", "Kneel before him, and…"))}</p>
     <ul class="places">${monkActs.map((x, i) => `<li><button data-monk-act="${i}"><span class="ic">${x.icon}</span><span>${esc(tx(...x.t))}</span></button></li>`).join("")}</ul>
     <div class="row"><button class="chip" data-close>${esc(tx("ปิด", "Close"))}</button></div>`);
 }
@@ -4624,9 +4631,9 @@ const STAMPS = [
   { id: "dog", g: "friends", icon: "🐕", ev: "petDog", t: ["ลูบหัวหมาวัด", "Pet the temple dog"] },
   { id: "cat", g: "friends", icon: "🐈", ev: "petCat", t: ["ลูบแมววัด", "Pet the temple cat"] },
   { id: "fish", g: "friends", icon: "🐟", ev: "feed", t: ["ให้อาหารปลา", "Feed the fish"] },
-  { id: "monk-elder", g: "friends", icon: "🧡", t: ["ไหว้พระอาจารย์อาวุโส", "Greet the eldest teacher"] },
-  { id: "monk", g: "friends", icon: "🧡", t: ["ไหว้พระอาจารย์รูปกลาง", "Greet the middle teacher"] },
-  { id: "monk-young", g: "friends", icon: "🧡", t: ["ไหว้พระอาจารย์รูปหนุ่ม", "Greet the youngest teacher"] },
+  { id: "monk-elder", g: "friends", icon: "🧡", t: ["ไหว้" + TEACHER_NAME["monk-elder"][0], "Greet " + TEACHER_NAME["monk-elder"][1]] },
+  { id: "monk", g: "friends", icon: "🧡", t: ["ไหว้" + TEACHER_NAME["monk"][0], "Greet " + TEACHER_NAME["monk"][1]] },
+  { id: "monk-young", g: "friends", icon: "🧡", t: ["ไหว้" + TEACHER_NAME["monk-young"][0], "Greet " + TEACHER_NAME["monk-young"][1]] },
   ...Object.entries(INFO_TEXT).map(([id, T]) => ({ id: "card-" + id, g: "cards", icon: T.icon, t: T.t, card: id,
     when: ["lanterns", "krathong"].includes(id) ? () => fest.now === "loykrathong" : id === "wiantian" ? () => fest.now === "bucha" : null })),
 ];
