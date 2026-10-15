@@ -38,7 +38,7 @@ export function createSound({ high = true } = {}) {
     p.positionX.value = x; p.positionY.value = y; p.positionZ.value = z;
     p.connect(inside ? master : outdoor); return p;
   }
-  const voices = {}; let speaking = 0; // (blessings playing with the ambience off)
+  const voices = {};
   const voiceBuffer = (url) => voices[url] || (voices[url] = fetch(url).then((r) => r.arrayBuffer()).then((b) => ctx.decodeAudioData(b)).catch(() => null));
   const env = (g, t, a, peak, d) => { g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + a + d); };
 
@@ -277,17 +277,13 @@ export function createSound({ high = true } = {}) {
       s.buffer = noiseBuffer("pink", 0.4); f.type = "bandpass"; f.frequency.value = 1800; f.Q.value = 0.8;
       s.connect(f); f.connect(g); g.connect(out); env(g, t0, 0.05, 0.12, 0.2); s.start(t0); s.stop(t0 + 0.4);
     },
-    // a monk's spoken blessing, from where he sits. Like the bell it plays with the ambience off too: it answers
-    // the visitor's own offering. Resolves to its length in seconds (0 if it can't be played).
-    // (with the ambience off, the voice goes straight out, and the rest of the world stays silent)
+    // a monk's voice (a blessing, a few words to the child), from where he sits; heard only with the sound on.
+    // Resolves to its length in seconds (0 if it isn't played).
     async blessing(url, x, y, z, inside = false) {
-      if (!ctx) build();
-      const quiet = !on; if (quiet) await ctx.resume();
-      const buf = await voiceBuffer(url); if (!buf) return 0;
-      const s = ctx.createBufferSource(), g = ctx.createGain(), p = placed(x, y, z, 5, 40, 0.8, inside); s.buffer = buf; g.gain.value = 1.6;
-      if (quiet) { p.disconnect(); p.connect(ctx.destination); g.gain.value = 1.3; }
-      s.connect(g); g.connect(p); s.start();
-      if (quiet) { speaking++; s.onended = () => { if (--speaking === 0 && !on && ctx) ctx.suspend(); }; }
+      if (!ctx || !on) return 0;
+      const buf = await voiceBuffer(url); if (!buf || !on) return 0;
+      const s = ctx.createBufferSource(), g = ctx.createGain(); s.buffer = buf; g.gain.value = 1.6;
+      s.connect(g); g.connect(placed(x, y, z, 5, 40, 0.8, inside)); s.start();
       return buf.duration;
     },
     // pigeons taking off: a clatter of wingbeats

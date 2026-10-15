@@ -2759,13 +2759,14 @@ const BLESSING_TEXT = () => tx(
   ["อะภิวาทะนะสีลิสสะ นิจจัง วุฑฒาปะจายิโน จัตตาโร ธัมมา วัฑฒันติ อายุ วัณโณ สุขัง พะลัง", "ผู้ที่กราบไหว้และอ่อนน้อมต่อผู้ใหญ่อยู่เป็นนิตย์ ธรรมสี่ประการย่อมเจริญแก่เขา คือ อายุ วรรณะ สุขะ พละ"],
   ["Abhivādanasīlissa niccaṃ vuḍḍhāpacāyino, cattāro dhammā vaḍḍhanti: āyu vaṇṇo sukhaṃ balaṃ", "For one who always honours and respects the elders, four things grow: long life, beauty, happiness and strength."]);
 let subtitleOff = 0;
-function recite(url, at, inside, text = null) {
+// (the words are shown whether or not the sound is on; the voice is heard only with it on)
+function recite(url, at, inside, text = null, length = 11) {
   sound.blessing(url, at.x, at.y, at.z, inside).then((secs) => {
     const el = document.getElementById("subtitle"); if (!el) return;
     if (text) el.innerHTML = `<span>${esc(text)}</span>`;
     else { const [pali, meaning] = BLESSING_TEXT(); el.innerHTML = `<span class="pali">${pali}</span><span>${meaning}</span>`; }
     el.hidden = false;
-    clearTimeout(subtitleOff); subtitleOff = setTimeout(() => { el.hidden = true; }, ((secs || 14) + 0.8) * 1000);
+    clearTimeout(subtitleOff); subtitleOff = setTimeout(() => { el.hidden = true; }, ((secs || length) + 0.8) * 1000);
   });
 }
 /* ---------------- the teachers speak ---------------- */
@@ -2908,7 +2909,7 @@ function blessStep(s, t) {
   const [b0, b1] = KATHIN_BLESS, u = (t - b0) / (b1 - b0);
   const w = B.whisk;
   if (t < b0 - 0.6 || u > 1 + 0.15 * BW) { w.position.copy(B.rest.pos); w.rotation.copy(B.rest.rot); B.flicked = []; B.recited = false; return; }
-  if (u >= 0 && !B.recited) { B.recited = true; recite("audio/bless-hall.mp3", s.rig ? s.rig.B.Head.getWorldPosition(new THREE.Vector3()) : s.lean.getWorldPosition(new THREE.Vector3()), true); }
+  if (u >= 0 && !B.recited) { B.recited = true; recite("audio/bless-hall.mp3", s.rig ? s.rig.B.Head.getWorldPosition(new THREE.Vector3()) : s.lean.getWorldPosition(new THREE.Vector3()), true, null, 11.0); }
   const rise = smooth(-0.1 * BW, 0.12 * BW, u) * (1 - smooth(1 - 0.08 * BW, 1 + 0.1 * BW, u));
   const g = (c, wd) => Math.exp(-(((u - c) / wd) ** 2));
   const dip = Math.max(...BLESS_DIPS.map((c) => g(c, 0.05 * BW)), 1 - smooth(0.02 * BW, 0.12 * BW, u), smooth(1 - 0.08 * BW, 1 + 0.05 * BW, u));
@@ -4315,7 +4316,7 @@ function frame(dt) {
     fx = fz = 0;
     const kBefore = kraap.t;
     kraap.t += dt;
-    if (kraap.recite && kraap.t >= kraap.recite.at) { const r = kraap.recite; recite(r.url, r.from, !!r.inside, r.text || null); if (r.who) r.who.talking = r.secs; kraap.recite = null; }
+    if (kraap.recite && kraap.t >= kraap.recite.at) { const r = kraap.recite; recite(r.url, r.from, !!r.inside, r.text || null, r.secs || 10.4); if (r.who) r.who.talking = r.secs; kraap.recite = null; }
     if (kraap.t > (kraap.keys ? kraap.dur : KRAAP_DUR)) { kraap.greet = false; kraapEnded(kraap.kathin ? "kathinDone" : kraap.merit ? null : kraap.keys === ALMS_KNEEL_KEYS ? "almsBless" : !kraap.keys ? "kraap" : null); kraap.t = -1; kraap.touch = null; kraap.keys = null; if (kraap.kathin) kraap.kathin.monk.lean.rotation.x = 0; endKneelingOffering(); }
     const mv = kraap.kathin || kraap.merit;
     if (mv && kraap.keys && kraap.t >= 0) { // Kathina and kneeling offerings: kneel close to offer, then move back on the knees to bow
