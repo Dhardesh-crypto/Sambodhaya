@@ -2717,7 +2717,6 @@ const KATHIN_KEYS = (() => {
   k.push([b0 + 1.4 + BLESS_DUR + (stand[0] - b0), ...stand.slice(1)]);
   return k;
 })();
-const KATHIN_PLACE = { id: "kathin", icon: "🟫", th: "ถวายผ้ากฐิน", en: "Offer the Kathina robe", sub: ["ถวายพระสงฆ์ผ่านพระเถระ แล้วกราบ 3 ครั้ง", "To the Sangha, through the senior monk; then bow three times"] };
 function kathinSpots(h) { // where he kneels to offer, and where he bows (as far from the platform as before the Buddha)
   const s = h.senior, [nx, nz] = h.toWorld(s.lx, s.edge + KATHIN_NEAR), [fx, fz] = h.toWorld(s.lx, s.edge + 1.75);
   return { near: { x: nx, z: nz }, far: { x: fx, z: fz } };
@@ -2809,7 +2808,6 @@ function mealTray() { // a round tray: a plate of rice, two dishes, a bowl of so
 const mealCloth = () => { const m = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.012, 0.4), S(0xc9a46a, { roughness: 0.95 })); m.receiveShadow = true; return m; };
 const spoonGeo = new THREE.BoxGeometry(0.012, 0.012, 0.13), spoonMat = S(0xd8dce2, { metalness: 0.9, roughness: 0.25 });
 const meal = { on: false, table: null, blessed: false, eatAt: 0 };
-const MEAL_PLACE = { id: "meal", icon: "🍚", th: "ถวายภัตตาหาร", en: "Offer the meal", sub: ["คุกเข่า ยกสำรับประเคนพระด้วยสองมือ", "Kneel, and offer the tray with both hands"] };
 function mealSet(on) {
   const h = salas.learn; if (!h || !h.teachers || meal.on === on) return;
   meal.on = on; meal.blessed = false;
@@ -2891,6 +2889,40 @@ function mealStep(dt) {
   const on = mealTime(); if (on !== meal.on) mealSet(on);
   if (meal.blessed && meal.eatAt > 0) meal.eatAt -= dt;
 }
+// Before a monk: one place for everything that can be done there (greet him; at meal times, offer him his meal; before
+// the senior monk, offer the Kathina robe), in a wide area in front of him, so the child need not stand on one spot:
+// with one thing to do, E does it; with more, E opens a short list to choose from. The child moves to the right place
+// to kneel by himself.
+const MONK_ZONE = { half: 1.3, front: 3.2 }; // across, either side of the monk; how far out before the platform
+function monkHere() {
+  const h = salas.learn; if (!h || !h.teachers || kraap.t >= 0 || alms.t >= 0) return null;
+  const p = h.g.worldToLocal(new THREE.Vector3(player.x, 0, player.z)); let best = null;
+  for (const s of h.teachers) {
+    if (!s.rig || !TEACHER_TALK[s.name]) continue;
+    const dx = Math.abs(p.x - s.lx), dz = p.z - s.edge;
+    if (dx < MONK_ZONE.half && dz > -0.3 && dz < MONK_ZONE.front) { const d = dx + 0.3 * Math.max(0, dz); if (!best || d < best.d) best = { h, s, d }; }
+  }
+  return best;
+}
+function monkActions(h, s) {
+  const a = [{ icon: "🙏", t: ["ไหว้พระสงฆ์", "Greet the monk"], run: () => startGreet(h, s) }];
+  if (s.meal && !s.meal.offered) a.push({ icon: "🍚", t: ["ถวายภัตตาหาร", "Offer the meal"], run: () => startMealOffer(h, s) });
+  if (s === h.senior) a.push({ icon: "🟫", t: ["ถวายผ้ากฐิน", "Offer the Kathina robe"], run: () => startKathin(h) });
+  return a;
+}
+function monkPlace(h, s) {
+  const acts = monkActions(h, s);
+  return { id: "monk", icon: "🙏", th: "พระสงฆ์", en: "A monk", hall: h, monk: s, acts, key: acts.length,
+    sub: [acts.map((x) => x.t[0]).join(" · "), acts.map((x) => x.t[1]).join(" · ")] };
+}
+let monkActs = [];
+function openMonk(p) {
+  monkActs = monkActions(p.hall, p.monk);
+  if (monkActs.length === 1) { monkActs[0].run(); return; }
+  openDialog(tx("🙏 หน้าพระสงฆ์", "🙏 Before the monk"), `<p>${esc(tx("คุกเข่าต่อหน้าท่าน แล้ว…", "Kneel before him, and…"))}</p>
+    <ul class="places">${monkActs.map((x, i) => `<li><button data-monk-act="${i}"><span class="ic">${x.icon}</span><span>${esc(tx(...x.t))}</span></button></li>`).join("")}</ul>
+    <div class="row"><button class="chip" data-close>${esc(tx("ปิด", "Close"))}</button></div>`);
+}
 /* ---------------- the teachers speak ---------------- */
 // A child greets a seated monk kneeling with a wai (always, before a seated monk). He looks up at the child and says a
 // few words: a different line each time, in turn (the lines checked by a former monk in Thailand). The child bows the
@@ -2918,7 +2950,6 @@ const TALK_DUR = {
   middle: { th: [3.05, 3.86, 5.09, 4.88], en: [2.97, 3.91, 4.42, 4.75] }, // Harrison
   junior: { th: [5.52, 4.29, 5.74, 5.71], en: [6.61, 5.82, 5.26, 7.66] }, // Brooks
 };
-const GREET_PLACE = { id: "greet", icon: "🙏", th: "ไหว้พระสงฆ์", en: "Greet the monk", sub: ["คุกเข่าพนมมือ แล้วฟังท่าน", "Kneel with a wai, and listen to him"] };
 const GREET_BACK = 1.3; // where the child kneels: this far before the platform
 function greetSpot(h, s) { const [x, z] = h.toWorld(s.lx, s.edge + GREET_BACK); return { x, z }; }
 const talkTurn = read("talk", {});
@@ -4072,7 +4103,7 @@ function showPrompt(p) {
   if (!p) { el.hidden = true; return; }
   $("prompt-name").textContent = p.icon + " " + placeName(p);
   $("prompt-sub").textContent = p.stone != null ? (p.board ? tx("ป้ายเรื่องที่ ", "Story board ") : tx("เรื่องที่ ", "Story ")) + (p.stone + 1) : p.sub[L === "en" ? 1 : 0];
-  $("prompt-go").textContent = p.id === "bell" ? tx("ตี", "Strike") : p.id === "donate" ? tx("เปิด", "Open") : p.id === "alms" ? tx("ใส่บาตร", "Offer") : p.id === "fish" ? tx("ให้อาหาร", "Feed") : p.merit ? tx("ทำบุญ", "Offer") : p.id === "broom" ? (broom.held ? tx("วาง", "Put back") : tx("หยิบ", "Pick up")) : p.id === "kathin" ? tx("ถวาย", "Offer") : p.id === "greet" ? tx("ไหว้", "Greet") : p.id === "meal" ? tx("ประเคน", "Offer") : p.id === "cat" ? tx("ลูบ", "Pet") : tx("เข้า", "Visit");
+  $("prompt-go").textContent = p.id === "bell" ? tx("ตี", "Strike") : p.id === "donate" ? tx("เปิด", "Open") : p.id === "alms" ? tx("ใส่บาตร", "Offer") : p.id === "fish" ? tx("ให้อาหาร", "Feed") : p.merit ? tx("ทำบุญ", "Offer") : p.id === "broom" ? (broom.held ? tx("วาง", "Put back") : tx("หยิบ", "Pick up")) : p.id === "monk" ? (p.acts.length > 1 ? tx("เลือก", "Choose") : tx("ไหว้", "Greet")) : p.id === "cat" ? tx("ลูบ", "Pet") : tx("เข้า", "Visit");
   el.hidden = false;
 }
 $("prompt-go").addEventListener("click", () => near && openPlace(near));
@@ -4130,9 +4161,7 @@ function openPlace(p) {
   if (p.merit) { startMerit(meritHere()); return; }
   if (p.id === "cat") { startPetCat(); return; }
   if (p.id === "broom") { broom.held = !broom.held; near = null; return; }
-  if (p.id === "kathin") { startKathin(p.hall); return; }
-  if (p.id === "greet") { startGreet(p.hall, p.monk); return; }
-  if (p.id === "meal") { startMealOffer(p.hall, p.monk); return; }
+  if (p.id === "monk") { openMonk(p); return; }
   if (p.stone != null) {
     const n = p.stone + 1;
     openDialog(`👣 ${n} · ${esc(L === "en" ? JOURNEY[p.stone][1] : JOURNEY[p.stone][0])}`,
@@ -4290,6 +4319,7 @@ function kraapEnded(kind) {
   else if (kind) questEvent(kind);
 }
 $("dlg").addEventListener("click", (e) => {
+  const ma = e.target.closest("[data-monk-act]"); if (ma) { const a = monkActs[+ma.dataset.monkAct]; closeDialog(); if (a) a.run(); return; }
   const qs = e.target.closest("[data-quest]"); if (qs) { startQuest(qs.dataset.quest); closeDialog(); return; }
   if (e.target.closest("[data-quest-stop]")) { questState.active = null; saveQuests(); renderQuest(); closeDialog(); return; }
   const go = e.target.closest("[data-go]"); if (go) { teleport(go.dataset.go); closeDialog(); return; }
@@ -4619,15 +4649,14 @@ function frame(dt) {
   for (const s of journeyStones) { const d = Math.hypot(player.x - s.x, player.z - s.z); if (d < 2.6 && d < bestD) { best = { ...PLACES.find((p) => p.id === "journey"), stone: s.i }; bestD = d; } }
   if (Math.hypot(player.x - BELL[0], player.z - BELL[1]) < 4.4 && 3 < bestD) { best = BELL_PLACE; bestD = 3; } // reachable from the road
   { const d = Math.hypot(player.x - DONATE.x, player.z - (DONATE.z + 0.6)); if (d < 2.4 && d < bestD) { best = DONATE_PLACE; bestD = d; } } // only when standing at the box
-  { const h = salas.learn; if (h && h.senior && kraap.t < 0) { const sp = kathinSpots(h), d = Math.hypot(player.x - sp.near.x, player.z - sp.near.z); if (d < 1.3 && d < bestD) { best = { ...KATHIN_PLACE, hall: h }; bestD = d; } } }
-  { const h = salas.learn; if (h && h.teachers && kraap.t < 0) for (const s of h.teachers) { if (!s.rig || !TEACHER_TALK[s.name]) continue; const sp = greetSpot(h, s), d = Math.hypot(player.x - sp.x, player.z - sp.z); if (d < 0.9 && d < bestD) { best = { ...(s.meal && !s.meal.offered ? MEAL_PLACE : GREET_PLACE), hall: h, monk: s }; bestD = d; } } }
+  { const m = monkHere(); if (m && m.d < bestD) { best = monkPlace(m.h, m.s); bestD = m.d; } }
   if (onBridge(player.x, player.z) && feed.t < 0 && 2.5 < bestD) { best = FISH_PLACE; bestD = 2.5; }
   if (merit.t < 0 && kraap.t < 0) { const mh = meritHere(); if (mh) { best = { ...MERIT[mh.kind].place, merit: mh }; bestD = 0.5; } } // standing at it: the offering comes first
   if (catNear() && 1.9 < bestD) { best = CAT_PLACE; bestD = 1.9; }
   if (Math.hypot(player.x - BROOM_AT.x, player.z - BROOM_AT.z) < 1.8 && 2.3 < bestD) { best = broom.held ? BROOM_BACK : BROOM_PLACE; bestD = 2.3; }
   if (almsScene.on) for (const m of almsMonks) { const d = Math.hypot(player.x - (m.x + Math.sin(m.yaw) * ALMS_STAND), player.z - (m.z + Math.cos(m.yaw) * ALMS_STAND)); if (d < 1.5 && d < bestD) { best = { ...ALMS_PLACE, monk: m }; bestD = d; } }
   for (const s of boards) { const d = Math.hypot(player.x - s.x, player.z - s.z); if (d < 1.9 && d < bestD) { best = { ...PLACES.find((p) => p.id === "learn"), stone: s.i, board: true }; bestD = d; } }
-  if ((best && best.id) !== (near && near.id) || (best && best.stone) !== (near && near.stone) || (best && best.monk) !== (near && near.monk)) { near = best; showPrompt(near); }
+  if ((best && best.id) !== (near && near.id) || (best && best.stone) !== (near && near.stone) || (best && best.monk) !== (near && near.monk) || (best && best.key) !== (near && near.key)) { near = best; showPrompt(near); }
   // while he is doing something the prompt steps aside, and stays aside until he has walked on a little
   const busy = alms.t >= 0 || kraap.t >= 0 || shoes.t >= 0 || wai.t >= 0 || sit.on || feed.t >= 0 || merit.t >= 0 || pet.phase === "call";
   if (busy) promptRest = { x: player.x, z: player.z };
