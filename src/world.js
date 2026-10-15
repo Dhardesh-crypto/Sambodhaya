@@ -1245,7 +1245,8 @@ props("jar", 1.1, jars.map(([x, z], i) => [x, z, i]), { extra: true }); jars.for
 const bushes = [[-9, 18], [9, 18], [-19, -5], [19, -5], [-24, -36], [24, -36], [-40, 0], [40, -4], [22, 52], [36, 40], [-8, -52], [8, -52]];
 props("bougainvillea", 2.4, bushes.map(([x, z], i) => [x, z, i * 2]), { extra: true }); bushes.forEach(([x, z]) => colliders.push({ x, z, r: 1.3 }));
 const pots = [[-5.2, 15.8], [5.2, 15.8]];
-props("potplant", 1.6, pots.map(([x, z], i) => [x, z, i]), { extra: true }); pots.forEach(([x, z]) => colliders.push({ x, z, r: 0.6 }));
+const waterPots = pots.map(([x, z]) => ({ x, z, y: 0.55 })); // the plants a child can water (and the bonsai below); y: the soil
+props("potplant", 1.6, pots.map(([x, z], i) => [x, z, i])); pots.forEach(([x, z]) => colliders.push({ x, z, r: 0.6 }));
 const blooms = [[-9.5, 12], [9.5, 12]];
 props("lotus", 1, blooms.map(([x, z], i) => [x, z, i]), { extra: true }); blooms.forEach(([x, z]) => infoSpot("lotus", x, 0.6, z, 1.3, 2.2)); blooms.forEach(([x, z]) => colliders.push({ x, z, r: 0.8 }));
 
@@ -1311,8 +1312,8 @@ const gardenSpots = []; // (for ?debug checks)
   }
   // a pair of bonsai in glazed pots (ไม้ดัด) either side of every hall's steps
   const bonsai = [];
-  Object.values(salas).forEach((h) => { [-1, 1].forEach((sg) => { const [x, z] = h.toWorld(sg * (Math.min(5, h.W - 2) / 2 + 1.0), h.D / 2 + 1.5); bonsai.push([x, z, sg]); colliders.push({ x, z, r: 0.55 }); }); });
-  props("bonsai", 1.4, bonsai, { extra: true });
+  Object.values(salas).forEach((h) => { [-1, 1].forEach((sg) => { const [x, z] = h.toWorld(sg * (Math.min(5, h.W - 2) / 2 + 1.0), h.D / 2 + 1.5); bonsai.push([x, z, sg]); colliders.push({ x, z, r: 0.55 }); waterPots.push({ x, z, y: 0.45 }); }); });
+  props("bonsai", 1.4, bonsai);
   taken.forEach((t) => { gardenSpots.push(t); });
 }
 
@@ -1651,7 +1652,7 @@ function tieCloth() {
 // A broom leans by the plaza. Picking it up, the boy sweeps as he walks: fallen Bodhi leaves before the broom are
 // brushed away. Now and then a leaf falls from the tree. Putting it back is the same button at the stand.
 const BROOM_AT = { x: -6.4, z: 12.6 };
-const broom = { held: false, obj: new THREE.Group(), phase: 0 };
+const broom = { held: false, obj: new THREE.Group(), phase: 0, swept: 0 };
 const BROOM_PLACE = { id: "broom", icon: "🧹", th: "กวาดลานวัด", en: "Sweep the courtyard", sub: ["หยิบไม้กวาด", "Pick up the broom"] };
 const BROOM_BACK = { id: "broom", icon: "🧹", th: "วางไม้กวาด", en: "Put the broom back", sub: ["วางไว้ที่เดิม", "Lean it back where it was"] };
 {
@@ -1686,7 +1687,7 @@ function broomStep(dt, moving) {
     broom.grips = [head.clone().addScaledVector(dir, 1.0), head.clone().addScaledVector(dir, 1.45)];
     if (Math.floor(broom.phase / Math.PI) !== stroke) sound.sweep(head.x, head.y, head.z); // each stroke, a swish
     // leaves before the broom are brushed away
-    for (const l of fallenLeaves) { const u = l.userData; if (u.fall > 0 || u.fade >= 0) continue; if (Math.hypot(u.x - head.x, u.z - head.z) < 0.75) { u.fade = 0; u.vx = fwd.x * 1.2 + right.x * Math.sin(broom.phase); u.vz = fwd.z * 1.2 + right.z * Math.sin(broom.phase); } }
+    for (const l of fallenLeaves) { const u = l.userData; if (u.fall > 0 || u.fade >= 0) continue; if (Math.hypot(u.x - head.x, u.z - head.z) < 0.75) { if (++broom.swept === 12) stamp("sweep"); u.fade = 0; u.vx = fwd.x * 1.2 + right.x * Math.sin(broom.phase); u.vz = fwd.z * 1.2 + right.z * Math.sin(broom.phase); } }
   }
   // falling and swept leaves
   if (!settings.calmMotion) leafClock -= dt; if (leafClock <= 0) { leafClock = 10 + Math.random() * 14; if (fallenLeaves.length < (HIGH ? 60 : 30)) dropLeaf(true); }
@@ -1704,6 +1705,100 @@ function poseBroom(model, B) {
     const hs = shape[s], Q = basisQuat(hs.finger, hs.palm, side.clone().multiplyScalar(-sg), fwd.clone().negate());
     armTo(B, s, p.clone().addScaledVector(side, sg * 0.06), Q, new THREE.Vector3().addScaledVector(up, -1).addScaledVector(side, sg * 0.7), 1);
   });
+}
+
+/* ---------------- watering the plants (รดน้ำต้นไม้) ---------------- */
+// A watering can stands by a water jar across the entrance road from the broom. Picking it up, the child carries it
+// at the side; at a potted plant (the two by the gate, the bonsai either side of every hall's steps) E waters it:
+// the arm comes forward, the can tips and a fine stream falls at the foot of the plant. Each plant once a visit.
+const CAN_AT = { x: 6.6, z: 12.6 }, CAN_DUR = 3.4;
+const can = { held: false, obj: new THREE.Group(), t: -1, plant: null, stand: null, faceYaw: 0, watered: new Set(), w: 0, tilt: 0, spill: 0, splash: 0 };
+const CAN_PLACE = { id: "can", icon: "🪴", th: "รดน้ำต้นไม้", en: "Water the plants", sub: ["หยิบบัวรดน้ำ", "Pick up the watering can"] };
+const CAN_BACK = { id: "can", icon: "🪴", th: "วางบัวรดน้ำ", en: "Put the can back", sub: ["วางไว้ที่เดิม", "Set it back where it was"] };
+const WATER_PLACE = { id: "water", icon: "💧", th: "รดน้ำต้นไม้", en: "Water the plant", sub: ["ค่อย ๆ รดที่โคนต้น", "Gently, at the foot of the plant"] };
+const CAN_GRIP = new THREE.Vector3(0, 0.31, 0), CAN_ROSE = new THREE.Vector3(0, 0.275, 0.32); // the top of the handle; the spout's rose
+{
+  const metal = S(0x5f8f6a, { roughness: 0.45, metalness: 0.5 });
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.115, 0.22, 16), metal); body.position.y = 0.11;
+  const spout = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.018, 0.3, 8), metal); spout.position.set(0, 0.165, 0.205); spout.rotation.x = Math.PI / 4;
+  const rose = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.022, 0.025, 10), metal); rose.position.copy(CAN_ROSE); rose.rotation.x = Math.PI / 4;
+  const handle = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.012, 6, 14, Math.PI), metal); handle.position.y = 0.22; handle.rotation.y = Math.PI / 2;
+  [body, spout, handle].forEach((m) => { m.castShadow = true; });
+  can.obj.add(body, spout, rose, handle); scene.add(can.obj);
+  can.stream = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ color: 0xcfeeff, transparent: true, opacity: 0.55, depthWrite: false })); // the water, from the rose to the soil
+  can.stream.visible = false; scene.add(can.stream);
+  props("jar", 1.1, [[CAN_AT.x + 1.0, CAN_AT.z + 0.1, 0.4]]); colliders.push({ x: CAN_AT.x + 1.0, z: CAN_AT.z + 0.1, r: 0.6 });
+}
+function putCanBack() { can.held = false; can.t = -1; can.w = can.tilt = 0; can.stream.visible = false; }
+// the nearest plant not yet watered, within reach
+function potHere() {
+  let best = null;
+  waterPots.forEach((p, i) => { if (can.watered.has(i)) return; const d = Math.hypot(player.x - p.x, player.z - p.z); if (d < 1.7 && (!best || d < best.d)) best = { i, d }; });
+  return best;
+}
+function startWater(i) {
+  const p = waterPots[i]; if (!p || can.t >= 0 || kraap.t >= 0 || alms.t >= 0) return;
+  const d = Math.hypot(player.x - p.x, player.z - p.z) || 1;
+  can.plant = i; can.stand = { x: p.x + (player.x - p.x) / d * 1.2, z: p.z + (player.z - p.z) / d * 1.2 };
+  can.faceYaw = Math.atan2(p.x - can.stand.x, p.z - can.stand.z); can.t = 0; can.spill = 0; can.splash = 0; wai.t = -1;
+  if (player.mixer) playClip("idle", 0.4);
+}
+function placeCan(grip) {
+  const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(can.tilt, player.yaw, 0, "YXZ"));
+  can.obj.quaternion.copy(q); can.obj.position.copy(grip).sub(CAN_GRIP.clone().applyQuaternion(q));
+}
+function canStep(dt) {
+  if (!can.held) { can.obj.position.set(CAN_AT.x, groundAt(CAN_AT.x, CAN_AT.z), CAN_AT.z); can.obj.rotation.set(0, -0.6, 0); return; }
+  if (can.t >= 0) {
+    const t = (can.t += dt);
+    if (t < 0.6) { player.x += (can.stand.x - player.x) * Math.min(1, dt * 8); player.z += (can.stand.z - player.z) * Math.min(1, dt * 8); }
+    let dy = can.faceYaw - player.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); player.yaw += dy * Math.min(1, dt * 8);
+    can.w = smooth(0.2, 0.8, t) * (1 - smooth(CAN_DUR - 0.6, CAN_DUR, t));
+    can.tilt = 0.95 * smooth(0.7, 1.2, t) * (1 - smooth(CAN_DUR - 1.0, CAN_DUR - 0.5, t));
+    can.stream.visible = can.tilt > 0.75;
+    if (can.stream.visible) {
+      can.obj.updateMatrixWorld(true);
+      const rose = can.obj.localToWorld(CAN_ROSE.clone()), fwd = new THREE.Vector3(Math.sin(player.yaw), 0, Math.cos(player.yaw)), floor = waterPots[can.plant].y;
+      const v0 = fwd.clone().multiplyScalar(1.0).add(new THREE.Vector3(0, -0.2, 0)), at = (u) => rose.clone().addScaledVector(v0, u).add(new THREE.Vector3(0, -4.5 * u * u, 0));
+      let T = 0; while (T < 1 && at(T).y > floor) T += 0.02; // where it reaches the soil
+      const pts = []; for (let k = 0; k <= 6; k++) pts.push(at(T * k / 6));
+      can.stream.geometry.dispose(); can.stream.geometry = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 12, 0.009, 5);
+      for (can.spill += dt; can.spill > 0.04; can.spill -= 0.04) { // a few drops along it, and splashing where it lands
+        const m = new THREE.Mesh(dropGeo, dropMat); m.scale.setScalar(0.7); m.position.copy(rose);
+        m.userData = { v: v0.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.1, 0, (Math.random() - 0.5) * 0.1)), G: 9, life: 0, floor };
+        scene.add(m); drops.push(m);
+      }
+      if ((can.splash -= dt) <= 0) { can.splash = 0.6; sound.sprinkle(rose.x, floor, rose.z); }
+    }
+    if (t >= CAN_DUR) {
+      can.t = -1; can.w = can.tilt = 0; can.stream.visible = false; can.watered.add(can.plant); stamp("water");
+      toast(`🪴 ${esc(tx(`รดน้ำแล้ว ${can.watered.size} จาก ${waterPots.length} ต้น`, `Watered ${can.watered.size} of ${waterPots.length} plants`))}`, 4);
+    }
+  }
+  if (!player.mixer) placeCan(new THREE.Vector3(player.x, player.y + 0.7, player.z).addScaledVector(new THREE.Vector3(-Math.cos(player.yaw), 0, Math.sin(player.yaw)), 0.4)); // the block avatar: at its right side
+}
+// the right hand: holding the can at the side (it swings with the walk); to water, the arm comes forward, palm down
+function poseCan(model, B) {
+  if (!B.RightHand) return;
+  const up = new THREE.Vector3(0, 1, 0), fwd = new THREE.Vector3(Math.sin(player.yaw), 0, Math.cos(player.yaw)), side = new THREE.Vector3().crossVectors(up, fwd);
+  model.updateMatrixWorld(true);
+  if (can.w > 0.001) {
+    // square to the plant first: the idle stands turned, its shoulders twisted (as for an offering)
+    if (B.Hips && B.LeftUpLeg && B.RightUpLeg) {
+      const hipLine = B.LeftUpLeg.getWorldPosition(new THREE.Vector3()).sub(B.RightUpLeg.getWorldPosition(new THREE.Vector3())).setY(0).normalize();
+      turnBone(B.Hips, _q2.slerpQuaternions(_q1.identity(), new THREE.Quaternion().setFromUnitVectors(hipLine, side), can.w));
+    }
+    const rest = restPose(model); if (rest) ["Spine", "Spine01", "Spine02", "neck", "Head"].forEach((n) => { if (B[n] && rest[n]) B[n].quaternion.slerp(rest[n], can.w); });
+    model.updateMatrixWorld(true);
+    const shape = handShape(model), sh = B.RightArm.getWorldPosition(new THREE.Vector3());
+    const out = sh.addScaledVector(fwd, 0.42).addScaledVector(side, 0.04).addScaledVector(up, -0.3);
+    if (shape) { const hs = shape.Right; armTo(B, "Right", out, basisQuat(hs.finger, hs.palm, side, up.clone().negate()), up.clone().negate().addScaledVector(side, -0.7), can.w); }
+    model.updateMatrixWorld(true);
+  }
+  // the handle sits in the palm: a little along the fingers from the wrist, and a little out from the palm
+  const shape = handShape(model), q = B.RightHand.getWorldQuaternion(new THREE.Quaternion()), grip = B.RightHand.getWorldPosition(new THREE.Vector3());
+  if (shape) grip.addScaledVector(shape.Right.finger.clone().applyQuaternion(q), can.w > 0.5 ? 0.075 : 0.13).addScaledVector(shape.Right.palm.clone().applyQuaternion(q), 0.03);
+  placeCan(grip);
 }
 
 /* ---------------- a living temple: walking meditation, a novice sweeping, the temple cat, pigeons ---------------- */
@@ -3138,7 +3233,7 @@ function dropsStep(dt) {
   for (let i = drops.length - 1; i >= 0; i--) {
     const m = drops[i], d = m.userData; d.life += dt;
     d.v.y -= d.G * dt; m.position.addScaledVector(d.v, dt);
-    if (m.position.y < groundAt(m.position.x, m.position.z) + 0.01 || d.life > 1.6) { scene.remove(m); drops.splice(i, 1); }
+    if (m.position.y < (d.floor != null ? d.floor : groundAt(m.position.x, m.position.z) + 0.01) || d.life > 1.6) { scene.remove(m); drops.splice(i, 1); }
   }
 }
 function startKraap() {
@@ -3590,6 +3685,7 @@ function poseOverlays(model, hands, bow, sitW) {
   if (feed.t >= 0) { waiBegin(B); poseFeed(model, B); waiMark(B); return; }
   if (merit.t >= 0) { waiBegin(B); poseMerit(model, B); waiMark(B); return; }
   if (broom.held && hands <= 0 && sitW <= 0.001) { waiBegin(B); poseBroom(model, B); waiMark(B); return; }
+  if (can.held && hands <= 0 && sitW <= 0.001) { waiBegin(B); poseCan(model, B); waiMark(B); return; }
   if (stoop.w > 0.01 && hands <= 0 && bow <= 0 && sitW <= 0.001) { waiBegin(B); poseStoop(model, B, stoop.w); waiMark(B); return; } // passing before the monks
   if (hands <= 0 && bow <= 0 && sitW <= 0.001) { waiEnd(B); return; }
   waiBegin(B);
@@ -4158,7 +4254,7 @@ function showPrompt(p) {
   if (!p) { el.hidden = true; return; }
   $("prompt-name").textContent = p.icon + " " + placeName(p);
   $("prompt-sub").textContent = p.stone != null ? (p.board ? tx("ป้ายเรื่องที่ ", "Story board ") : tx("เรื่องที่ ", "Story ")) + (p.stone + 1) : p.sub[L === "en" ? 1 : 0];
-  $("prompt-go").textContent = p.id === "bell" ? tx("ตี", "Strike") : p.id === "donate" ? tx("เปิด", "Open") : p.id === "alms" ? tx("ใส่บาตร", "Offer") : p.id === "fish" ? tx("ให้อาหาร", "Feed") : p.merit ? tx("ทำบุญ", "Offer") : p.id === "broom" ? (broom.held ? tx("วาง", "Put back") : tx("หยิบ", "Pick up")) : p.id === "info" ? tx("อ่าน", "Read") : p.id === "bridge" ? tx("เลือก", "Choose") : p.id === "monk" ? (p.acts.length > 1 ? tx("เลือก", "Choose") : tx("ไหว้", "Greet")) : p.id === "cat" ? tx("ลูบ", "Pet") : tx("เข้า", "Visit");
+  $("prompt-go").textContent = p.id === "bell" ? tx("ตี", "Strike") : p.id === "donate" ? tx("เปิด", "Open") : p.id === "alms" ? tx("ใส่บาตร", "Offer") : p.id === "fish" ? tx("ให้อาหาร", "Feed") : p.merit ? tx("ทำบุญ", "Offer") : p.id === "broom" ? (broom.held ? tx("วาง", "Put back") : tx("หยิบ", "Pick up")) : p.id === "can" ? (can.held ? tx("วาง", "Put back") : tx("หยิบ", "Pick up")) : p.id === "water" ? tx("รดน้ำ", "Water") : p.id === "info" ? tx("อ่าน", "Read") : p.id === "bridge" ? tx("เลือก", "Choose") : p.id === "monk" ? (p.acts.length > 1 ? tx("เลือก", "Choose") : tx("ไหว้", "Greet")) : p.id === "cat" ? tx("ลูบ", "Pet") : tx("เข้า", "Visit");
   el.hidden = false;
 }
 $("prompt-go").addEventListener("click", () => near && openPlace(near));
@@ -4215,7 +4311,9 @@ function openPlace(p) {
   if (p.id === "fish") { startFeed(); return; }
   if (p.merit) { startMerit(meritHere()); return; }
   if (p.id === "cat") { startPetCat(); return; }
-  if (p.id === "broom") { broom.held = !broom.held; near = null; return; }
+  if (p.id === "broom") { broom.held = !broom.held; if (broom.held) putCanBack(); near = null; return; }
+  if (p.id === "can") { can.held = !can.held; if (can.held) putBroomBack(); near = null; return; }
+  if (p.id === "water") { startWater(p.key); return; }
   if (p.id === "monk") { openMonk(p); return; }
   if (p.id === "info") { openInfo(p.info); return; }
   if (p.id === "bridge") { openBridge(); return; }
@@ -4609,7 +4707,7 @@ function openQuests() {
 // The temple passport (📖): a stamp for each place found and each custom done, kept on this device. No score: a
 // blank stamp shows its name, so a child knows what there is still to find
 const STAMP_GROUPS = [
-  ["places", ["สถานที่ในวัด", "Places"]], ["customs", ["ธรรมเนียม", "Customs"]], ["friends", ["เพื่อนในวัด", "Friends"]], ["cards", ["สิ่งที่ได้รู้", "Discoveries"]],
+  ["places", ["สถานที่ในวัด", "Places"]], ["customs", ["ธรรมเนียม", "Customs"]], ["friends", ["เพื่อนในวัด", "Friends"]], ["help", ["ช่วยงานวัด", "Helping"]], ["cards", ["สิ่งที่ได้รู้", "Discoveries"]],
 ];
 const STAMPS = [
   ...PLACES.filter((p) => p.id !== "exit").map((p) => ({ id: "place-" + p.id, g: "places", icon: p.icon, t: [p.th, p.en], at: p.pos, r: p.r })),
@@ -4634,6 +4732,8 @@ const STAMPS = [
   { id: "monk-elder", g: "friends", icon: "🧡", t: ["ไหว้" + TEACHER_NAME["monk-elder"][0], "Greet " + TEACHER_NAME["monk-elder"][1]] },
   { id: "monk", g: "friends", icon: "🧡", t: ["ไหว้" + TEACHER_NAME["monk"][0], "Greet " + TEACHER_NAME["monk"][1]] },
   { id: "monk-young", g: "friends", icon: "🧡", t: ["ไหว้" + TEACHER_NAME["monk-young"][0], "Greet " + TEACHER_NAME["monk-young"][1]] },
+  { id: "sweep", g: "help", icon: "🧹", t: ["กวาดลานวัด", "Sweep the courtyard"] },
+  { id: "water", g: "help", icon: "🪴", t: ["รดน้ำต้นไม้", "Water the plants"] },
   ...Object.entries(INFO_TEXT).map(([id, T]) => ({ id: "card-" + id, g: "cards", icon: T.icon, t: T.t, card: id,
     when: ["lanterns", "krathong"].includes(id) ? () => fest.now === "loykrathong" : id === "wiantian" ? () => fest.now === "bucha" : null })),
 ];
@@ -4846,8 +4946,8 @@ function tick() {
 // one step of the world: movement, animation, camera and the picture
 function frame(dt) {
   timeStep(dt); placeLampLights(dt);
-  feedStep(dt); fishStep(dt); meritStep(dt); lifeStep(dt); eyesStep(dt); questsStep(dt); passportStep(); mealStep(dt); mediStep(dt); petStep(dt); petalStep(dt); rainStep(dt); mistStep(dt); festivalStep(dt); dropsStep(dt);
-  if (broom.held && (alms.t >= 0 || kraap.t >= 0 || feed.t >= 0 || shoes.t >= 0 || sit.on || merit.t >= 0)) putBroomBack(); // hands needed elsewhere
+  feedStep(dt); fishStep(dt); meritStep(dt); lifeStep(dt); eyesStep(dt); questsStep(dt); passportStep(); mealStep(dt); mediStep(dt); petStep(dt); petalStep(dt); rainStep(dt); mistStep(dt); festivalStep(dt); canStep(dt); dropsStep(dt);
+  if ((broom.held || can.held) && (alms.t >= 0 || kraap.t >= 0 || feed.t >= 0 || shoes.t >= 0 || sit.on || merit.t >= 0)) { putBroomBack(); putCanBack(); } // hands needed elsewhere
   monkTime += dt;
   if (!settings.calmMotion) for (const m of monkFigures) { const b = Math.sin(monkTime * 1.25 + m.ph); m.o.scale.set(1 + b * 0.004, 1 + b * 0.008, 1 + b * 0.004); } // slow breathing
   // movement relative to the camera
@@ -4887,6 +4987,7 @@ function frame(dt) {
     }
   }
   if (merit.t >= 0) fx = fz = 0; // making an offering: in place until it is done
+  if (can.t >= 0) fx = fz = 0; // watering a plant: in place until it is done
   if (feed.t >= 0) fx = fz = 0; // feeding the fish: at the rail until the last handful is thrown
   if (alms.t >= 0) { // giving alms: stay put (it ends by itself); step up to the monk and face him first
     fx = fz = 0;
@@ -4938,7 +5039,7 @@ function frame(dt) {
       player.model.position.y = -1.05 * sit.w + (sit.spot ? sit.spot.top * sit.w : 0);
     } else if (player.model.position.y < 0) player.model.position.y = 0;
   } else if (player.mixer) {
-    if (kraap.t >= 0 || alms.t >= 0 || shoes.t >= 0 || feed.t >= 0 || merit.t >= 0) playClip("idle", 0.4);
+    if (kraap.t >= 0 || alms.t >= 0 || shoes.t >= 0 || feed.t >= 0 || merit.t >= 0 || can.t >= 0) playClip("idle", 0.4);
     else if (sit.on && player.clips.sit) playClip(phabphiap() ? "idle" : "sit", 1.2);
     else if (sit.rise > 0) playClip("idle", 1.0);
     else playClip(!moving ? "idle" : player.clips.run && speed > 5 ? "run" : player.clips.walk ? "walk" : "idle");
@@ -5046,11 +5147,13 @@ function frame(dt) {
   if (merit.t < 0 && kraap.t < 0) { const mh = meritHere(); if (mh) { best = { ...MERIT[mh.kind].place, merit: mh }; bestD = 0.5; } } // standing at it: the offering comes first
   if (catNear() && 1.9 < bestD) { best = CAT_PLACE; bestD = 1.9; }
   if (Math.hypot(player.x - BROOM_AT.x, player.z - BROOM_AT.z) < 1.8 && 2.3 < bestD) { best = broom.held ? BROOM_BACK : BROOM_PLACE; bestD = 2.3; }
+  if (Math.hypot(player.x - CAN_AT.x, player.z - CAN_AT.z) < 1.8 && 2.3 < bestD) { best = can.held ? CAN_BACK : CAN_PLACE; bestD = 2.3; }
+  if (can.held && can.t < 0) { const w = potHere(); if (w && w.d < bestD) { best = { ...WATER_PLACE, key: w.i }; bestD = w.d; } }
   if (almsScene.on) for (const m of almsMonks) { const d = Math.hypot(player.x - (m.x + Math.sin(m.yaw) * ALMS_STAND), player.z - (m.z + Math.cos(m.yaw) * ALMS_STAND)); if (d < 1.5 && d < bestD) { best = { ...ALMS_PLACE, monk: m }; bestD = d; } }
   for (const s of boards) { const d = Math.hypot(player.x - s.x, player.z - s.z); if (d < 1.9 && d < bestD) { best = { ...PLACES.find((p) => p.id === "learn"), stone: s.i, board: true }; bestD = d; } }
   if ((best && best.id) !== (near && near.id) || (best && best.stone) !== (near && near.stone) || (best && best.monk) !== (near && near.monk) || (best && best.key) !== (near && near.key)) { near = best; showPrompt(near); }
   // while he is doing something the prompt steps aside, and stays aside until he has walked on a little
-  const busy = alms.t >= 0 || kraap.t >= 0 || shoes.t >= 0 || wai.t >= 0 || sit.on || feed.t >= 0 || merit.t >= 0 || pet.phase === "call";
+  const busy = alms.t >= 0 || kraap.t >= 0 || shoes.t >= 0 || wai.t >= 0 || sit.on || feed.t >= 0 || merit.t >= 0 || can.t >= 0 || pet.phase === "call";
   if (busy) promptRest = { x: player.x, z: player.z };
   else if (promptRest && Math.hypot(player.x - promptRest.x, player.z - promptRest.z) > 0.6) promptRest = null;
   if (!!promptRest !== promptAway) { promptAway = !!promptRest; $("prompt").classList.toggle("away", promptAway); }
@@ -5088,7 +5191,7 @@ document.fonts.load("64px Itim").then(() => document.fonts.load("36px Mali")).ca
 });
 camYaw = 0; camera.position.set(0, 8, 105);
 restoreSpot(); // back from a page of the site: stand where you were
-if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, meal, setMealTime: (v) => { mealForce = v; }, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, almsScene, almsShow, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, gardenSpots, paths, floors, ponds, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startKathin, kathinSpots, feed, startFeed, fishes, food, onBridge, merit, startMerit, meritHere, broom, fallenLeaves, altars, gildImage, bodhiBands, lane, novice, birds, cat, rain, petals, catShow, catPlan, pet, startPetDog, startPetCat, petStroke, look: (eye, at) => { camera.position.set(...eye); camera.lookAt(...at); if (composer) composer.render(); else renderer.render(scene, camera); }, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
+if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, meal, setMealTime: (v) => { mealForce = v; }, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, almsScene, almsShow, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, gardenSpots, paths, floors, ponds, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startKathin, kathinSpots, feed, startFeed, fishes, food, onBridge, merit, startMerit, meritHere, broom, fallenLeaves, can, waterPots, startWater, altars, gildImage, bodhiBands, lane, novice, birds, cat, rain, petals, catShow, catPlan, pet, startPetDog, startPetCat, petStroke, look: (eye, at) => { camera.position.set(...eye); camera.lookAt(...at); if (composer) composer.render(); else renderer.render(scene, camera); }, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
 Promise.race([Promise.all(propJobs), new Promise((r) => setTimeout(r, 7000))]).then(() => {
   $("loading").hidden = true;
   canvas.focus();
