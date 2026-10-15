@@ -41,6 +41,13 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .prompt { position: fixed; left: 50%; bottom: 70px; transform: translateX(-50%); padding: 8px 14px; display: flex; gap: 10px; align-items: center; z-index: 5; max-width: calc(100% - 24px); }
 .prompt strong { font-family: var(--display); font-weight: 400; font-size: 1.15rem; }
 .prompt.away { display: none; } /* out of the way while he is doing something, until he walks on */
+/* two players: each child's note on their own side, marked with their colour (the same as the ring at their feet) */
+#prompt2 { display: none; }
+body.two #prompt2:not([hidden]):not(.away) { display: flex; }
+body.two #prompt { left: 26%; border-left: 6px solid #e98a2b; }
+body.two #prompt2 { left: 74%; border-left: 6px solid #3d7fd1; }
+body.two .prompt { max-width: calc(50% - 16px); }
+.two-touch { display: none !important; }
 .key { display: inline-grid; place-items: center; min-width: 26px; height: 26px; border: 1.5px solid var(--ink); border-radius: 6px; background: var(--cream); font-family: var(--display); }
 
 /* quests: the checklist (tap its title to fold it) and the notes that tick a step or give a hint */
@@ -90,7 +97,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .dialog h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 1.6rem; color: var(--saffron-deep); }
 .dialog p { margin: 0; line-height: 1.6; }
 /* photo mode: everything steps aside but a small bar */
-body.photo .hud-top, body.photo .prompt, body.photo .questbox, body.photo .toast, body.photo .medi, body.photo .fold, body.photo .subtitle, body.photo .proto, body.photo .tbtns, body.photo #medi-glow { display: none !important; }
+body.photo .hud-top, body.photo .prompt, body.photo .questbox, body.photo .toast, body.photo .medi, body.photo .fold, body.photo .subtitle, body.photo .proto, body.photo .tbtns, body.photo .pbtns, body.photo #medi-glow { display: none !important; }
 .photobar { position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: flex; gap: 8px; align-items: center; padding: 6px 8px; z-index: 6; white-space: nowrap; }
 @media (pointer: coarse) { .photobar { bottom: auto; top: calc(12px + env(safe-area-inset-top, 0px)); } }
 #photo-flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 8; transition: opacity .5s ease; }
@@ -136,6 +143,19 @@ body.photo .hud-top, body.photo .prompt, body.photo .questbox, body.photo .toast
   .prompt .key, .prompt br, #prompt-sub { display: none; }
   .prompt strong { font-size: 1rem; white-space: nowrap; }
   .prompt .btn { padding: 3px 12px; font-size: .95rem; white-space: nowrap; }
+  /* two players on a touch screen: a stick in each bottom corner, each with its own small buttons above it */
+  body.two .two-touch { display: block !important; }
+  body.two .tbtns { display: none; }
+  #stick2 { left: auto; right: calc(18px + env(safe-area-inset-right, 0px)); border-color: #3d7fd1; }
+  body.two #stick { border-color: #e98a2b; }
+  .pbtns { position: fixed; bottom: calc(172px + env(safe-area-inset-bottom, 0px)); display: flex; gap: 4px; z-index: 6; }
+  body.two .questbox { bottom: calc(226px + env(safe-area-inset-bottom, 0px)); }
+  .pbtns.p1 { left: calc(12px + env(safe-area-inset-left, 0px)); }
+  .pbtns.p2 { right: calc(12px + env(safe-area-inset-right, 0px)); }
+  .pbtns button { width: min(42px, calc((50vw - 28px) / 4)); height: min(42px, calc((50vw - 28px) / 4)); border-radius: 50%; background: rgba(255, 253, 248, .85); border: 2px solid #e98a2b; font-family: var(--display); font-size: .95rem; }
+  .pbtns.p2 button { border-color: #3d7fd1; }
+  body.two .prompt { top: var(--prompt-top, 124px); }
+  body.two #prompt { left: 25%; } body.two #prompt2 { left: 75%; }
 }
 @media (max-width: 600px) { .places { grid-template-columns: minmax(0, 1fr); } .hud-tools .label { display: none; } }
 </style>
@@ -157,6 +177,7 @@ body.photo .hud-top, body.photo .prompt, body.photo .questbox, body.photo .toast
     <button class="chip pin" id="btn-places">🗺️ <span class="label" data-th="ที่ต่าง ๆ ในวัด" data-en="Places">ที่ต่าง ๆ ในวัด</span></button>
     <button class="chip pin" id="btn-quest">📜 <span class="label" data-th="ภารกิจ" data-en="Quests">ภารกิจ</span></button>
     <button class="chip pin" id="btn-passport">📖 <span class="label" data-th="สมุดตรา" data-en="Passport">สมุดตรา</span></button>
+    <button class="chip" id="btn-two" aria-pressed="false">👫 <span class="label" data-th="เล่นสองคน" data-en="Two players">เล่นสองคน</span></button>
     <button class="chip" id="btn-photo">📷 <span class="label" data-th="ถ่ายภาพ" data-en="Photo">ถ่ายภาพ</span></button>
     <button class="chip" id="btn-avatar">🧍 <span class="label" data-th="ตัวละครของฉัน" data-en="My avatar">ตัวละครของฉัน</span></button>
     <button class="chip" id="btn-quality">✨ <span class="label">ภาพ: ละเอียด</span></button>
@@ -179,6 +200,11 @@ body.photo .hud-top, body.photo .prompt, body.photo .questbox, body.photo .toast
   <span><strong id="prompt-name"></strong><br><span class="quiet" id="prompt-sub"></span></span>
   <button class="btn" id="prompt-go">เข้า</button>
 </div>
+<div class="prompt panel p2" id="prompt2" hidden>
+  <span class="key" aria-hidden="true">↵</span>
+  <span><strong id="prompt2-name"></strong><br><span class="quiet" id="prompt2-sub"></span></span>
+  <button class="btn" id="prompt2-go">เข้า</button>
+</div>
 
 <div class="questbox panel" id="questbox" hidden><button id="quest-head" aria-label="ภารกิจ"></button><ol id="quest-steps"></ol></div>
 <div id="medi-glow" aria-hidden="true"></div>
@@ -198,6 +224,11 @@ body.photo .hud-top, body.photo .prompt, body.photo .questbox, body.photo .toast
   <div id="dlg-body"></div>
 </div>
 
+<div class="touch two-touch" aria-hidden="true">
+  <div class="stick" id="stick2"><div class="knob" id="knob2"></div></div>
+  <div class="pbtns p1"><button data-kid="1" data-do="act">E</button><button data-kid="1" data-do="wai">🙏</button><button data-kid="1" data-do="sit">🧘</button><button data-kid="1" data-do="jump">⤴︎</button></div>
+  <div class="pbtns p2"><button data-kid="2" data-do="act">E</button><button data-kid="2" data-do="wai">🙏</button><button data-kid="2" data-do="sit">🧘</button><button data-kid="2" data-do="jump">⤴︎</button></div>
+</div>
 <div class="touch" aria-hidden="true">
   <div class="stick" id="stick"><div class="knob" id="knob"></div></div>
   <div class="tbtns"><button id="t-sit" aria-label="นั่ง">🧘</button><button id="t-wai" aria-label="ไหว้">🙏</button><button id="t-pet" aria-label="ลูบหัวหมา">🐾</button><button id="t-jump">⤴︎</button><button id="t-act">E</button></div>

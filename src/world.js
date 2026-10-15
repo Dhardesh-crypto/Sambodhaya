@@ -1383,7 +1383,7 @@ const gardenSpots = []; // (for ?debug checks)
 // nibble, then drift back to their stretch.
 const FISH_LEN = 0.95, FISH_DEPTH = 0.16; // a fish's length (at this scale); how far under the surface they swim
 const fishes = [], ripples = [], pellets = [];
-const feed = { t: -1, side: 1, stand: null, faceYaw: 0, spot: null, until: -1, thrown: 0 };
+let feed = { t: -1, side: 1, stand: null, faceYaw: 0, spot: null, until: -1, thrown: 0 };
 const FEED_DUR = 4.6, FEED_TOSSES = [1.0, 2.2, 3.4];
 const FISH_PLACE = { id: "fish", icon: "🐟", th: "ให้อาหารปลา", en: "Feed the fish", sub: ["โปรยอาหารจากสะพาน", "Toss food from the bridge"] };
 {
@@ -1507,7 +1507,7 @@ function fishStep(dt) {
 //   wai again, moves back and bows three times; the gold stays where he pressed;
 // • standing at the edge of the Bodhi tree's platform he makes a wai holding a folded three-coloured cloth, and a
 //   new band of cloth appears around the trunk, shaped to it.
-const merit = { t: -1, kind: null, spot: null, faceYaw: 0, dur: 0, altar: null, items: null, placed: false, done: false };
+let merit = { t: -1, kind: null, spot: null, faceYaw: 0, dur: 0, altar: null, items: null, placed: false, done: false };
 const MERIT = {
   offer: { place: { id: "offer", icon: "🪔", th: "บูชาพระด้วยธูปเทียนดอกไม้", en: "Offer incense, candles and a lotus", sub: ["คุกเข่า จุดเทียน จุดธูป ถวายดอกบัว แล้วกราบ 3 ครั้ง", "Kneel, light the candles and incense, offer a lotus, bow three times"] } },
   gild: { place: { id: "gild", icon: "✨", th: "ปิดทององค์พระ", en: "Apply gold leaf", sub: ["คุกเข่า ปิดทอง แล้วกราบ 3 ครั้ง", "Kneel, press on a leaf of gold, bow three times"] } },
@@ -1532,6 +1532,7 @@ function meritHere() {
   return null;
 }
 function startMerit(here) {
+  if (busyElsewhere()) return; // (the other child is in a ceremony)
   if (!here || merit.t >= 0 || kraap.t >= 0 || alms.t >= 0 || feed.t >= 0) return;
   if (sit.on) { sit.on = false; sit.rise = 0; sit.faceYaw = null; }
   if (broom.held) putBroomBack();
@@ -1712,7 +1713,7 @@ function tieCloth() {
 // A broom leans by the plaza. Picking it up, the boy sweeps as he walks: fallen Bodhi leaves before the broom are
 // brushed away. Now and then a leaf falls from the tree. Putting it back is the same button at the stand.
 const BROOM_AT = { x: -6.4, z: 12.6 };
-const broom = { held: false, obj: new THREE.Group(), phase: 0, swept: 0 };
+let broom = { held: false, obj: new THREE.Group(), phase: 0, swept: 0 };
 const BROOM_PLACE = { id: "broom", icon: "🧹", th: "กวาดลานวัด", en: "Sweep the courtyard", sub: ["หยิบไม้กวาด", "Pick up the broom"] };
 const BROOM_BACK = { id: "broom", icon: "🧹", th: "วางไม้กวาด", en: "Put the broom back", sub: ["วางไว้ที่เดิม", "Lean it back where it was"] };
 {
@@ -1772,7 +1773,7 @@ function poseBroom(model, B) {
 // at the side; at a potted plant (the two by the gate, the bonsai either side of every hall's steps) E waters it:
 // the arm comes forward, the can tips and a fine stream falls at the foot of the plant. Each plant once a visit.
 const CAN_AT = { x: 6.6, z: 12.6 }, CAN_DUR = 3.4;
-const can = { held: false, obj: new THREE.Group(), t: -1, plant: null, stand: null, faceYaw: 0, watered: new Set(), w: 0, tilt: 0, spill: 0, splash: 0 };
+let can = { held: false, obj: new THREE.Group(), t: -1, plant: null, stand: null, faceYaw: 0, watered: new Set(), w: 0, tilt: 0, spill: 0, splash: 0 };
 const CAN_PLACE = { id: "can", icon: "🪴", th: "รดน้ำต้นไม้", en: "Water the plants", sub: ["หยิบบัวรดน้ำ", "Pick up the watering can"] };
 const CAN_BACK = { id: "can", icon: "🪴", th: "วางบัวรดน้ำ", en: "Put the can back", sub: ["วางไว้ที่เดิม", "Set it back where it was"] };
 const WATER_PLACE = { id: "water", icon: "💧", th: "รดน้ำต้นไม้", en: "Water the plant", sub: ["ค่อย ๆ รดที่โคนต้น", "Gently, at the foot of the plant"] };
@@ -2150,6 +2151,7 @@ const CAT_PLACE = { id: "cat", icon: "🐈", th: "ลูบแมว", en: "Pet 
 const CAT_PET_D = 1.05;
 function catNear() { return cat.cur && Math.hypot(player.x - cat.x, player.z - cat.z) < 1.9 && !(pet.who === "cat" && pet.phase); }
 function startPetCat() {
+  if (animalTaken("cat")) return;
   if (petBusy() || !cat.cur) return;
   if (broom.held) putBroomBack();
   const asleep = cat.state === "sleep", D = asleep ? 0.85 : CAT_PET_D;
@@ -2545,7 +2547,7 @@ function blockyAvatar(cfg, faceImg) {
   return root;
 }
 
-const player = { obj: new THREE.Group(), x: 0, z: 93, y: 0, vy: 0, yaw: Math.PI, model: null, mixer: null, clips: {}, current: null, vrm: null };
+let player = { obj: new THREE.Group(), x: 0, z: 93, y: 0, vy: 0, yaw: Math.PI, model: null, mixer: null, clips: {}, current: null, vrm: null };
 scene.add(player.obj);
 function setModel(obj, mixerClips) {
   if (player.model) player.obj.remove(player.model);
@@ -2639,9 +2641,10 @@ const boyLoader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 const boyReady = {};
 // kit "boy" wears his sneakers; kit "boy-socks" is the same boy in his white socks, for inside the halls (and the
 // same for "girl" and "girl-socks", in her school shoes)
-function loadBoy(kit = "boy") {
+function loadBoy(kit = "boy", copy = 1) {
   // boy.glb holds the model and its walk; the other files hold only an animation for the same skeleton
-  if (!boyReady[kit]) boyReady[kit] = Promise.all([kit, kit + "-idle", kit + "-run", kit + "-sit"].map((n) => new Promise((res) => boyLoader.load(`assets/models/${n}.glb`, res, undefined, () => res(null)))))
+  const key = copy > 1 ? kit + "#" + copy : kit;
+  if (!boyReady[key]) boyReady[key] = Promise.all([kit, kit + "-idle", kit + "-run", kit + "-sit"].map((n) => new Promise((res) => boyLoader.load(`assets/models/${n}.glb`, res, undefined, () => res(null)))))
     .then(([walk, idle, run, sitting]) => {
       if (!walk) return null;
       const obj = walk.scene, holder = new THREE.Group(); holder.add(obj); fitModel(obj);
@@ -2652,7 +2655,7 @@ function loadBoy(kit = "boy") {
       const girl = kit.startsWith("girl");
       return { holder, clips: [walk, idle, girl ? null : run, sitting].flatMap((g) => (g ? g.animations : [])) };
     });
-  return boyReady[kit];
+  return boyReady[key];
 }
 function buildAvatar() {
   const kind = avatarCfg.kind;
@@ -2777,9 +2780,10 @@ function animateDog(mat) {
 // it comes and sits at his right side; he kneels and strokes its head while it wags hard and nuzzles up into his
 // hand; when he stands it lies down for a moment, then gets up and follows again. Walking off calls it off.
 const DOG_PET_D = 1.15, DOG_LIE = 4.5;
-const pet = { who: null, phase: null, t: 0, yaw: 0, spot: null };
+let pet = { who: null, phase: null, t: 0, yaw: 0, spot: null };
 function petBusy() { return sit.on || kraap.t >= 0 || alms.t >= 0 || shoes.t >= 0 || feed.t >= 0 || merit.t >= 0 || pet.phase === "call" || pet.phase === "on"; }
 function startPetDog() {
+  if (animalTaken("dog")) return;
   if (!dog.obj.visible || petBusy() || player.y > groundAt(player.x, player.z) + 0.05) return;
   if (broom.held) putBroomBack();
   if (dogKeepOut(player.x, player.z)) return; // (not in the Learning Hall)
@@ -2830,11 +2834,11 @@ function petStroke(t) {
 // right hand on the left. Near a cushion in a hall he sits on it, facing the front (the altar and the
 // teachers' platform); before a Buddha image he faces the image. The temple dog comes and sits beside
 // him. Walking (or the button again) stands him up; a wai while sitting is fine.
-const sit = { on: false, w: 0, rise: 0, spot: null, faceYaw: null };
+let sit = { on: false, w: 0, rise: 0, spot: null, faceYaw: null };
 function startSit() {
   if (sit.on || player.y > groundAt(player.x, player.z) + 0.05) return;
   let best = null, bd = 1.6;
-  for (const c of cushionSpots) { const d = Math.hypot(c.x - player.x, c.z - player.z); if (d < bd) { bd = d; best = c; } }
+  for (const c of cushionSpots) { const d = Math.hypot(c.x - player.x, c.z - player.z); if (d < bd && !seatTaken(c)) { bd = d; best = c; } }
   sit.spot = best; sit.on = true; sit.rise = 0;
   if (best) sit.faceYaw = best.yaw;
   else { const here = waiLevelHere(); sit.faceYaw = here.face ? Math.atan2(here.face.x - player.x, here.face.z - player.z) : null; }
@@ -2854,7 +2858,7 @@ const toggleSit = () => (sit.on ? standUp() : startSit());
 // them, coming back up into the high wai each time. Then he lowers his hands and stands. No animation for
 // this exists, so it is posed on his skeleton: the knee, hip and forehead heights come from his measured
 // body, and the bow is solved so the forehead really reaches the floor.
-const kraap = { t: -1, spot: null, faceYaw: null, floorY: 0, touch: null, keys: null, dur: 0, kathin: null, merit: null, recite: null };
+let kraap = { t: -1, spot: null, faceYaw: null, floorY: 0, touch: null, keys: null, dur: 0, kathin: null, merit: null, recite: null };
 // keyframes: [time, kneel, chest wai, high wai, palms on the floor, bow]
 const KRAAP_KEYS = (() => {
   const k = [[0, 0, 0, 0, 0, 0], [0.6, 0, 0, 0, 0, 0], [2.0, 1, 1, 0, 0, 0], [2.7, 1, 0, 1, 0, 0], [3.0, 1, 0, 1, 0, 0]];
@@ -2911,6 +2915,7 @@ function kathinSpots(h) { // where he kneels to offer, and where he bows (as far
   return { near: { x: nx, z: nz }, far: { x: fx, z: fz } };
 }
 function startKathin(h) {
+  if (busyElsewhere()) return; // (the other child is in a ceremony)
   if (kraap.t >= 0 || alms.t >= 0 || !h || !h.senior) return;
   if (sit.on) { sit.on = false; sit.rise = 0; sit.faceYaw = null; }
   wai.t = -1;
@@ -3011,6 +3016,7 @@ function mealSet(on) {
 }
 const mealLeft = () => (salas.learn.teachers || []).filter((s) => s.meal && !s.meal.offered).length;
 function startMealOffer(h, s) {
+  if (busyElsewhere()) return; // (the other child is in a ceremony)
   if (kraap.t >= 0 || alms.t >= 0 || !s.meal || s.meal.offered) return;
   if (sit.on) { sit.on = false; sit.rise = 0; sit.faceYaw = null; }
   wai.t = -1;
@@ -3150,6 +3156,7 @@ const GREET_BACK = 1.3; // where the child kneels: this far before the platform
 function greetSpot(h, s) { const [x, z] = h.toWorld(s.lx, s.edge + GREET_BACK); return { x, z }; }
 const talkTurn = read("talk", {});
 function startGreet(h, s) {
+  if (busyElsewhere()) return; // (the other child is in a ceremony)
   const T = TEACHER_TALK[s.name]; if (kraap.t >= 0 || alms.t >= 0 || !T) return;
   if (sit.on) { sit.on = false; sit.rise = 0; sit.faceYaw = null; }
   wai.t = -1;
@@ -3297,6 +3304,7 @@ function dropsStep(dt) {
   }
 }
 function startKraap() {
+  if (busyElsewhere()) return; // (the other child is in a ceremony)
   if (kraap.t >= 0) return;
   const here = waiLevelHere();
   if (here.level !== "buddha" || !here.face || !here.face.spot) {
@@ -3317,7 +3325,7 @@ function startKraap() {
 // He steps up to the monk and faces him, holds the rice ball in both hands, raises it to his forehead,
 // places it in the bowl (bending a little, his eyes on the bowl), lowers his hands and then gives the high wai.
 // The monk leans in slightly to receive. Posed on the skeleton, like the wai.
-const alms = { t: -1, m: null, spot: null, faceYaw: 0, item: null, placed: false };
+let alms = { t: -1, m: null, spot: null, faceYaw: 0, item: null, placed: false };
 const ALMS_DUR = 4.0, ALMS_RELEASE = 3.05;
 // then he kneels with his hands in a wai at the chest and his head a little bowed while the monk gives the blessing
 // (10.4 s), and stands again. Keyed as the kraap: [t, kneel, chest wai, high wai, floor, bow]
@@ -3333,6 +3341,7 @@ function almsState(t) {
   };
 }
 function startAlms(m) {
+  if (busyElsewhere()) return; // (the other child is in a ceremony)
   if (alms.t >= 0 || kraap.t >= 0 || !m) return;
   if (sit.on) { sit.on = false; sit.rise = 0; sit.faceYaw = null; }
   wai.t = -1;
@@ -3422,7 +3431,7 @@ const WAI_LEVELS = {
   elder:  { tip: 0.23, dur: 3.2, bow: [0.06, 0.06, 0.06, 0.14, 0.12] },
   peer:   { tip: 0.12, dur: 2.9, bow: [0.05, 0.05, 0.05, 0.12, 0.10] },
 };
-const wai = { t: -1, dur: 2.9, level: "peer", faceYaw: null, plane: { normal: new THREE.Vector3(), point: new THREE.Vector3(), on: 0 } };
+let wai = { t: -1, dur: 2.9, level: "peer", faceYaw: null, plane: { normal: new THREE.Vector3(), point: new THREE.Vector3(), on: 0 } };
 const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 // which wai fits where he stands: in a shrine hall, to the Buddha image (and he turns to face it); near a monk or a
 // novice (the monk at walking meditation, the novice sweeping, the monks on the alms round), the same high wai,
@@ -3634,13 +3643,15 @@ function addLids(model, file) {
 }
 // whose eyes stay shut: the child's while bowing to the Buddha or a monk with the hands in a wai, and while sitting
 // on a cushion; the dog's while it lies down to be stroked (and the senior monk's while he blesses: teacherStep)
-function eyesStep(dt) {
+function kidEyes() { // the child's own eyes: shut while sitting in meditation, and in the bows
   const PL = player.model && player.model.userData.lids;
   if (PL) {
     let shut = sit.on && sit.w > 0.9;
     if (kraap.t >= 0) { const k = kraapState(kraap.t); shut = !kraap.greet && k.kneel > 0.9 && k.tray + k.lift + k.place + k.reach < 0.05 && k.chest + k.high + k.floor + k.bow > 0.3; }
     PL.want = shut ? 1 : 0;
   }
+}
+function eyesStep(dt) {
   if (dog.lids) dog.lids.want = dogAnim.lie.value > 0.6 ? 1 : 0;
   lidStep(dt);
 }
@@ -4130,8 +4141,8 @@ function poseWaiCore(model, B, hands, bow) {
 // out of his sneakers one foot at a time and goes in in his socks; the pair waits at the step, toes turned
 // out, with his school backpack beside it (sitting and bowing with a bag on is not done either). Leaving,
 // he steps back into them and takes his bag. (Only the Sambodhaya boy: the built characters have neither.)
-const boyKits = { kind: "boy", shod: null, socks: null };
-const shoes = { on: true, t: -1, mode: null, pair: null };
+let boyKits = { kind: "boy", shod: null, socks: null };
+let shoes = { on: true, t: -1, mode: null, pair: null };
 const SHOES_DUR = 1.5, SHOES_SWAP = 0.62;
 const pairSrc = { boy: null, girl: null }; let bagSrc = null; // his sneakers, her school shoes; the same kind of backpack
 loadProp("shoes").then((m) => { pairSrc.boy = m; }); loadProp("shoes-girl").then((m) => { pairSrc.girl = m; }); loadProp("backpack").then((m) => { bagSrc = m; });
@@ -4206,19 +4217,25 @@ addEventListener("keydown", (e) => {
   if (e.target instanceof HTMLInputElement) return;
   if (photoMode && e.key === "Escape") { setPhoto(false); return; }
   keys[e.code] = true;
+  if (twoP && ["Enter", "Period", "Comma"].includes(e.code)) { // player 2, at the arrow keys
+    actFor(P2);
+    if (e.code === "Enter") { if (near) openPlace(near); } else if (e.code === "Period") startWai(); else toggleSit();
+    e.preventDefault(); return;
+  }
+  actFor(P1);
   if (e.code === "KeyE" || e.code === "Enter") { if (near) openPlace(near); }
   if (e.code === "KeyG") openPlaces(true);
   if (e.code === "KeyQ") startWai();
   if (e.code === "KeyC") toggleSit();
   if (e.code === "KeyK") startKraap();
   if (e.code === "KeyP") startPetDog();
-  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) e.preventDefault();
+  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space", "Slash"].includes(e.code)) e.preventDefault();
 });
 addEventListener("keyup", (e) => { keys[e.code] = false; });
 let drag = null;
 canvas.addEventListener("pointerdown", (e) => {
   canvas.focus();
-  if (e.pointerType === "touch" && e.clientX < innerWidth * 0.4 && e.clientY > innerHeight * 0.5) return; // joystick area
+  if (e.pointerType === "touch" && e.clientY > innerHeight * 0.5 && (e.clientX < innerWidth * 0.4 || (twoP && e.clientX > innerWidth * 0.6))) return; // joystick area(s)
   drag = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: 0 };
   canvas.setPointerCapture(e.pointerId);
 });
@@ -4343,14 +4360,15 @@ $("btn-menu").addEventListener("click", () => foldMenu(!$("hud-tools").classList
 $("hud-tools").addEventListener("click", (e) => { const b = e.target.closest(".chip"); if (b && !b.classList.contains("pin") && !b.hasAttribute("aria-pressed")) foldMenu(true); });
 canvas.addEventListener("pointerdown", () => { if (!$("hud-tools").classList.contains("folded")) foldMenu(true); });
 function showPrompt(p) {
-  const el = $("prompt");
+  const id = promptId(), el = $(id);
   if (!p) { el.hidden = true; return; }
-  $("prompt-name").textContent = p.icon + " " + placeName(p);
-  $("prompt-sub").textContent = p.stone != null ? (p.board ? tx("ป้ายเรื่องที่ ", "Story board ") : tx("เรื่องที่ ", "Story ")) + (p.stone + 1) : p.sub[L === "en" ? 1 : 0];
-  $("prompt-go").textContent = p.id === "bell" ? tx("ตี", "Strike") : p.id === "donate" ? tx("เปิด", "Open") : p.id === "alms" ? tx("ใส่บาตร", "Offer") : p.id === "fish" ? tx("ให้อาหาร", "Feed") : p.merit ? tx("ทำบุญ", "Offer") : p.id === "broom" ? (broom.held ? tx("วาง", "Put back") : tx("หยิบ", "Pick up")) : p.id === "can" ? (can.held ? tx("วาง", "Put back") : tx("หยิบ", "Pick up")) : p.id === "water" ? tx("รดน้ำ", "Water") : p.id === "fold" ? tx("นั่งพับ", "Sit and fold") : p.id === "info" ? tx("อ่าน", "Read") : p.id === "bridge" ? tx("เลือก", "Choose") : p.id === "monk" ? (p.acts.length > 1 ? tx("เลือก", "Choose") : tx("ไหว้", "Greet")) : p.id === "cat" ? tx("ลูบ", "Pet") : tx("เข้า", "Visit");
+  $(id + "-name").textContent = p.icon + " " + placeName(p);
+  $(id + "-sub").textContent = p.stone != null ? (p.board ? tx("ป้ายเรื่องที่ ", "Story board ") : tx("เรื่องที่ ", "Story ")) + (p.stone + 1) : p.sub[L === "en" ? 1 : 0];
+  $(id + "-go").textContent = p.id === "bell" ? tx("ตี", "Strike") : p.id === "donate" ? tx("เปิด", "Open") : p.id === "alms" ? tx("ใส่บาตร", "Offer") : p.id === "fish" ? tx("ให้อาหาร", "Feed") : p.merit ? tx("ทำบุญ", "Offer") : p.id === "broom" ? (broom.held ? tx("วาง", "Put back") : tx("หยิบ", "Pick up")) : p.id === "can" ? (can.held ? tx("วาง", "Put back") : tx("หยิบ", "Pick up")) : p.id === "water" ? tx("รดน้ำ", "Water") : p.id === "fold" ? tx("นั่งพับ", "Sit and fold") : p.id === "info" ? tx("อ่าน", "Read") : p.id === "bridge" ? tx("เลือก", "Choose") : p.id === "monk" ? (p.acts.length > 1 ? tx("เลือก", "Choose") : tx("ไหว้", "Greet")) : p.id === "cat" ? tx("ลูบ", "Pet") : tx("เข้า", "Visit");
   el.hidden = false;
 }
-$("prompt-go").addEventListener("click", () => near && openPlace(near));
+$("prompt-go").addEventListener("click", () => { actFor(P1); if (near) openPlace(near); });
+$("prompt2-go").addEventListener("click", () => { actFor(P2); if (near) openPlace(near); });
 const DONATE_PLACE = { id: "donate", icon: "🤲", th: "ตู้รับบริจาค (สำหรับผู้ใหญ่)", en: "Donation box (for adults)", sub: ["สมทบทุนพัฒนาและสร้างวัด", "Support the temple's development"] };
 function openDonate() {
   openDialog(tx("🤲 ตู้รับบริจาค", "🤲 Donation box"),
@@ -4365,8 +4383,9 @@ function ringBell() {
 }
 const dialogOpen = () => !$("dlg").hidden;
 let lastFocus = null;
+let dialogKid = null; // which child opened the dialog (two players)
 function openDialog(title, html) {
-  lastFocus = document.activeElement;
+  lastFocus = document.activeElement; try { dialogKid = kid; } catch (e) {} // (a choice made in it is that child's; before the two-player code has loaded, nobody's)
   $("dlg-title").textContent = title; $("dlg-body").innerHTML = html; $("dlg").hidden = false;
   for (const k in keys) keys[k] = false;
   const f = $("dlg").querySelector("button, a, input"); if (f) f.focus();
@@ -4441,6 +4460,7 @@ function teleport(id) {
   player.x = x - Math.sin(a) * back; player.z = z - Math.cos(a) * back + (id === "yard" ? 4 : 0);
   [player.x, player.z] = collide(player.x, player.z);
   dog.x = player.x + 1.5; dog.z = player.z + 1.5;
+  bringOthers();
   camYaw = id === "journey" || id === "exit" ? Math.atan2(player.x, player.z) : (Math.atan2(player.x - x, player.z - z) || camYaw);
 }
 /* ---------------- cards: what things in the temple are, and why ---------------- */
@@ -4635,6 +4655,7 @@ const floatKeys = [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0.6, 0, 0, 0, 0, 0, 0, 0,
   [5.4, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0], [6.0, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0],                                   // set down at the edge
   [6.7, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0], [7.4, 1, 1, 0, 0, 0.2, 0, 0, 0, 0, 0], [8.0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0], [9.5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]];
 function startFloat() {
+  if (busyElsewhere()) return; // (the other child is in a ceremony)
   if (kraap.t >= 0 || alms.t >= 0 || fest.now !== "loykrathong" || !onBridge(player.x, player.z)) return;
   if (sit.on) { sit.on = false; sit.rise = 0; sit.faceYaw = null; }
   wai.t = -1;
@@ -4688,7 +4709,7 @@ const mediPlace = () => { const g = PLACES.find((p) => p.id === "garden"); retur
 const mediReady = () => sit.on && sit.w > 0.9 && kraap.t < 0 && !fold.on && mediPlace();
 function startMedi(min) {
   if (!mediReady() || medi.on) return;
-  Object.assign(medi, { on: true, plan: MEDI_PLAN[min], i: 0, next: 0, t: 0 });
+  Object.assign(medi, { on: true, kid, plan: MEDI_PLAN[min], i: 0, next: 0, t: 0 });
   sound.duck(true); $("medi-glow").classList.add("on"); renderMedi();
 }
 function stopMedi() {
@@ -4721,7 +4742,7 @@ function renderMedi() {
 // in half lengthwise and its tip tucked in, the outer row first; the bud in the middle stays closed. The folded lotus
 // then goes with the next offering of incense, candles and a lotus: into the vase, kneeling, and three bows.
 const FOLD_PETALS = 8; // two rows of four
-const fold = { on: false, done: 0, order: [], ready: false, spot: null, lotus: null };
+let fold = { on: false, done: 0, order: [], ready: false, spot: null, lotus: null };
 const FOLD_PLACE = { id: "fold", icon: "🪷", th: "พับกลีบบัว", en: "Fold a lotus", sub: ["นั่งพับดอกบัวไว้ถวายพระ", "Sit and fold a lotus for the altar"] };
 const petalMat = S(0xf2a3b8, { roughness: 0.7 }), petalInnerMat = S(0xf8c6d4, { roughness: 0.75 });
 // a lotus with its first `folded` petals folded: unfolded petals hug the bud; folded ones, narrower and paler (their
@@ -4748,7 +4769,7 @@ function foldedLotus(folded) {
     const b = add(new THREE.SphereGeometry(0.045, 10, 8), lotusMat, (i - 1.5) * 0.09, 0.06, dz, tray, false); b.scale.set(1, 1, 1.7); b.rotation.y = a * 0.2;
   });
 }
-function foldHere() { return fold.spot && !fold.on && Math.hypot(player.x - fold.spot.x, player.z - fold.spot.z) < 1.3; }
+function foldHere() { return fold.spot && !fold.on && !heldElsewhere("fold") && Math.hypot(player.x - fold.spot.x, player.z - fold.spot.z) < 1.3; }
 function startFold() {
   if (fold.on || kraap.t >= 0 || alms.t >= 0 || merit.t >= 0) return;
   putBroomBack(); putCanBack(); wai.t = -1;
@@ -4949,7 +4970,7 @@ function openPassport() {
 }
 // Passing in front of the seated monks, the child walks with the body lowered (เดินก้ม); from the hall's own layout:
 // the monks face +z from their seats, and the floor before the platform is "in front"
-const stoop = { w: 0, near: false, lastX: null, lastZ: null };
+let stoop = { w: 0, near: false, lastX: null, lastZ: null };
 function stoopTarget() {
   const h = salas.learn; if (!h || !h.teachers || !insideHall(player.x, player.z)) return 0;
   const p = h.g.worldToLocal(new THREE.Vector3(player.x, 0, player.z));
@@ -5134,20 +5155,239 @@ function tick() {
   frame(debugPause ? 0 : Math.min(clock.getDelta(), 0.05));
   requestAnimationFrame(tick);
 }
+/* ---------------- two players on one device (👫) ---------------- */
+// Everything else is written for one child (player, sit, wai, shoes...). Each child has their own set of those, and
+// before a child's part of the step (or their key, button or menu choice) that child's set is put in place (bindKid).
+// The temple's one-of-a-kind things are shared, and belong to whoever is using them: a ceremony (kraap, alms, merit),
+// the broom, the watering can, the folding mat. The other child meanwhile has an idle stand-in. One shared view keeps
+// both in frame; player 1 has W A S D (E, Q, C, K, P, Shift, Space) and the left stick, player 2 the arrow keys (Enter
+// to act, . to wai, , to sit, / to jump, right Shift to walk briskly) and the right stick. One passport for the device.
+const SHARED = { kraap, alms, merit, broom, can, fold };
+const P1 = { n: 1, player, sit, wai, feed, shoes, pet, stoop, boyKits, walkPhase: 0, near: null, promptRest: null, promptAway: false, backWatch: null, drop: 0 };
+let kid = P1, P2 = null, twoP = false;
+const owner = { kraap: P1, alms: P1, merit: P1, broom: P1, can: P1, fold: P1 };
+const inUse = { kraap: () => SHARED.kraap.t >= 0, alms: () => SHARED.alms.t >= 0, merit: () => SHARED.merit.t >= 0, broom: () => SHARED.broom.held, can: () => SHARED.can.held || SHARED.can.t >= 0, fold: () => SHARED.fold.on };
+const idleSet = () => ({ // the stand-ins: the shared things as they are when nobody is using them
+  kraap: { ...SHARED.kraap, t: -1, keys: null, kathin: null, merit: null, meal: null, float: null, greet: false, recite: null, spot: null, faceYaw: null },
+  alms: { ...SHARED.alms, t: -1, m: null, item: null }, merit: { ...SHARED.merit, t: -1, items: null },
+  broom: { ...SHARED.broom, held: false }, can: { ...SHARED.can, held: false, t: -1 }, fold: { ...SHARED.fold, on: false, lotus: null },
+});
+function bindKid(P) {
+  if (kid === P) return;
+  Object.assign(kid, { walkPhase, near, promptRest, promptAway, backWatch });
+  kid = P;
+  ({ player, sit, wai, feed, shoes, pet, stoop, boyKits, walkPhase, near, promptRest, promptAway, backWatch } = P);
+  const own = (k) => (owner[k] === P ? SHARED[k] : P.idle[k]);
+  kraap = own("kraap"); alms = own("alms"); merit = own("merit"); broom = own("broom"); can = own("can"); fold = own("fold");
+}
+const kids = () => (twoP ? [P1, P2] : [P1]);
+const other = () => (kid === P1 ? P2 : P1);
+// a child's key, button or menu choice: the free shared things become theirs, and their set is put in place
+function actFor(P) {
+  if (!twoP || !P) return;
+  for (const k in owner) if (!inUse[k]()) owner[k] = P;
+  bindKid(P);
+}
+function releaseIdle() { for (const k in owner) if (!inUse[k]()) owner[k] = P1; }
+const leadKid = () => (twoP ? (["kraap", "alms", "merit"].map((k) => inUse[k]() && owner[k]).find(Boolean) || P1) : P1);
+const mediKid = () => (medi.on ? medi.kid || P1 : kids().find((P) => P.sit.on && P.sit.w > 0.9) || P1);
+const busyElsewhere = () => twoP && ["kraap", "alms", "merit"].some((k) => inUse[k]() && owner[k] !== kid);
+const heldElsewhere = (k) => twoP && inUse[k]() && owner[k] !== kid;
+const animalTaken = (who) => twoP && kids().some((P) => P !== kid && P.pet.who === who && P.pet.phase);
+const seatTaken = (c) => twoP && kids().some((P) => P !== kid && P.sit.on && P.sit.spot === c);
+const promptId = () => (kid === P2 ? "prompt2" : "prompt");
+const LEASH = 15; // how far apart the two may wander (the view keeps both in frame)
+function leashed(x, z) {
+  if (!twoP) return false; const o = other().player;
+  return Math.hypot(x - o.x, z - o.z) > LEASH && Math.hypot(x - o.x, z - o.z) > Math.hypot(player.x - o.x, player.z - o.z);
+}
+function apart(x, z) { // two children don't stand inside each other
+  if (!twoP) return [x, z];
+  const o = other().player, dx = x - o.x, dz = z - o.z, d = Math.hypot(dx, dz), MIN = 0.85;
+  return d < MIN && d > 0.001 ? [o.x + dx / d * MIN, o.z + dz / d * MIN] : [x, z];
+}
+function kidDrop() { const ks = kraap.t >= 0 ? kraapState(kraap.t) : null; return Math.max(1.05 * sit.w, ks ? ks.kneel + 0.6 * ks.bow : 0); }
+function kidsCentre() {
+  const a = P1.player, b = P2.player;
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2, sep: Math.hypot(a.x - b.x, a.z - b.z), drop: (P1.drop + P2.drop) / 2 };
+}
+function bringOthers() { // the places menu takes the other child along, to stand beside
+  if (!twoP) return;
+  for (const P of kids()) if (P.player !== player) {
+    const q = P.player, rx = -Math.cos(player.yaw), rz = Math.sin(player.yaw);
+    [q.x, q.z] = collide(player.x + rx * 1.3, player.z + rz * 1.3); q.y = groundAt(q.x, q.z); q.vy = 0; q.yaw = player.yaw;
+  }
+}
+// each child's own controls
+function kidInput() {
+  const k = keys, two = kid === P2, j = two ? joy2 : joy;
+  const up = two ? k.ArrowUp : k.KeyW || (!twoP && k.ArrowUp), down = two ? k.ArrowDown : k.KeyS || (!twoP && k.ArrowDown);
+  const left = two ? k.ArrowLeft : k.KeyA || (!twoP && k.ArrowLeft), right = two ? k.ArrowRight : k.KeyD || (!twoP && k.ArrowRight);
+  return {
+    fx: (right ? 1 : 0) - (left ? 1 : 0) + j.x, fz: (down ? 1 : 0) - (up ? 1 : 0) + j.y,
+    run: (two ? k.ShiftRight : k.ShiftLeft || (!twoP && k.ShiftRight)) || Math.hypot(j.x, j.y) > 0.92,
+    jump: two ? !!k.Slash : !!k.Space,
+  };
+}
+const joy2 = { x: 0, y: 0, id: null };
+{
+  const st = $("stick2"), kn = $("knob2");
+  const move = (e) => {
+    const r = st.getBoundingClientRect(); let dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
+    const m = Math.hypot(dx, dy), max = r.width / 2 - 10; if (m > max) { dx *= max / m; dy *= max / m; }
+    kn.style.transform = `translate(${dx}px, ${dy}px)`; joy2.x = dx / max; joy2.y = dy / max;
+  };
+  st.addEventListener("pointerdown", (e) => { joy2.id = e.pointerId; st.setPointerCapture(e.pointerId); move(e); });
+  st.addEventListener("pointermove", (e) => { if (e.pointerId === joy2.id) move(e); });
+  const end = () => { joy2.id = null; joy2.x = joy2.y = 0; kn.style.transform = ""; };
+  st.addEventListener("pointerup", end); st.addEventListener("pointercancel", end);
+  document.querySelectorAll(".pbtns button").forEach((b) => b.addEventListener("click", () => {
+    actFor(b.dataset.kid === "2" ? P2 : P1);
+    const d = b.dataset.do;
+    if (d === "act") { if (near) openPlace(near); } else if (d === "wai") startWai(); else if (d === "sit") toggleSit();
+    else if (d === "jump" && player.y <= groundAt(player.x, player.z) + 0.01) player.vy = 9;
+  }));
+}
+// a coloured ring at each child's feet, so each knows which one is theirs
+function kidRing(color) {
+  const m = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.68, 32), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.7, depthWrite: false }));
+  m.rotation.x = -Math.PI / 2; m.position.y = 0.04; m.renderOrder = 2; return m;
+}
+const ring1 = kidRing(0xe98a2b);
+function startTwo(kind2) {
+  if (twoP) return;
+  const a = P1.player, pl = { obj: new THREE.Group(), x: a.x, z: a.z, y: a.y, vy: 0, yaw: a.yaw, model: null, mixer: null, clips: {}, current: null, vrm: null };
+  scene.add(pl.obj); pl.obj.add(kidRing(0x3d7fd1));
+  P2 = { n: 2, player: pl, sit: { on: false, w: 0, rise: 0, spot: null, faceYaw: null }, wai: { t: -1, dur: 2.9, level: "peer", faceYaw: null, plane: { normal: new THREE.Vector3(), point: new THREE.Vector3(), on: 0 } },
+    feed: { t: -1, side: 1, stand: null, faceYaw: 0, spot: null, until: -1, thrown: 0 }, shoes: { on: true, t: -1, mode: null, pair: null },
+    pet: { who: null, phase: null, t: 0, yaw: 0, spot: null }, stoop: { w: 0, near: false, lastX: null, lastZ: null }, boyKits: { kind: kind2, shod: null, socks: null },
+    walkPhase: 0, near: null, promptRest: null, promptAway: false, backWatch: null, drop: 0, kind: kind2 };
+  P1.idle = idleSet(); P2.idle = idleSet();
+  twoP = true; document.body.classList.add("two"); $("btn-two").setAttribute("aria-pressed", "true"); P1.player.obj.add(ring1);
+  bindKid(P1); bringOthers();
+  loadBoy(kind2, 2).then((b) => {
+    if (!b || !twoP || P2.kind !== kind2) return;
+    const was = kid; bindKid(P2); boyKits.shod = b; shoes.on = true; setModel(b.holder, b.clips); bindKid(was);
+    loadBoy(kind2 + "-socks", 2).then((sk) => { if (twoP && P2.kind === kind2) P2.boyKits.socks = sk; }); // for inside the halls
+  });
+}
+function stopTwo() {
+  if (!twoP) return;
+  if (["kraap", "alms", "merit", "broom", "can", "fold"].some((k) => inUse[k]() && owner[k] === P2)) { toast(esc(tx("รอให้ผู้เล่นคนที่สองทำให้เสร็จก่อนนะ", "Let player 2 finish first."))); return; }
+  bindKid(P2); standUp(); removePair(); bindKid(P1);
+  scene.remove(P2.player.obj); P1.player.obj.remove(ring1); $("prompt2").hidden = true;
+  for (const k in owner) owner[k] = P1;
+  twoP = false; P2 = null; document.body.classList.remove("two"); $("btn-two").setAttribute("aria-pressed", "false");
+}
+$("btn-two").addEventListener("click", () => {
+  if (twoP) { stopTwo(); return; }
+  const mine = boyKits.kind === "girl" ? "girl" : "boy", theirs = mine === "boy" ? "girl" : "boy";
+  openDialog(tx("👫 เล่นสองคน", "👫 Two players"), `<p>${esc(tx("เดินชมวัดด้วยกันสองคนบนเครื่องเดียว ผู้เล่นคนที่ 1 (สีส้ม) ใช้ W A S D และ E · ผู้เล่นคนที่ 2 (สีฟ้า) ใช้ปุ่มลูกศร และ Enter (. = ไหว้ , = นั่ง / = กระโดด) บนแท็บเล็ตหรือมือถือ มีจอยสติกคนละข้าง", "Visit the temple together on one device. Player 1 (orange) uses W A S D and E; player 2 (blue) uses the arrow keys and Enter (. = wai, , = sit, / = jump). On a tablet or phone each has a stick on their own side."))}</p>
+    <p>${esc(tx("ผู้เล่นคนที่ 2 เป็น:", "Player 2 is:"))}</p>
+    <ul class="places"><li><button data-two="${theirs}"><span class="ic">${theirs === "girl" ? "👧" : "👦"}</span><span>${esc(theirs === "girl" ? tx("เด็กหญิง", "The girl") : tx("เด็กชาย", "The boy"))}</span></button></li>
+    <li><button data-two="${mine}"><span class="ic">${mine === "girl" ? "👧" : "👦"}</span><span>${esc(mine === "girl" ? tx("เด็กหญิงอีกคน", "Another girl") : tx("เด็กชายอีกคน", "Another boy"))}</span></button></li></ul>
+    <div class="row"><button class="chip" data-close>${esc(tx("ปิด", "Close"))}</button></div>`);
+});
+$("dlg").addEventListener("click", () => actFor(dialogKid || P1), true); // first, before the dialog's own handlers
+$("dlg").addEventListener("click", (e) => { const b = e.target.closest("[data-two]"); if (b) { closeDialog(); startTwo(b.dataset.two); } });
+
 // one step of the world: movement, animation, camera and the picture
 function frame(dt) {
+  if (twoP) bindKid(leadKid()); // the temple's own part, seen from the child in a ceremony (or player 1)
   timeStep(dt); placeLampLights(dt);
-  feedStep(dt); fishStep(dt); meritStep(dt); lifeStep(dt); eyesStep(dt); questsStep(dt); passportStep(); foldStep(); mealStep(dt); mediStep(dt); petStep(dt); petalStep(dt); rainStep(dt); mistStep(dt); festivalStep(dt); canStep(dt); dropsStep(dt);
-  if ((broom.held || can.held) && (alms.t >= 0 || kraap.t >= 0 || feed.t >= 0 || shoes.t >= 0 || sit.on || merit.t >= 0)) { putBroomBack(); putCanBack(); } // hands needed elsewhere
+  fishStep(dt); meritStep(dt); lifeStep(dt); eyesStep(dt); mealStep(dt); petalStep(dt); rainStep(dt); mistStep(dt); festivalStep(dt); dropsStep(dt);
+  if (twoP) bindKid(mediKid()); mediStep(dt);
   monkTime += dt;
   if (!settings.calmMotion) for (const m of monkFigures) { const b = Math.sin(monkTime * 1.25 + m.ph); m.o.scale.set(1 + b * 0.004, 1 + b * 0.008, 1 + b * 0.004); } // slow breathing
+  for (const P of kids()) { if (twoP) bindKid(P); kidStep(dt); } // each child: their own walking, actions and note
+  if (twoP) bindKid(leadKid());
+
+  // the dog follows a little behind
+  if (dog.obj.visible) {
+    // stay ahead-left of the player as seen from the camera, so it never blocks the view
+    const fx2 = -Math.sin(camYaw), fz2 = -Math.cos(camYaw), rx = Math.cos(camYaw), rz = -Math.sin(camYaw);
+    let bx = player.x + fx2 * 1.4 - rx * 2.6, bz = player.z + fz2 * 1.4 - rz * 2.6;
+    // during the ceremonies (sitting, paying respect, Kathina, giving alms and its wai) the dog sits at his left side, facing the same way
+    const ceremony = sit.on || kraap.t >= 0 || alms.t >= 0 || feed.t >= 0 || merit.t >= 0;
+    if (ceremony) {
+      // beside where he will be for the whole ceremony (the bowing spot, the spot before the monk), so the dog
+      // sits down once and stays down while he steps up or moves back on his knees
+      const k = kraap.t >= 0 ? kraap : null, al = !k && alms.t >= 0 ? alms : null, fd = feed.t >= 0 ? feed : merit.t >= 0 ? { stand: merit.spot, faceYaw: merit.faceYaw } : null;
+      const at = k ? ((k.kathin || k.merit) && k.keys ? (k.kathin || k.merit).far : k.spot) : al ? al.spot : fd ? fd.stand : null;
+      const ax = at ? at.x : player.x, az = at ? at.z : player.z;
+      const ay = k && k.faceYaw != null ? k.faceYaw : al ? al.faceYaw : fd ? fd.faceYaw : player.yaw;
+      bx = ax + Math.cos(ay) * 1.5 + Math.sin(ay) * 0.2; bz = az - Math.sin(ay) * 1.5 + Math.cos(ay) * 0.2;
+    }
+    // the Learning Hall, the main hall where the monks sit, is no place for a dog: it waits outside by the steps
+    if (dogKeepOut(dog.x, dog.z)) { dog.x = DOG_WAIT.x; dog.z = DOG_WAIT.z; } // (arrived inside some other way)
+    const waiting = dogKeepOut(bx, bz);
+    if (waiting) { bx = DOG_WAIT.x; bz = DOG_WAIT.z; }
+    // after a while waiting, it trots off to keep the sweeping novice company (by day), walking at his side and
+    // sitting when he stops; when the child comes out it comes back
+    dog.waitT = waiting ? (dog.waitT || 0) + dt : 0;
+    const withNovice = waiting && dog.waitT > 15 && novice.n && novice.n.holder.visible;
+    if (withNovice) { const hp = novice.n.holder.position, ny = novice.n.holder.rotation.y; bx = hp.x + Math.cos(ny) * 1.3 - Math.sin(ny) * 0.4; bz = hp.z - Math.sin(ny) * 1.3 - Math.cos(ny) * 0.4; }
+    // being petted: it comes and sits at his right side; afterwards it lies down there for a moment
+    const petting = pet.who === "dog" ? pet.phase : null;
+    if (petting === "call" || petting === "on") { bx = pet.spot.x; bz = pet.spot.z; }
+    else if (petting === "after") { bx = dog.x; bz = dog.z; }
+    const ddx = bx - dog.x, ddz = bz - dog.z, dd = Math.hypot(ddx, ddz);
+    const wantSit = (ceremony || waiting || petting === "call" || petting === "on") && dd < 0.5;
+    const wantLie = petting === "after" && pet.t > 0.5 && pet.t < DOG_LIE;
+    dogAnim.sit.value += ((wantSit && !wantLie ? 1 : 0) - dogAnim.sit.value) * Math.min(1, dt * 3);
+    dogAnim.lie.value += ((wantLie ? 1 : 0) - dogAnim.lie.value) * Math.min(1, dt * 2.2);
+    dogAnim.nuzzle.value += ((petting === "on" && kraap.t >= 0 && kraapState(kraap.t).reach > 0.6 ? 1 : 0) - dogAnim.nuzzle.value) * Math.min(1, dt * 3);
+    const dogFree = dogAnim.sit.value < 0.15 && dogAnim.lie.value < 0.15; // a sitting or lying dog gets up before it walks
+    dog.moving = dd > 0.4 && dogFree;
+    let dogSpeed = 0;
+    if (wantLie) { let dy = pet.yaw - dog.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); dog.yaw += dy * Math.min(1, dt * 2.5); } // lies down alongside him, where it sat
+    if (wantSit) { let dy = (withNovice ? novice.n.holder.rotation.y : waiting ? DOG_WAIT.yaw : petting ? pet.yaw : player.yaw) - dog.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); dog.yaw += dy * Math.min(1, dt * 4); }
+    if (dd > 0.4 && dogFree) { const st = Math.min(dd, dt * (dd > 6 ? 12 : 6)); dogSpeed = dt > 0 ? st / dt : 0; const [nx, nz] = collide(dog.x + ddx / dd * st, dog.z + ddz / dd * st); if (!dogKeepOut(nx, nz)) { dog.x = nx; dog.z = nz; } dog.yaw = Math.atan2(ddx, ddz); }
+    // walk cycle: about one stride per 1.2 m; the legs ease in and out of walking
+    dogAnim.phase.value = (dogAnim.phase.value + dt * dogSpeed * 5.2) % (Math.PI * 200); // kept small so it stays precise
+    if (!Number.isFinite(dogAnim.phase.value)) dogAnim.phase.value = 0;
+    dogAnim.walk.value += ((dogSpeed > 0.5 ? 1 : 0) - dogAnim.walk.value) * Math.min(1, dt * 6);
+    dogAnim.time.value += dt; dogAnim.wag.value = (settings.calmMotion ? 0.4 : 1) * (petting ? 1.3 : 1); // wagging harder while petted
+    dog.obj.position.set(dog.x, groundAt(dog.x, dog.z) + (onPath(dog.x, dog.z) && !insideHall(dog.x, dog.z) ? PAVING : 0), dog.z); dog.obj.rotation.y = dog.yaw; // paws on the paving, not in it
+    if (!settings.calmMotion) dog.tail.rotation.y = Math.sin(performance.now() / 160) * 0.6;
+  }
+
+  // camera follows
+  const fp = twoP ? kidsCentre() : player, cd = twoP ? Math.min(30, Math.max(camDist, fp.sep * 0.85 + 5)) : camDist;
+  const cx = fp.x + Math.sin(camYaw) * Math.cos(camPitch) * cd;
+  const cz = fp.z + Math.cos(camYaw) * Math.cos(camPitch) * cd;
+  const seatDrop = twoP ? fp.drop : kidDrop(); // seated or kneeling, the camera looks at where his head now is
+  const cy = fp.y + 2 - seatDrop + Math.sin(camPitch) * cd;
+  // don't look through walls or roofs: pull the camera in front of whatever is in the way
+  head.set(fp.x, fp.y + 2.2 - seatDrop, fp.z); tmp.set(cx, cy, cz);
+  const want = tmp.clone().sub(head), dist = want.length(); want.normalize();
+  camRay.set(head, want); camRay.far = dist;
+  const hit = camRay.intersectObjects(camBlock, false)[0];
+  if (hit) tmp.copy(head).addScaledVector(want, Math.max(1.2, hit.distance - 0.35));
+  if (settings.calmMotion || hit) camera.position.copy(tmp); else camera.position.lerp(tmp, Math.min(1, dt * 8));
+  camera.lookAt(head);
+
+  // running water (slower with calm motion on)
+  { const wdt = dt * (settings.calmMotion ? 0.35 : 1); waterClock += wdt; waterAnims.forEach((f) => f(wdt, waterClock)); }
+  // candle flames sway a little (not in calm motion)
+  if (!settings.calmMotion) { const t = performance.now() / 1000; flames.forEach((f, i) => { f.scale.y = 1.8 + Math.sin(t * 7 + i * 1.7) * 0.18; }); }
+  if (dog.model) dog.model.position.y = Math.abs(Math.sin(dogAnim.phase.value)) * 0.035 * dogAnim.walk.value; // a light bounce in step
+
+  camera.getWorldDirection(camFwd);
+  sound.update(camera.position, camFwd, insideHall(player.x, player.z) && Math.hypot(camera.position.x - player.x, camera.position.z - player.z) < 14, dt);
+
+  if (composer) composer.render(); else renderer.render(scene, camera);
+  if (twoP) { releaseIdle(); bindKid(P1); } // between frames, the buttons and menus act for player 1
+}
+// one child's part of the step: their own actions, walking, animation, the poses layered on it, and their note
+function kidStep(dt) {
+  feedStep(dt); kidEyes(); questsStep(dt); passportStep(); foldStep(); petStep(dt); if (can === SHARED.can) canStep(dt);
+  if ((broom.held || can.held) && (alms.t >= 0 || kraap.t >= 0 || feed.t >= 0 || shoes.t >= 0 || sit.on || merit.t >= 0)) { putBroomBack(); putCanBack(); } // hands needed elsewhere
   // movement relative to the camera
-  let fx = 0, fz = 0;
+  let fx = 0, fz = 0, inp = { run: false };
   if (!dialogOpen()) {
-    if (keys.KeyW || keys.ArrowUp) fz -= 1; if (keys.KeyS || keys.ArrowDown) fz += 1;
-    if (keys.KeyA || keys.ArrowLeft) fx -= 1; if (keys.KeyD || keys.ArrowRight) fx += 1;
-    fx += joy.x; fz += joy.y;
-    if ((keys.Space) && !sit.on && sit.rise <= 0 && kraap.t < 0 && alms.t < 0 && shoes.t < 0 && feed.t < 0 && merit.t < 0 && player.y <= groundAt(player.x, player.z) + 0.01) player.vy = 9;
+    inp = kidInput(); fx = inp.fx; fz = inp.fz;
+    if (inp.jump && !sit.on && sit.rise <= 0 && kraap.t < 0 && alms.t < 0 && shoes.t < 0 && feed.t < 0 && merit.t < 0 && player.y <= groundAt(player.x, player.z) + 0.01) player.vy = 9;
   }
   if (kraap.t >= 0) { // paying tribute: stay put (it ends by itself); glide to the spot and face the image first
     fx = fz = 0;
@@ -5195,13 +5435,15 @@ function frame(dt) {
   sit.w += ((sit.on ? 1 : 0) - sit.w) * Math.min(1, dt * 2.4); sit.rise = Math.max(0, sit.rise - dt);
   const mag = Math.min(1, Math.hypot(fx, fz));
   // a calm walk, like the boy in the film; Shift (or the touch stick pushed to its edge) runs
-  const running = keys.ShiftLeft || keys.ShiftRight || Math.hypot(joy.x, joy.y) > 0.92;
+  const running = inp.run;
   const speed = (running ? (player.clips.walk && !player.clips.run && player.gait.walk ? Math.min(6, player.gait.walk.speed * 2.2) : 6) : 2.6) * mag * (1 - 0.35 * stoop.w); // (slower, walking low before the monks) a 10-year-old's natural walking and running pace at this scale (the girl: a brisk walk her stride keeps up with)
   if (mag > 0.05) {
     const s = Math.sin(camYaw), c = Math.cos(camYaw);
     const nx = fx / (Math.hypot(fx, fz) || 1), nz = fz / (Math.hypot(fx, fz) || 1);
     const wx = nx * c + nz * s, wz = -nx * s + nz * c;
-    const [cx, cz] = collide(player.x + wx * speed * dt, player.z + wz * speed * dt);
+    let [cx, cz] = collide(player.x + wx * speed * dt, player.z + wz * speed * dt);
+    if (leashed(cx, cz)) [cx, cz] = [player.x, player.z]; // two players: not too far from each other
+    [cx, cz] = apart(cx, cz); // ...nor walking through each other
     // the edge of a hall floor: shoes come off going in, and go back on coming out
     const gateIn = isBoy() && shoes.on && insideHall(cx, cz) && !insideHall(player.x, player.z);
     const gateOut = isBoy() && !shoes.on && !insideHall(cx, cz) && insideHall(player.x, player.z);
@@ -5215,7 +5457,7 @@ function frame(dt) {
 
   // limb swing for blocky avatars, clips for 3D models
   const moving = mag > 0.05;
-  broomStep(dt, moving);
+  if (broom === SHARED.broom) broomStep(dt, moving); // (the broom moves with whoever holds it)
   const stepsBefore = Math.floor(walkPhase / Math.PI);
   const gait = player.gait && player.gait[player.current];
   walkPhase += dt * (moving ? (gait && player.action ? Math.PI * gait.steps * player.action.timeScale : speed * 1.6) : 0); // footsteps follow the animation's own steps
@@ -5276,55 +5518,6 @@ function frame(dt) {
     poseOverlays(player.model, hands, bow, sit.w); player.model.updateMatrixWorld(true); updatePress(player.model);
   }
 
-  // the dog follows a little behind
-  if (dog.obj.visible) {
-    // stay ahead-left of the player as seen from the camera, so it never blocks the view
-    const fx2 = -Math.sin(camYaw), fz2 = -Math.cos(camYaw), rx = Math.cos(camYaw), rz = -Math.sin(camYaw);
-    let bx = player.x + fx2 * 1.4 - rx * 2.6, bz = player.z + fz2 * 1.4 - rz * 2.6;
-    // during the ceremonies (sitting, paying respect, Kathina, giving alms and its wai) the dog sits at his left side, facing the same way
-    const ceremony = sit.on || kraap.t >= 0 || alms.t >= 0 || feed.t >= 0 || merit.t >= 0;
-    if (ceremony) {
-      // beside where he will be for the whole ceremony (the bowing spot, the spot before the monk), so the dog
-      // sits down once and stays down while he steps up or moves back on his knees
-      const k = kraap.t >= 0 ? kraap : null, al = !k && alms.t >= 0 ? alms : null, fd = feed.t >= 0 ? feed : merit.t >= 0 ? { stand: merit.spot, faceYaw: merit.faceYaw } : null;
-      const at = k ? ((k.kathin || k.merit) && k.keys ? (k.kathin || k.merit).far : k.spot) : al ? al.spot : fd ? fd.stand : null;
-      const ax = at ? at.x : player.x, az = at ? at.z : player.z;
-      const ay = k && k.faceYaw != null ? k.faceYaw : al ? al.faceYaw : fd ? fd.faceYaw : player.yaw;
-      bx = ax + Math.cos(ay) * 1.5 + Math.sin(ay) * 0.2; bz = az - Math.sin(ay) * 1.5 + Math.cos(ay) * 0.2;
-    }
-    // the Learning Hall, the main hall where the monks sit, is no place for a dog: it waits outside by the steps
-    if (dogKeepOut(dog.x, dog.z)) { dog.x = DOG_WAIT.x; dog.z = DOG_WAIT.z; } // (arrived inside some other way)
-    const waiting = dogKeepOut(bx, bz);
-    if (waiting) { bx = DOG_WAIT.x; bz = DOG_WAIT.z; }
-    // after a while waiting, it trots off to keep the sweeping novice company (by day), walking at his side and
-    // sitting when he stops; when the child comes out it comes back
-    dog.waitT = waiting ? (dog.waitT || 0) + dt : 0;
-    const withNovice = waiting && dog.waitT > 15 && novice.n && novice.n.holder.visible;
-    if (withNovice) { const hp = novice.n.holder.position, ny = novice.n.holder.rotation.y; bx = hp.x + Math.cos(ny) * 1.3 - Math.sin(ny) * 0.4; bz = hp.z - Math.sin(ny) * 1.3 - Math.cos(ny) * 0.4; }
-    // being petted: it comes and sits at his right side; afterwards it lies down there for a moment
-    const petting = pet.who === "dog" ? pet.phase : null;
-    if (petting === "call" || petting === "on") { bx = pet.spot.x; bz = pet.spot.z; }
-    else if (petting === "after") { bx = dog.x; bz = dog.z; }
-    const ddx = bx - dog.x, ddz = bz - dog.z, dd = Math.hypot(ddx, ddz);
-    const wantSit = (ceremony || waiting || petting === "call" || petting === "on") && dd < 0.5;
-    const wantLie = petting === "after" && pet.t > 0.5 && pet.t < DOG_LIE;
-    dogAnim.sit.value += ((wantSit && !wantLie ? 1 : 0) - dogAnim.sit.value) * Math.min(1, dt * 3);
-    dogAnim.lie.value += ((wantLie ? 1 : 0) - dogAnim.lie.value) * Math.min(1, dt * 2.2);
-    dogAnim.nuzzle.value += ((petting === "on" && kraap.t >= 0 && kraapState(kraap.t).reach > 0.6 ? 1 : 0) - dogAnim.nuzzle.value) * Math.min(1, dt * 3);
-    const dogFree = dogAnim.sit.value < 0.15 && dogAnim.lie.value < 0.15; // a sitting or lying dog gets up before it walks
-    dog.moving = dd > 0.4 && dogFree;
-    let dogSpeed = 0;
-    if (wantLie) { let dy = pet.yaw - dog.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); dog.yaw += dy * Math.min(1, dt * 2.5); } // lies down alongside him, where it sat
-    if (wantSit) { let dy = (withNovice ? novice.n.holder.rotation.y : waiting ? DOG_WAIT.yaw : petting ? pet.yaw : player.yaw) - dog.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); dog.yaw += dy * Math.min(1, dt * 4); }
-    if (dd > 0.4 && dogFree) { const st = Math.min(dd, dt * (dd > 6 ? 12 : 6)); dogSpeed = dt > 0 ? st / dt : 0; const [nx, nz] = collide(dog.x + ddx / dd * st, dog.z + ddz / dd * st); if (!dogKeepOut(nx, nz)) { dog.x = nx; dog.z = nz; } dog.yaw = Math.atan2(ddx, ddz); }
-    // walk cycle: about one stride per 1.2 m; the legs ease in and out of walking
-    dogAnim.phase.value = (dogAnim.phase.value + dt * dogSpeed * 5.2) % (Math.PI * 200); // kept small so it stays precise
-    if (!Number.isFinite(dogAnim.phase.value)) dogAnim.phase.value = 0;
-    dogAnim.walk.value += ((dogSpeed > 0.5 ? 1 : 0) - dogAnim.walk.value) * Math.min(1, dt * 6);
-    dogAnim.time.value += dt; dogAnim.wag.value = (settings.calmMotion ? 0.4 : 1) * (petting ? 1.3 : 1); // wagging harder while petted
-    dog.obj.position.set(dog.x, groundAt(dog.x, dog.z) + (onPath(dog.x, dog.z) && !insideHall(dog.x, dog.z) ? PAVING : 0), dog.z); dog.obj.rotation.y = dog.yaw; // paws on the paving, not in it
-    if (!settings.calmMotion) dog.tail.rotation.y = Math.sin(performance.now() / 160) * 0.6;
-  }
 
   // nearest place within reach
   let best = null, bestD = Infinity;
@@ -5337,8 +5530,8 @@ function frame(dt) {
   if (onBridge(player.x, player.z) && feed.t < 0 && kraap.t < 0 && 2.5 < bestD) { best = fest.now === "loykrathong" ? { id: "bridge", icon: "🪷", th: "ลอยกระทง", en: "Loy Krathong", sub: ["ลอยกระทง · ให้อาหารปลา", "Float a krathong · feed the fish"] } : FISH_PLACE; bestD = 2.5; }
   if (merit.t < 0 && kraap.t < 0) { const mh = meritHere(); if (mh) { best = { ...MERIT[mh.kind].place, merit: mh }; bestD = 0.5; } } // standing at it: the offering comes first
   if (catNear() && 1.9 < bestD) { best = CAT_PLACE; bestD = 1.9; }
-  if (Math.hypot(player.x - BROOM_AT.x, player.z - BROOM_AT.z) < 1.8 && 2.3 < bestD) { best = broom.held ? BROOM_BACK : BROOM_PLACE; bestD = 2.3; }
-  if (Math.hypot(player.x - CAN_AT.x, player.z - CAN_AT.z) < 1.8 && 2.3 < bestD) { best = can.held ? CAN_BACK : CAN_PLACE; bestD = 2.3; }
+  if (Math.hypot(player.x - BROOM_AT.x, player.z - BROOM_AT.z) < 1.8 && 2.3 < bestD && !heldElsewhere("broom")) { best = broom.held ? BROOM_BACK : BROOM_PLACE; bestD = 2.3; }
+  if (Math.hypot(player.x - CAN_AT.x, player.z - CAN_AT.z) < 1.8 && 2.3 < bestD && !heldElsewhere("can")) { best = can.held ? CAN_BACK : CAN_PLACE; bestD = 2.3; }
   if (foldHere() && 1.6 < bestD) { best = FOLD_PLACE; bestD = 1.6; }
   if (can.held && can.t < 0) { const w = potHere(); if (w && w.d < bestD) { best = { ...WATER_PLACE, key: w.i }; bestD = w.d; } }
   if (almsScene.on) for (const m of almsMonks) { const d = Math.hypot(player.x - (m.x + Math.sin(m.yaw) * ALMS_STAND), player.z - (m.z + Math.cos(m.yaw) * ALMS_STAND)); if (d < 1.5 && d < bestD) { best = { ...ALMS_PLACE, monk: m }; bestD = d; } }
@@ -5348,33 +5541,9 @@ function frame(dt) {
   const busy = alms.t >= 0 || kraap.t >= 0 || shoes.t >= 0 || wai.t >= 0 || sit.on || feed.t >= 0 || merit.t >= 0 || can.t >= 0 || pet.phase === "call";
   if (busy) promptRest = { x: player.x, z: player.z };
   else if (promptRest && Math.hypot(player.x - promptRest.x, player.z - promptRest.z) > 0.6) promptRest = null;
-  if (!!promptRest !== promptAway) { promptAway = !!promptRest; $("prompt").classList.toggle("away", promptAway); }
+  if (!!promptRest !== promptAway) { promptAway = !!promptRest; $(promptId()).classList.toggle("away", promptAway); }
 
-  // camera follows
-  const cx = player.x + Math.sin(camYaw) * Math.cos(camPitch) * camDist;
-  const cz = player.z + Math.cos(camYaw) * Math.cos(camPitch) * camDist;
-  const ks = kraap.t >= 0 ? kraapState(kraap.t) : null;
-  const seatDrop = Math.max(1.05 * sit.w, ks ? 1.0 * ks.kneel + 0.6 * ks.bow : 0); // seated or kneeling, the camera looks at where his head now is
-  const cy = player.y + 2 - seatDrop + Math.sin(camPitch) * camDist;
-  // don't look through walls or roofs: pull the camera in front of whatever is in the way
-  head.set(player.x, player.y + 2.2 - seatDrop, player.z); tmp.set(cx, cy, cz);
-  const want = tmp.clone().sub(head), dist = want.length(); want.normalize();
-  camRay.set(head, want); camRay.far = dist;
-  const hit = camRay.intersectObjects(camBlock, false)[0];
-  if (hit) tmp.copy(head).addScaledVector(want, Math.max(1.2, hit.distance - 0.35));
-  if (settings.calmMotion || hit) camera.position.copy(tmp); else camera.position.lerp(tmp, Math.min(1, dt * 8));
-  camera.lookAt(head);
-
-  // running water (slower with calm motion on)
-  { const wdt = dt * (settings.calmMotion ? 0.35 : 1); waterClock += wdt; waterAnims.forEach((f) => f(wdt, waterClock)); }
-  // candle flames sway a little (not in calm motion)
-  if (!settings.calmMotion) { const t = performance.now() / 1000; flames.forEach((f, i) => { f.scale.y = 1.8 + Math.sin(t * 7 + i * 1.7) * 0.18; }); }
-  if (dog.model) dog.model.position.y = Math.abs(Math.sin(dogAnim.phase.value)) * 0.035 * dogAnim.walk.value; // a light bounce in step
-
-  camera.getWorldDirection(camFwd);
-  sound.update(camera.position, camFwd, insideHall(player.x, player.z) && Math.hypot(camera.position.x - player.x, camera.position.z - player.z) < 14, dt);
-
-  if (composer) composer.render(); else renderer.render(scene, camera);
+  kid.drop = kidDrop();
 }
 
 document.fonts.load("64px Itim").then(() => document.fonts.load("36px Mali")).catch(() => {}).finally(() => {
@@ -5383,7 +5552,7 @@ document.fonts.load("64px Itim").then(() => document.fonts.load("36px Mali")).ca
 });
 camYaw = 0; camera.position.set(0, 8, 105);
 restoreSpot(); // back from a page of the site: stand where you were
-if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, meal, setMealTime: (v) => { mealForce = v; }, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, almsScene, almsShow, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, gardenSpots, paths, floors, ponds, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startKathin, kathinSpots, feed, startFeed, fishes, food, onBridge, merit, startMerit, meritHere, broom, fallenLeaves, can, waterPots, startWater, fold, startFold, foldPetal, altars, gildImage, bodhiBands, lane, novice, birds, cat, rain, petals, catShow, catPlan, pet, startPetDog, startPetCat, petStroke, look: (eye, at) => { camera.position.set(...eye); camera.lookAt(...at); if (composer) composer.render(); else renderer.render(scene, camera); }, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
+if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, two: () => ({ P1, P2, twoP, owner, kid }), meal, setMealTime: (v) => { mealForce = v; }, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, almsScene, almsShow, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, gardenSpots, paths, floors, ponds, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startKathin, kathinSpots, feed, startFeed, fishes, food, onBridge, merit, startMerit, meritHere, broom, fallenLeaves, can, waterPots, startWater, fold, startFold, foldPetal, altars, gildImage, bodhiBands, lane, novice, birds, cat, rain, petals, catShow, catPlan, pet, startPetDog, startPetCat, petStroke, look: (eye, at) => { camera.position.set(...eye); camera.lookAt(...at); if (composer) composer.render(); else renderer.render(scene, camera); }, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
 Promise.race([Promise.all(propJobs), new Promise((r) => setTimeout(r, 7000))]).then(() => {
   $("loading").hidden = true;
   canvas.focus();
