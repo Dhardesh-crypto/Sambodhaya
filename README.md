@@ -176,3 +176,5 @@ The base has two tables, with fields named exactly:
 - **Feedback**: Submitted (date with time), Type (text), Message (long text), Page (text), Language (text), Device (text), Email (email), Attachment (URL), Submission ID (text)
 
 The support page promises slips are kept 90 days: each donation row gets a "Delete after" date; delete the row (and the submission in Netlify) by then. The Slip link is Netlify's; if it has expired, open the submission in the Netlify dashboard (Forms → donation) by its Submission ID.
+
+**Greeting a monk:** kneeling with the wai before a teacher, the child first says the polite greeting, นมัสการครับ (Namassakan krab) for the boy and นมัสการค่ะ (Namassakan kha) for the girl, as a former monk in Thailand gave them; then the monk answers. The words are shown beneath, in either language the Thai words with their meaning; the voice (MiniMax: Bram for the boy, Pixie for the girl; `audio/greet-boy.mp3`, `greet-girl.mp3`) is heard only with the sound on.

@@ -3209,6 +3209,12 @@ const TALK_DUR = {
 const GREET_BACK = 1.3; // where the child kneels: this far before the platform
 function greetSpot(h, s) { const [x, z] = h.toWorld(s.lx, s.edge + GREET_BACK); return { x, z }; }
 const talkTurn = read("talk", {});
+// the child's greeting to a monk: the polite words a Thai child uses (as a former monk in Thailand gave them), said aloud
+// (with the sound on) and shown beneath; the same Thai words in either language, with what they mean in English
+const GREET = {
+  boy: { url: "audio/greet-boy.mp3", secs: 0.9, th: "นมัสการครับ", en: "นมัสการครับ · Namassakan krab (a respectful greeting to a monk)" },
+  girl: { url: "audio/greet-girl.mp3", secs: 1.4, th: "นมัสการค่ะ", en: "นมัสการค่ะ · Namassakan kha (a respectful greeting to a monk)" },
+};
 function startGreet(h, s) {
   if (busyElsewhere()) return; // (the other child is in a ceremony)
   const T = TEACHER_TALK[s.name]; if (kraap.t >= 0 || alms.t >= 0 || !T) return;
@@ -3216,12 +3222,14 @@ function startGreet(h, s) {
   wai.t = -1;
   const i = (talkTurn[s.name] || 0) % T.lines.length; talkTurn[s.name] = i + 1; write("talk", talkTurn);
   const secs = ((TALK_DUR[T.file] || {})[L] || [])[i] || 5, sp = greetSpot(h, s), [mx, mz] = h.toWorld(s.lx, s.lz);
-  const k0 = 1.4, end = k0 + 0.4 + secs + 0.6; // kneel, listen, then a small bow of the head, and up
+  // kneeling with the wai, the child first greets him (นมัสการครับ, a girl นมัสการค่ะ), then he answers
+  const g = GREET[boyKits.kind === "girl" ? "girl" : "boy"], k0 = 1.4, said = k0 + 0.2 + g.secs + 0.5, end = said + secs + 0.6; // kneel, greet, listen, a small bow of the head, and up
   kraap.merit = null; kraap.kathin = null; kraap.greet = true;
   kraap.keys = [[0, 0, 0, 0, 0, 0], [0.3, 0, 1, 0, 0, 0], [k0, 1, 1, 0, 0, 0], [end, 1, 1, 0, 0, 0], [end + 0.5, 1, 1, 0, 0, 0.3], [end + 1.2, 1, 1, 0, 0, 0], [end + 2.7, 0, 0, 0, 0, 0]];
   kraap.dur = end + 2.7; kraap.spot = sp; kraap.faceYaw = Math.atan2(mx - sp.x, mz - sp.z); kraap.floorY = groundAt(sp.x, sp.z); kraap.t = 0;
   const from = s.rig ? s.rig.B.Head.getWorldPosition(new THREE.Vector3()) : s.lean.getWorldPosition(new THREE.Vector3());
-  kraap.recite = { at: k0 + 0.4, url: `audio/talk-${T.file}-${i + 1}-${L}.mp3`, from, inside: true, text: tx(...T.lines[i]), who: s, secs };
+  kraap.say = { at: k0 + 0.2, url: g.url, text: tx(g.th, g.en), secs: g.secs };
+  kraap.recite = { at: said, url: `audio/talk-${T.file}-${i + 1}-${L}.mp3`, from, inside: true, text: tx(...T.lines[i]), who: s, secs };
   if (player.mixer) playClip("idle", 0.4);
   questEvent("waiMonk"); stamp(s.name);
   joinKraap();
@@ -5504,9 +5512,10 @@ function kidStep(dt) {
     fx = fz = 0;
     const kBefore = kraap.t;
     kraap.t += dt;
+    if (kraap.say && kraap.t >= kraap.say.at) { const r = kraap.say; recite(r.url, new THREE.Vector3(player.x, player.y + 1.2, player.z), true, r.text, r.secs); kraap.say = null; } // (the child's own words)
     if (kraap.recite && kraap.t >= kraap.recite.at) { const r = kraap.recite; recite(r.url, r.from, !!r.inside, r.blessing ? null : r.text || null, r.secs || 10.4); if (r.who) r.who.talking = r.secs; kraap.recite = null; }
     if (kraap.join) { if (kraap.t >= 0.8 && kraap.spot) { player.x = kraap.spot.x; player.z = kraap.spot.z; } } // (beside the giver, moving with them; the giver's step ends it)
-    else if (kraap.t > (kraap.keys ? kraap.dur : KRAAP_DUR)) { kraap.greet = false; if (kraap.float) kraap.float = null; else if (kraap.meal) { mealEnded(kraap.meal); kraap.meal = null; } else kraapEnded(kraap.kathin ? "kathinDone" : kraap.merit ? null : kraap.keys === ALMS_KNEEL_KEYS ? "almsBless" : !kraap.keys ? "kraap" : null); kraap.t = -1; kraap.touch = null; kraap.keys = null; if (kraap.kathin) kraap.kathin.monk.lean.rotation.x = 0; endKneelingOffering(); }
+    else if (kraap.t > (kraap.keys ? kraap.dur : KRAAP_DUR)) { kraap.greet = false; if (kraap.float) kraap.float = null; else if (kraap.meal) { mealEnded(kraap.meal); kraap.meal = null; } else kraapEnded(kraap.kathin ? "kathinDone" : kraap.merit ? null : kraap.keys === ALMS_KNEEL_KEYS ? "almsBless" : !kraap.keys ? "kraap" : null); kraap.t = -1; kraap.touch = null; kraap.keys = null; kraap.say = null; if (kraap.kathin) kraap.kathin.monk.lean.rotation.x = 0; endKneelingOffering(); }
     const mv = kraap.kathin || kraap.merit || kraap.meal || kraap.float;
     if (mv && kraap.keys && kraap.t >= 0) { // Kathina and kneeling offerings: kneel close to offer, then move back on the knees to bow
       const b = kraapState(kraap.t).back;
