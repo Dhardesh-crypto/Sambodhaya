@@ -2800,10 +2800,10 @@ function animateDog(mat) {
 
 /* ---------------- petting the dog (and the cat, below) ---------------- */
 // The dog is always at his side, so petting it is asked for (the 🐾 button, P, or from the dog's own panel):
-// it comes and sits at his right side; he turns to it and, standing close, strokes its head while it wags hard and nuzzles up into his
+// it comes and sits in front of him, facing him; he strokes its head from the front while it wags hard and nuzzles up into his
 // hand; when he stands it lies down for a moment, then gets up and follows again. Walking off calls it off.
 const DOG_PET_D = 1.15, DOG_LIE = 4.5;
-const PET_REACH = 0.55, PET_RIGHT = 0.28; // stroking the dog: the dog's head this far in front of him, and this far to his right
+const PET_REACH = 0.45, PET_RIGHT = 0.1, PET_TOES = 0.2, PET_BODY = 0.3; // stroking the dog: its head this far in front of him and this far to his right; his feet this far from its body
 let pet = { who: null, phase: null, t: 0, yaw: 0, spot: null };
 function petBusy() { return sit.on || kraap.t >= 0 || alms.t >= 0 || shoes.t >= 0 || feed.t >= 0 || merit.t >= 0 || pet.phase === "call" || pet.phase === "on"; }
 function startPetDog() {
@@ -2811,9 +2811,9 @@ function startPetDog() {
   if (!dog.obj.visible || petBusy() || player.y > groundAt(player.x, player.z) + 0.05) return;
   if (broom.held) putBroomBack();
   if (dogKeepOut(player.x, player.z)) return; // (not in the Learning Hall)
-  pet.who = "dog"; pet.phase = "call"; pet.t = 0; pet.yaw = player.yaw; pet.from = { x: player.x, z: player.z };
-  // it sits at his right side, facing the way he faces, its head within reach of his right hand
-  pet.spot = { x: player.x - Math.cos(pet.yaw) * DOG_PET_D + Math.sin(pet.yaw) * 0.15, z: player.z + Math.sin(pet.yaw) * DOG_PET_D + Math.cos(pet.yaw) * 0.15 };
+  pet.who = "dog"; pet.phase = "call"; pet.t = 0; pet.yaw = player.yaw + Math.PI; pet.from = { x: player.x, z: player.z }; // (the way the dog faces: toward him)
+  // it sits in front of him, facing him (never beside him or with its back to him)
+  pet.spot = { x: player.x + Math.sin(player.yaw) * DOG_PET_D, z: player.z + Math.cos(player.yaw) * DOG_PET_D };
   [pet.spot.x, pet.spot.z] = collide(pet.spot.x, pet.spot.z);
 }
 function petStep(dt) {
@@ -2822,12 +2822,11 @@ function petStep(dt) {
   const moved = Math.hypot(player.x - (pet.from ? pet.from.x : player.x), player.z - (pet.from ? pet.from.z : player.z)) > 0.3;
   if (pet.phase === "call") {
     if (moved || pet.t > 8) { pet.phase = null; return; } // walked off, or it couldn't come
-    if (pet.who === "dog" && Math.hypot(dog.x - pet.spot.x, dog.z - pet.spot.z) < 0.5 && dogAnim.sit.value > 0.8) {
-      // he turns to the dog's head and stands within reach of it, the head a little to his right (his stroking hand);
-      // the dog sitting is as tall as a kneeling child, so he leans over it a little rather than kneel
-      const hd = petStroke(0), dx = hd.x - player.x, dz = hd.z - player.z, fy = Math.atan2(dx, dz);
-      const at = { x: hd.x - Math.sin(fy) * PET_REACH + Math.cos(fy) * PET_RIGHT, z: hd.z - Math.cos(fy) * PET_REACH - Math.sin(fy) * PET_RIGHT };
-      pet.phase = "on"; startKneelingOffering({ kind: "pet", near: at, far: at, faceYaw: fy, stand: true, lean: 0.12 });
+    if (pet.who === "dog" && Math.hypot(dog.x - pet.spot.x, dog.z - pet.spot.z) < 0.5 && dogAnim.sit.value > 0.8 && Math.abs(Math.atan2(Math.sin(dog.yaw - pet.yaw), Math.cos(dog.yaw - pet.yaw))) < 0.15) {
+      // face to face: he stands before the dog, its head within reach of his right hand, and leans over a little to
+      // stroke it (sitting, the dog is as tall as a kneeling child)
+      const { at, fy, R } = petSpot(petStroke(0));
+      pet.phase = "on"; startKneelingOffering({ kind: "pet", near: at, far: at, faceYaw: fy, stand: true, lean: 0.22 + (R - PET_REACH) * 0.6 }); // (further off, he leans further over)
     }
   } else if (pet.phase === "after") {
     if (pet.t > DOG_LIE + 1.2 || Math.hypot(player.x - dog.x, player.z - dog.z) > 5) pet.phase = null;
@@ -2839,7 +2838,30 @@ function petDone() {
 }
 // where his stroking hand goes: over the top of the dog's head (worked out from the model and the same sitting and
 // nuzzling the dog's shader does), moving back and forth; for the cat, along her back
-let dogHead = null;
+let dogHead = null, dogBody = null;
+// where he stands to stroke the sitting dog: straight in front of it, facing it, as near as its front paws and chest
+// allow (its shape worked out from the model, tipped back into its sitting pose as the dog's shader does)
+function petSpot(hd) {
+  const mesh = dog.model && dog.model.getObjectByProperty("isMesh", true);
+  if (!dogBody && mesh) { // a sample of the model's points
+    const pos = mesh.geometry.attributes.position; dogBody = [];
+    for (let i = 0; i < pos.count; i += 9) dogBody.push(new THREE.Vector3(pos.getX(i), pos.getY(i), pos.getZ(i)));
+  }
+  const fy = pet.yaw + Math.PI, fx = Math.sin(fy), fz = Math.cos(fy); // he faces the dog (as it sits, facing him)
+  // how far its front (paws at the bottom, chest above) comes out toward him, ahead of its head
+  const FEET = -0.634, HIP = -0.1, th0 = 0.5 * dogAnim.sit.value; let paws = 0, chest = 0;
+  if (mesh) { mesh.updateWorldMatrix(true, false); for (const v of dogBody) {
+    if (v.x < 0.2) continue; // (the front of it; the haunches are behind)
+    const legW = Math.min(1, Math.max(0, (HIP - v.y) / (HIP - FEET))), th = th0 * (1 - legW), cs = Math.cos(th), sn = Math.sin(th);
+    const dx = v.x - 0.6, dy = v.y - FEET, w = mesh.localToWorld(new THREE.Vector3(0.6 + dx * cs - dy * sn, FEET + dx * sn + dy * cs, v.z));
+    const out = -((w.x - hd.x) * fx + (w.z - hd.z) * fz); // ahead of the head, toward him
+    if (w.y > hd.y - 0.3) continue; // (its head and muzzle: he leans over those)
+    if (w.y < groundAt(w.x, w.z) + 0.3) paws = Math.max(paws, out); else chest = Math.max(chest, out);
+  } }
+  // his toes just short of its paws, his knees and body clear of its chest
+  const R = Math.max(PET_REACH, paws + PET_TOES, chest + PET_BODY);
+  return { at: { x: hd.x - fx * R + fz * PET_RIGHT, z: hd.z - fz * R - fx * PET_RIGHT }, fy, R };
+}
 function petStroke(t) {
   if (pet.who === "cat") return catStroke(t);
   const mesh = dog.model && dog.model.getObjectByProperty("isMesh", true); if (!mesh) return new THREE.Vector3(dog.x, 1.2, dog.z);
@@ -2851,7 +2873,7 @@ function petStroke(t) {
     dogHead = n ? c.multiplyScalar(1 / n) : new THREE.Vector3(0.5, 0.5, 0);
   }
   const FEET = -0.634, th = 0.5 * dogAnim.sit.value, cs = Math.cos(th), sn = Math.sin(th);
-  const p = dogHead.clone(); p.x -= 0.1 + 0.07 * Math.sin(t * 4); // from the forehead back toward the neck
+  const p = dogHead.clone(); p.x -= 0.03 + 0.06 * Math.sin(t * 4); // over the crown, from the forehead back a little (he strokes from the front)
   p.y += 0.05 * dogAnim.nuzzle.value * (0.5 + 0.5 * Math.sin(dogAnim.time.value * 5));
   const dx = p.x - 0.6, dy = p.y - FEET; p.x = 0.6 + dx * cs - dy * sn; p.y = FEET + dx * sn + dy * cs;
   return mesh.localToWorld(p).add(new THREE.Vector3(0, -0.03, 0)); // (the palm rests in the fur)
