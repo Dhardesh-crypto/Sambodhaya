@@ -160,3 +160,5 @@ Deployed as-is (no build step on Netlify; see `netlify.toml`) to https://sambodh
 - `?loykrathong`, `?bucha`: a festival at any time (normally by the full moon)
 - `?season=hot|rainy|cool`: the Emerald Buddha's costume (normally by the season)
 - `?debug`: a test console for development (`window.__w`); `?return=1` is set by the site itself on the way back from a 2D page
+
+**The Learning Hall's back wall** is painted either side of the red cloth behind the image, from above the red band to the ceiling, in the manner of a Thai temple mural (จิตรกรรมฝาผนัง), symbols only as the user chose: on the left the Bodhi tree, a coloured cloth around its trunk, beside a lotus pond with a small golden pavilion; on the right the golden Dhamma wheel on a lotus, with a celestial pavilion on clouds; gold flame borders (kranok) and thin gold frames (`img/murals/back-left.jpg`, `back-right.jpg`, Higgsfield).

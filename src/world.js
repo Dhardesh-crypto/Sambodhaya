@@ -848,6 +848,18 @@ function spire(h, k = 0.85) {
   const h = salas.learn;
   shrine(h, [["monk-elder", -2.6], ["monk", 2.6], ["monk-young", 4.6]], { gifts: true }); // the main hall, where the monks sit: Kathina is offered here
   spire(h);
+  // the back wall's murals (symbols only, as the user chose): either side of the red cloth behind the image, from above the
+  // red band to the ceiling, each in a thin gold frame. Left, the Bodhi tree by a lotus pond; right, the Dhamma wheel on a lotus
+  {
+    const { g, FY, W, D, H } = h, x0 = 1.95, x1 = W / 2 - 0.35, y0 = FY + 1.05, y1 = FY + H - 0.08, z = -D / 2 + 0.215;
+    const pw = x1 - x0, ph = y1 - y0, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+    [["left", -1], ["right", 1]].forEach(([n, sg]) => {
+      const t = new THREE.TextureLoader().load(`img/murals/back-${n}.jpg`); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = HIGH ? 8 : 2;
+      add(new THREE.PlaneGeometry(pw, ph), new THREE.MeshStandardMaterial({ map: t, roughness: 0.9 }), sg * cx, cy, z, g, false);
+      [[pw + 0.12, 0.06, sg * cx, y1 + 0.03], [pw + 0.12, 0.06, sg * cx, y0 - 0.03], [0.06, ph, sg * (x0 - 0.03), cy], [0.06, ph, sg * (x1 + 0.03), cy]]
+        .forEach(([bw, bh, bx, by]) => add(new THREE.BoxGeometry(bw, bh, 0.03), MAT.gold, bx, by, z + 0.01, g, false));
+    });
+  }
   const spots = [["left", 4.2], ["left", 2.2], ["left", 0.2], ["left", -1.8], ["right", -1.8], ["right", 0.2], ["right", 2.2], ["right", 4.2]];
   spots.forEach(([side, u], i) => {
     const tex = boardTexture({ head: tx("เรื่องที่ ", "Story ") + (i + 1), icon: "👣", title: L === "en" ? JOURNEY[i][1] : JOURNEY[i][0], foot: tx("เดินมาใกล้ ๆ แล้วกด E", "Walk close and press E"), picture: `img/murals/u0${i + 1}.jpg` });
