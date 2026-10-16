@@ -1568,10 +1568,11 @@ function startMerit(here) {
 // [time, kneel, chest wai, high wai, palms on the floor, bow, (tray, lift, place: Kathina only), moved back, reach]
 function kneelKeys(kind, here = {}) {
   const b = here.lean || 0; // leaning forward a little to reach something low (a sleeping cat)
-  if (kind === "pet") return [ // petting the dog or the cat: kneel, stroke for a while, stand
+  const kn = here.stand ? 0 : 1; // the big dog, sitting, is petted standing beside it; the cat, kneeling
+  if (kind === "pet") return [ // petting the dog or the cat: kneel (or lean over), stroke for a while, stand
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0.3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [1.5, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0], [2.0, 1, 0, 0, 0, b, 0, 0, 0, 0, 1],
-    [6.4, 1, 0, 0, 0, b, 0, 0, 0, 0, 1], [6.9, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0], [8.1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [1.5, kn, 0, 0, 0, 0, 0, 0, 0, 0, 0], [2.0, kn, 0, 0, 0, b, 0, 0, 0, 0, 1],
+    [6.4, kn, 0, 0, 0, b, 0, 0, 0, 0, 1], [6.9, kn, 0, 0, 0, 0, 0, 0, 0, 0, 0], [8.1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
   ];
   const k = kind === "offer" ? [
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0.6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -2799,9 +2800,10 @@ function animateDog(mat) {
 
 /* ---------------- petting the dog (and the cat, below) ---------------- */
 // The dog is always at his side, so petting it is asked for (the 🐾 button, P, or from the dog's own panel):
-// it comes and sits at his right side; he kneels and strokes its head while it wags hard and nuzzles up into his
+// it comes and sits at his right side; he turns to it and, standing close, strokes its head while it wags hard and nuzzles up into his
 // hand; when he stands it lies down for a moment, then gets up and follows again. Walking off calls it off.
 const DOG_PET_D = 1.15, DOG_LIE = 4.5;
+const PET_REACH = 0.55, PET_RIGHT = 0.28; // stroking the dog: the dog's head this far in front of him, and this far to his right
 let pet = { who: null, phase: null, t: 0, yaw: 0, spot: null };
 function petBusy() { return sit.on || kraap.t >= 0 || alms.t >= 0 || shoes.t >= 0 || feed.t >= 0 || merit.t >= 0 || pet.phase === "call" || pet.phase === "on"; }
 function startPetDog() {
@@ -2821,7 +2823,11 @@ function petStep(dt) {
   if (pet.phase === "call") {
     if (moved || pet.t > 8) { pet.phase = null; return; } // walked off, or it couldn't come
     if (pet.who === "dog" && Math.hypot(dog.x - pet.spot.x, dog.z - pet.spot.z) < 0.5 && dogAnim.sit.value > 0.8) {
-      pet.phase = "on"; startKneelingOffering({ kind: "pet", near: { x: player.x, z: player.z }, far: { x: player.x, z: player.z }, faceYaw: pet.yaw });
+      // he turns to the dog's head and stands within reach of it, the head a little to his right (his stroking hand);
+      // the dog sitting is as tall as a kneeling child, so he leans over it a little rather than kneel
+      const hd = petStroke(0), dx = hd.x - player.x, dz = hd.z - player.z, fy = Math.atan2(dx, dz);
+      const at = { x: hd.x - Math.sin(fy) * PET_REACH + Math.cos(fy) * PET_RIGHT, z: hd.z - Math.cos(fy) * PET_REACH - Math.sin(fy) * PET_RIGHT };
+      pet.phase = "on"; startKneelingOffering({ kind: "pet", near: at, far: at, faceYaw: fy, stand: true, lean: 0.12 });
     }
   } else if (pet.phase === "after") {
     if (pet.t > DOG_LIE + 1.2 || Math.hypot(player.x - dog.x, player.z - dog.z) > 5) pet.phase = null;
@@ -2848,7 +2854,7 @@ function petStroke(t) {
   const p = dogHead.clone(); p.x -= 0.1 + 0.07 * Math.sin(t * 4); // from the forehead back toward the neck
   p.y += 0.05 * dogAnim.nuzzle.value * (0.5 + 0.5 * Math.sin(dogAnim.time.value * 5));
   const dx = p.x - 0.6, dy = p.y - FEET; p.x = 0.6 + dx * cs - dy * sn; p.y = FEET + dx * sn + dy * cs;
-  return mesh.localToWorld(p).add(new THREE.Vector3(0, 0.06, 0));
+  return mesh.localToWorld(p).add(new THREE.Vector3(0, -0.03, 0)); // (the palm rests in the fur)
 }
 
 /* ---------------- sitting: cross-legged, for meditation and for listening to a teacher ---------------- */
