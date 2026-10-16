@@ -2801,7 +2801,7 @@ function animateDog(mat) {
 /* ---------------- petting the dog (and the cat, below) ---------------- */
 // The dog is always at his side, so petting it is asked for (the 🐾 button, P, or from the dog's own panel):
 // it comes and sits in front of him, facing him; he strokes its head from the front while it wags hard and nuzzles up into his
-// hand; when he stands it lies down for a moment, then gets up and follows again. Walking off calls it off.
+// hand; then it gets up and follows him again. Walking off calls it off.
 const DOG_PET_D = 1.15, DOG_LIE = 4.5;
 const PET_REACH = 0.45, PET_RIGHT = 0.1, PET_TOES = 0.2, PET_BODY = 0.3; // stroking the dog: its head this far in front of him and this far to his right; his feet this far from its body
 let pet = { who: null, phase: null, t: 0, yaw: 0, spot: null };
@@ -2833,7 +2833,7 @@ function petStep(dt) {
   }
 }
 function petDone() {
-  if (pet.who === "dog") { pet.phase = "after"; pet.t = 0; pet.from = { x: player.x, z: player.z }; questEvent("petDog"); }
+  if (pet.who === "dog") { pet.phase = null; questEvent("petDog"); } // (then it gets up and follows him again)
   else { pet.phase = null; catPetted(); questEvent("petCat"); }
 }
 // where his stroking hand goes: over the top of the dog's head (worked out from the model and the same sitting and
