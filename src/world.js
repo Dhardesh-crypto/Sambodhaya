@@ -3213,7 +3213,7 @@ const talkTurn = read("talk", {});
 // (with the sound on) and shown beneath; the same Thai words in either language, with what they mean in English
 const GREET = {
   boy: { url: "audio/greet-boy.mp3", secs: 0.9, th: "นมัสการครับ", en: "นมัสการครับ · Namassakan krab (a respectful greeting to a monk)" },
-  girl: { url: "audio/greet-girl.mp3", secs: 1.4, th: "นมัสการค่ะ", en: "นมัสการค่ะ · Namassakan kha (a respectful greeting to a monk)" },
+  girl: { url: "audio/greet-girl.mp3", secs: 1.1, th: "นมัสการค่ะ", en: "นมัสการค่ะ · Namassakan kha (a respectful greeting to a monk)" },
 };
 function startGreet(h, s) {
   if (busyElsewhere()) return; // (the other child is in a ceremony)
