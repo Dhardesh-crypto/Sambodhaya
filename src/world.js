@@ -1638,7 +1638,7 @@ function kneelStep(before, t) {
   }
   if (m.kind === "gild" && at(E.leaf)) gildLeaf();
 }
-function endKneelingOffering() { const m = kraap.merit; if (m && m.items && !m.placed) scene.remove(m.items); if (m && m.kind === "pet") petDone(); else if (m) questEvent(m.kind); kraap.merit = null; }
+function endKneelingOffering() { const m = kraap.merit; if (m && m.items && !m.placed) scene.remove(m.items); if (m && m.kind === "pet") petDone(); else if (m) { questEvent(m.kind); questEvent("kraap"); /* (an offering before the image ends with the three bows) */ } kraap.merit = null; }
 // the hand's target and turn for a reach (fingers forward and down, palm down), as in poseKraap
 function kneelHand(model, fwd, up, t) {
   const shape = handShape(model); if (!shape) return null;
@@ -4874,6 +4874,7 @@ const QUESTS = [
   { id: "merit", icon: "🪷", name: ["ทำบุญในศาลา", "Making merit in the halls"], steps: [
     { ev: "offer", t: ["ถวายธูปเทียนดอกไม้หน้าพระพุทธรูป", "Offer incense, candles and a lotus before the Buddha"], why: ["เราถวายธูปเทียนดอกไม้ เพื่อบูชาพระพุทธ พระธรรม และพระสงฆ์", "We offer incense, candles and a lotus to honour the Buddha, the Dhamma and the Sangha."] },
     { ev: "gild", t: ["ปิดทองพระพุทธรูปในศาลาสากล", "Press gold leaf on the Buddha image in the Universal Hall"], why: ["การปิดทองพระเป็นการบูชาพระพุทธเจ้า", "Pressing gold leaf on the image is a way of honouring the Buddha."] },
+    { ev: "kraap", t: ["กราบพระ 3 ครั้ง หน้าพระพุทธรูป", "Bow three times before the Buddha image"], why: ["กราบครั้งที่หนึ่งระลึกถึงพระพุทธ ครั้งที่สองพระธรรม ครั้งที่สามพระสงฆ์", "The first bow is for the Buddha, the second for the Dhamma, the third for the Sangha."] }, // (the offerings end with three bows too)
   ] },
   { id: "kathin", icon: "🟫", name: ["ทอดกฐิน", "The Kathina"], steps: [
     { ev: "kathinOffer", t: ["ถวายผ้ากฐินแด่พระสงฆ์ในศาลาเรียนรู้", "Offer the Kathina robe to the senior monk in the Learning Hall"], why: ["ผ้ากฐินถวายแก่คณะสงฆ์ทั้งหมด ไม่ได้ถวายแก่พระรูปใดรูปหนึ่ง", "The Kathina robe is given to the whole community of monks, not to one monk."] },
