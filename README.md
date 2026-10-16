@@ -112,7 +112,7 @@ The monk and the novice are rigged like the boy (the same skeleton, with their o
 - breeze and rustling leaves that follow slow gusts, and small roof bells (kradueng) at the hall eaves that tinkle in the gusts
 - birds in the trees: bulbul-like twitters and, now and then, the Asian koel's rising "ko-el"
 - the Practice Garden waterfall
-- footsteps: stone on paths and the plaza, soft on grass, hollow wood inside halls
+- footsteps: stone on paths and the plaza, soft on grass, a quiet pad of socks on the marble inside halls
 - inside a hall the outside world is muffled and quieter
 - the bronze temple bell: a deep strike with a long, beating ring
 - pigeons clattering up when they take off

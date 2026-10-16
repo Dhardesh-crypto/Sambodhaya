@@ -168,15 +168,11 @@ export function createSound({ high = true } = {}) {
     if (!ctx) return;
     const t = ctx.currentTime, s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
     s.buffer = stepBuf; s.playbackRate.value = 0.9 + Math.random() * 0.2;
-    if (surface === "wood") { f.type = "bandpass"; f.frequency.value = 520; f.Q.value = 1.4; }
+    if (surface === "marble") { f.type = "lowpass"; f.frequency.value = 2200; } // socks on smooth stone: a soft pad
     else if (surface === "stone") { f.type = "bandpass"; f.frequency.value = 1500; f.Q.value = 0.7; }
     else { f.type = "lowpass"; f.frequency.value = 900; }
     s.connect(f); f.connect(g); g.connect(master);
-    env(g, t, 0.005, surface === "grass" ? 0.05 : 0.09, surface === "wood" ? 0.09 : 0.06); s.start(t, Math.random()); s.stop(t + 0.2);
-    if (surface === "wood") { // the hollow knock of a wooden floor
-      const o = ctx.createOscillator(), og = ctx.createGain(); o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(90, t + 0.08);
-      o.connect(og); og.connect(master); env(og, t, 0.003, 0.08, 0.09); o.start(t); o.stop(t + 0.15);
-    }
+    env(g, t, 0.005, surface === "grass" ? 0.05 : surface === "marble" ? 0.035 : 0.09, surface === "marble" ? 0.05 : 0.06); s.start(t, Math.random()); s.stop(t + 0.2);
   }
 
   /* ---------- start / stop ---------- */

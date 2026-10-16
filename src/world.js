@@ -120,12 +120,16 @@ function P(name, rx, ry, extra = {}) {
   return new THREE.MeshStandardMaterial(o);
 }
 
+// inside the halls, polished stone slabs (marble stays cool, and is easily swept and kept clean; wood would grow hot,
+// stain and rot): about half a metre each, whatever the size of the floor
+const MARBLE_SLABS = 2.2; // metres of floor per repeat of the texture (four slabs across)
+const marbleFloor = (w, d) => P("marble_01", w / MARBLE_SLABS, d / MARBLE_SLABS, { color: 0xfff9f0, roughness: 0.45 });
 const M = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.85, ...extra });
 const S = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.6, ...extra });
 const MAT = {
   grass: new THREE.MeshStandardMaterial({ color: 0x7db552, roughness: 1, normalMap: HIGH ? tex("leafy_grass", "nor", 70, 70) : null, normalScale: new THREE.Vector2(0.6, 0.6) }), rock: P("mossy_rock", 3, 3), stone: P("brick_pavement_02", 3, 3, { color: new THREE.Color(1.75, 1.5, 1.2) }), stoneDark: M(0xb39f7d), wood: S(0x8a4a2a), woodDark: S(0x4a2a18),
   roof: P("clay_roof_tiles_02", 0.4, 0.4, { color: 0xffb08a }), roofEdge: S(0xd9a640, { metalness: 0.55, roughness: 0.5 }), wall: P("beige_wall_001", 2, 1, { color: 0xfff4e2 }), gold: S(0xe0b24a, { metalness: 0.65, roughness: 0.45 }),
-  floor: P("brown_planks_05", 4, 4), lacquer: S(0x8e1f17, { roughness: 0.45 }), roofGreen: S(0x2f6b4a, { roughness: 0.5 }),
+  lacquer: S(0x8e1f17, { roughness: 0.45 }), roofGreen: S(0x2f6b4a, { roughness: 0.5 }),
   leaf: M(0x5f9e4a), leafLight: M(0x7db85a), trunk: M(0x7a5536), water: new THREE.MeshStandardMaterial({ color: 0x2f7f8a, roughness: 0.06, metalness: 0.15, transparent: true, opacity: 0.88 }),
   lotus: M(0xf28fb0), pad: M(0x4d8f45), glow: M(0xffd27a, { emissive: 0xffb84a, emissiveIntensity: 0.9 }), mountain: M(0x9fb0b8), mountainFar: M(0xbcc8cc),
 };
@@ -339,7 +343,7 @@ function sala({ x, z, rot = 0, W = 13, D = 10, H = 5.6, walls = true }) {
   const post = (lx, lz, r) => { const [px, pz] = toWorld(lx, lz); colliders.push({ x: px, z: pz, r }); };
   // stone base, front step and wooden floor
   add(new THREE.BoxGeometry(W + 1.6, FY - 0.02, D + 1.6), MAT.stoneDark, 0, (FY - 0.02) / 2, 0, g, false);
-  add(new THREE.BoxGeometry(W + 0.4, 0.06, D + 0.4), MAT.floor, 0, FY, 0, g, false);
+  add(new THREE.BoxGeometry(W + 0.4, 0.06, D + 0.4), marbleFloor(W + 0.4, D + 0.4), 0, FY, 0, g, false);
   add(new THREE.BoxGeometry(Math.min(5, W - 2), 0.18, 1), MAT.stoneDark, 0, 0.09, D / 2 + 1.2, g, false);
   { const [sx, sz] = toWorld(0, D / 2 + 1.2); floors.push({ x: sx, z: sz, c, s, hx: Math.min(5, W - 2) / 2, hz: 0.5, y: 0.18 }); } // the step you step up onto
   floors.push({ x, z, c, s, hx: W / 2 + 0.8, hz: D / 2 + 0.8, y: FY + 0.03, hall: true });
@@ -721,7 +725,7 @@ function shrine(h, monks = [], { gifts = false } = {}) {
   const top = FY + PH;
   const WP = (x, y, z) => { const [wx, wz] = h.toWorld(x, z); return [wx, y, wz]; }; // (a point in the hall, in the world)
   add(new THREE.BoxGeometry(W - 0.8, PH, PD), MAT.lacquer, 0, FY + PH / 2, pz, g);
-  add(new THREE.BoxGeometry(W - 0.7, 0.08, PD + 0.1), MAT.floor, 0, top + 0.02, pz, g, false);
+  add(new THREE.BoxGeometry(W - 0.7, 0.08, PD + 0.1), marbleFloor(W - 0.7, PD + 0.1), 0, top + 0.02, pz, g, false);
   add(new THREE.BoxGeometry(W - 0.75, 0.1, 0.06), MAT.gold, 0, FY + PH - 0.12, pz + PD / 2 + 0.01, g, false);
   add(new THREE.BoxGeometry(W - 0.75, 0.1, 0.06), MAT.gold, 0, FY + 0.12, pz + PD / 2 + 0.01, g, false);
   h.block(0, pz, (W - 0.8) / 2, PD / 2);
@@ -5523,7 +5527,7 @@ function kidStep(dt) {
   const stepsBefore = Math.floor(walkPhase / Math.PI);
   const gait = player.gait && player.gait[player.current];
   walkPhase += dt * (moving ? (gait && player.action ? Math.PI * gait.steps * player.action.timeScale : speed * 1.6) : 0); // footsteps follow the animation's own steps
-  if (moving && Math.floor(walkPhase / Math.PI) !== stepsBefore && player.y <= gy + 0.05) sound.step(insideHall(player.x, player.z) ? "wood" : onPath(player.x, player.z) ? "stone" : "grass");
+  if (moving && Math.floor(walkPhase / Math.PI) !== stepsBefore && player.y <= gy + 0.05) sound.step(insideHall(player.x, player.z) ? "marble" : onPath(player.x, player.z) ? "stone" : "grass");
   const limbs = player.model && player.model.userData.limbs;
   if (limbs) {
     const sw = moving ? Math.sin(walkPhase) * 0.7 : 0;
