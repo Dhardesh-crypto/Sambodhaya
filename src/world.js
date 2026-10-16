@@ -762,8 +762,9 @@ function shrine(h, monks = [], { gifts = false } = {}) {
   // a gold arch (suum) behind the image and a red cloth on the wall
   const arch = add(new THREE.TorusGeometry(1.05 * ik, 0.07, 10, 40, Math.PI), MAT.gold, 0, statueY + 1.05 * ik, az - 0.5, g, false);
   arch.scale.y = 1.25;
-  add(new THREE.BoxGeometry(3.6, 4.4, 0.05), S(0x9b2a1d, { roughness: 0.9 }), 0, top + 2.3, -D / 2 + 0.24, g, false);
-  add(new THREE.BoxGeometry(3.7, 0.12, 0.07), MAT.gold, 0, top + 4.5, -D / 2 + 0.25, g, false);
+  const clothTop = FY + h.H - 0.02, clothH = clothTop - (top + 0.1); // the red cloth reaches the ceiling, so the arch stays within it
+  add(new THREE.BoxGeometry(3.6, clothH, 0.05), S(0x9b2a1d, { roughness: 0.9 }), 0, top + 0.1 + clothH / 2, -D / 2 + 0.24, g, false);
+  add(new THREE.BoxGeometry(3.7, 0.12, 0.07), MAT.gold, 0, clothTop - 0.06, -D / 2 + 0.25, g, false);
   { const [bx, bz] = h.toWorld(0, az - 0.24), [sx, sz] = h.toWorld(0, pz + PD / 2 + KRAAP_BACK); // bowed head and hands reach ~1.45 m forward, clear of the incense table
     buddhaImages.push({ x: bx, z: bz, hall: h, spot: { x: sx, z: sz } }); }
   infoSpot(h === salas.access ? "emerald" : "buddha", ...WP(0, statueY + 0.95 * ik, az - 0.24), 1.3 * ik); infoSpot("altar", ...WP(0, top + 0.5, az + 0.2), 1.0);
