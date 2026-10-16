@@ -164,3 +164,15 @@ Deployed as-is (no build step on Netlify; see `netlify.toml`) to https://sambodh
 **The Learning Hall's back wall** is painted either side of the red cloth behind the image, from above the red band to the ceiling, in the manner of a Thai temple mural (จิตรกรรมฝาผนัง), symbols only as the user chose: on the left the Bodhi tree, a coloured cloth around its trunk, beside a lotus pond with a small golden pavilion; on the right the golden Dhamma wheel on a lotus, with a celestial pavilion on clouds; gold flame borders (kranok) and thin gold frames (`img/murals/back-left.jpg`, `back-right.jpg`, Higgsfield).
 
 **The Universal Hall's back wall** shows the Maravijaya, the Buddha's victory over Mara, in the same way either side of the red cloth: on the left Mara's army on elephants and horses is swept away by the flood Mae Thorani wrings from her hair; on the right the army kneels in the waves with hands in a wai while celestial beings scatter golden flowers (`img/murals/maravijaya-left.jpg`, `-right.jpg`, Higgsfield). In both halls the red cloth behind the image reaches the ceiling.
+
+## Form submissions in Airtable
+
+Every accepted Netlify Forms submission (spam filtered out) is also copied into Airtable by `netlify/functions/submission-created.mjs`, which Netlify runs on its own. The submission always stays in Netlify too; if Airtable is not set up or refuses a row, nothing is lost.
+
+Settings, in Netlify → Site configuration → Environment variables (never in the code or in chat): `AIRTABLE_TOKEN` (a personal access token with the scope `data.records:write`, access to this base only) and `AIRTABLE_BASE_ID` (starts with `app`).
+
+The base has two tables, with fields named exactly:
+- **Donations**: Submitted (date with time), Name (text), Amount (THB) (number), Method (text), Note (long text), Email (email), Thanks (text), Language (text), Slip (URL), Submission ID (text), Delete after (date), Status (single select: Awaiting check, Verified, Problem)
+- **Feedback**: Submitted (date with time), Type (text), Message (long text), Page (text), Language (text), Device (text), Email (email), Attachment (URL), Submission ID (text)
+
+The support page promises slips are kept 90 days: each donation row gets a "Delete after" date; delete the row (and the submission in Netlify) by then. The Slip link is Netlify's; if it has expired, open the submission in the Netlify dashboard (Forms → donation) by its Submission ID.
