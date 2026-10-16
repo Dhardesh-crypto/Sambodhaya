@@ -477,10 +477,12 @@ salas.media = hallAt(14, -38, { W: 13, D: 10 });
 salas.access = hallAt(30, -24, { W: 13, D: 10 });
 salas.care = hallAt(34, 6, { W: 10, D: 8, H: 5 });
 salas.rest = hallAt(-28, 14, { W: 8, D: 6, H: 4, walls: false });
-// the temple dog stays out of the Learning Hall (and off its step); while the boy is inside it waits here, facing the door
-const DOG_WAIT = (() => { const h = salas.learn, [x, z] = h.toWorld(2.6, h.D / 2 + 3.0), [cx, cz] = h.toWorld(0, 0); return { x, z, yaw: Math.atan2(cx - x, cz - z) }; })();
-const dogKeepOut = (x, z) => { const h = salas.learn, [cx, cz] = h.toWorld(0, 0), [fx, fz] = h.toWorld(0, 1); const ax = fx - cx, az = fz - cz; // the hall's own axes
-  const lz = (x - cx) * ax + (z - cz) * az, lx = (x - cx) * az - (z - cz) * ax; return Math.abs(lx) < h.W / 2 + 1.3 && Math.abs(lz) < h.D / 2 + 2.0; };
+// the temple dog stays out of the two shrine halls, the Learning Hall and the Universal Hall (and off their steps); while
+// the boy is inside one, it waits by that hall's steps, facing the door
+const DOG_HALLS = [salas.learn, salas.access];
+const DOG_WAITS = new Map(DOG_HALLS.map((h) => { const [x, z] = h.toWorld(2.6, h.D / 2 + 3.0), [cx, cz] = h.toWorld(0, 0); return [h, { x, z, yaw: Math.atan2(cx - x, cz - z) }]; }));
+const dogKeepOut = (x, z) => DOG_HALLS.find((h) => { const [cx, cz] = h.toWorld(0, 0), [fx, fz] = h.toWorld(0, 1); const ax = fx - cx, az = fz - cz; // the hall's own axes
+  const lz = (x - cx) * ax + (z - cz) * az, lx = (x - cx) * az - (z - cz) * ax; return Math.abs(lx) < h.W / 2 + 1.3 && Math.abs(lz) < h.D / 2 + 2.0; }) || null; // (the hall it may not enter, or null)
 Object.entries(salas).forEach(([id, h]) => {
   halls[id] = h.g;
   const [sx, sz] = h.toWorld(0, h.D / 2 + 1.7);            // the front step
@@ -2810,7 +2812,7 @@ function startPetDog() {
   if (animalTaken("dog")) return;
   if (!dog.obj.visible || petBusy() || player.y > groundAt(player.x, player.z) + 0.05) return;
   if (broom.held) putBroomBack();
-  if (dogKeepOut(player.x, player.z)) return; // (not in the Learning Hall)
+  if (dogKeepOut(player.x, player.z)) return; // (not in the Learning Hall or the Universal Hall)
   pet.who = "dog"; pet.phase = "call"; pet.t = 0; pet.yaw = player.yaw + Math.PI; pet.from = { x: player.x, z: player.z }; // (the way the dog faces: toward him)
   // it sits in front of him, facing him (never beside him or with its back to him)
   pet.spot = { x: player.x + Math.sin(player.yaw) * DOG_PET_D, z: player.z + Math.cos(player.yaw) * DOG_PET_D };
@@ -5427,10 +5429,10 @@ function frame(dt) {
       const ay = k && k.faceYaw != null ? k.faceYaw : al ? al.faceYaw : fd ? fd.faceYaw : player.yaw;
       bx = ax + Math.cos(ay) * 1.5 + Math.sin(ay) * 0.2; bz = az - Math.sin(ay) * 1.5 + Math.cos(ay) * 0.2;
     }
-    // the Learning Hall, the main hall where the monks sit, is no place for a dog: it waits outside by the steps
-    if (dogKeepOut(dog.x, dog.z)) { dog.x = DOG_WAIT.x; dog.z = DOG_WAIT.z; } // (arrived inside some other way)
-    const waiting = dogKeepOut(bx, bz);
-    if (waiting) { bx = DOG_WAIT.x; bz = DOG_WAIT.z; }
+    // the shrine halls (the Learning Hall, where the monks sit, and the Universal Hall) are no place for a dog: it waits outside by the steps
+    { const inside = dogKeepOut(dog.x, dog.z); if (inside) { const w = DOG_WAITS.get(inside); dog.x = w.x; dog.z = w.z; } } // (arrived inside some other way)
+    const waitHall = dogKeepOut(bx, bz), waiting = !!waitHall, waitAt = waitHall && DOG_WAITS.get(waitHall);
+    if (waiting) { bx = waitAt.x; bz = waitAt.z; }
     // after a while waiting, it trots off to keep the sweeping novice company (by day), walking at his side and
     // sitting when he stops; when the child comes out it comes back
     dog.waitT = waiting ? (dog.waitT || 0) + dt : 0;
@@ -5450,7 +5452,7 @@ function frame(dt) {
     dog.moving = dd > 0.4 && dogFree;
     let dogSpeed = 0;
     if (wantLie) { let dy = pet.yaw - dog.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); dog.yaw += dy * Math.min(1, dt * 2.5); } // lies down alongside him, where it sat
-    if (wantSit) { let dy = (withNovice ? novice.n.holder.rotation.y : waiting ? DOG_WAIT.yaw : petting ? pet.yaw : player.yaw) - dog.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); dog.yaw += dy * Math.min(1, dt * 4); }
+    if (wantSit) { let dy = (withNovice ? novice.n.holder.rotation.y : waiting ? waitAt.yaw : petting ? pet.yaw : player.yaw) - dog.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); dog.yaw += dy * Math.min(1, dt * 4); }
     if (dd > 0.4 && dogFree) { const st = Math.min(dd, dt * (dd > 6 ? 12 : 6)); dogSpeed = dt > 0 ? st / dt : 0; const [nx, nz] = collide(dog.x + ddx / dd * st, dog.z + ddz / dd * st); if (!dogKeepOut(nx, nz)) { dog.x = nx; dog.z = nz; } dog.yaw = Math.atan2(ddx, ddz); }
     // walk cycle: about one stride per 1.2 m; the legs ease in and out of walking
     dogAnim.phase.value = (dogAnim.phase.value + dt * dogSpeed * 5.2) % (Math.PI * 200); // kept small so it stays precise
