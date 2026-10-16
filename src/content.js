@@ -144,8 +144,8 @@ const WHEEL_IMAGE = {
 // Details provided by the temple team (Arnon, 12 Oct 2026), from the SCB account certificate.
 const SUPPORT = {
   recipient: { th: "นาย วัฒพงษ์ น้อยเวียง (บัญชีบุคคล สำหรับพัฒนาและสร้างวัด)", en: "Mr. Watthapong Noiwiang (an individual's account, for the temple's development and construction)" },
-  promptpayQr: null,    // path to the team's real PromptPay QR image, e.g. "img/promptpay-qr.png"
-  promptpayId: null,    // PromptPay phone or tax ID as text, shown with a copy button
+  promptpayQr: "img/promptpay-qr.png", // PromptPay QR (static, any amount) for the number below (16 Oct 2026)
+  promptpayId: "088-953-5999",          // PromptPay mobile number, account holder นาย วัฒพงษ์ น้อยเวียง (confirmed by the user, 16 Oct 2026)
   bank: {
     bank: { th: "ธนาคารไทยพาณิชย์ (SCB) สาขาชลบุรี · บัญชีออมทรัพย์ (ออนไลน์)", en: "Siam Commercial Bank (SCB), Chonburi branch · savings account (online)" },
     name: { th: "นาย วัฒพงษ์ น้อยเวียง", en: "Mr. Watthapong Noiwiang (นาย วัฒพงษ์ น้อยเวียง)" },
