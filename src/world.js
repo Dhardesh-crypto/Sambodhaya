@@ -1364,15 +1364,62 @@ JOURNEY.forEach(([th, en], i) => {
   colliders.push({ x, z: 36, r: 1.3 });
 });
 // the two doors: each is half the gateway wide, hinged on its post, so closed they would shut it completely;
-// they stand open, swung in along the sides of the road, and are solid to walk into
+// they stand open, swung in along the sides of the road, and are solid to walk into. Black lacquer painted in gold
+// (ลายรดน้ำ) like the hall windows, in three panels under raised gilded frames: a frieze of flame scrolls at the
+// top, a lattice of gold flowers about a lotus medallion in the middle, a row of lotus petals at the foot; a bronze
+// ring handle on each face.
+const doorTex = (() => {
+  const W = 1024, H = 800, c = document.createElement("canvas"); c.width = W; c.height = H; const g = c.getContext("2d");
+  const goldA = "#e2b452", goldB = "#b98a2e";
+  g.fillStyle = "#120d09"; g.fillRect(0, 0, W, H);
+  const panel = (x, y, w, h) => { g.strokeStyle = goldA; g.lineWidth = 6; g.strokeRect(x, y, w, h); g.lineWidth = 2; g.strokeRect(x + 12, y + 12, w - 24, h - 24); };
+  const top = [40, 30, W - 80, 120], mid = [40, 180, W - 80, 440], foot = [40, 650, W - 80, 120];
+  [top, mid, foot].forEach((r) => panel(...r));
+  const leaf = (x, y, s, a, flip) => { g.save(); g.translate(x, y); g.rotate(a); g.scale(flip ? -s : s, s); g.fillStyle = goldA;
+    g.beginPath(); g.moveTo(0, 18); g.bezierCurveTo(-20, 8, -16, -22, 4, -34); g.bezierCurveTo(14, -40, 22, -30, 12, -26); g.bezierCurveTo(4, -22, 8, -10, 16, -6); g.bezierCurveTo(22, 4, 12, 16, 0, 18); g.fill(); g.restore(); };
+  for (let x = 90, k = 0; x < W - 60; x += 56, k++) leaf(x, 98, 0.95, k % 2 ? 1.2 : 0.4, k % 2); // the frieze of scrolls
+  // the middle: a lattice of lozenges, a four-petalled flower in each
+  g.save(); g.beginPath(); g.rect(mid[0] + 16, mid[1] + 16, mid[2] - 32, mid[3] - 32); g.clip();
+  g.strokeStyle = goldB; g.lineWidth = 2;
+  for (let d = -H; d < W + H; d += 70) { g.beginPath(); g.moveTo(d, mid[1]); g.lineTo(d + mid[3], mid[1] + mid[3]); g.stroke(); g.beginPath(); g.moveTo(d, mid[1] + mid[3]); g.lineTo(d + mid[3], mid[1]); g.stroke(); }
+  g.fillStyle = goldA;
+  for (let y = mid[1] + 35, row = 0; y < mid[1] + mid[3]; y += 35, row++) for (let x = (row % 2 ? 35 : 0) + 40; x < W; x += 70) {
+    for (let k = 0; k < 4; k++) { g.save(); g.translate(x, y); g.rotate(k * Math.PI / 2); g.beginPath(); g.ellipse(0, -7, 4, 7, 0, 0, Math.PI * 2); g.fill(); g.restore(); }
+  }
+  g.restore();
+  // the medallion: a gold ring on black, a lotus in it
+  const cx = W / 2, cy = mid[1] + mid[3] / 2;
+  g.fillStyle = "#120d09"; g.beginPath(); g.arc(cx, cy, 150, 0, Math.PI * 2); g.fill();
+  g.strokeStyle = goldA; g.lineWidth = 10; g.beginPath(); g.arc(cx, cy, 145, 0, Math.PI * 2); g.stroke(); g.lineWidth = 3; g.beginPath(); g.arc(cx, cy, 126, 0, Math.PI * 2); g.stroke();
+  for (let k = 0; k < 16; k++) leaf(cx + Math.cos(k / 16 * Math.PI * 2) * 136, cy + Math.sin(k / 16 * Math.PI * 2) * 136, 0.42, k / 16 * Math.PI * 2 + Math.PI / 2, false);
+  g.fillStyle = goldA; g.strokeStyle = "#120d09"; g.lineWidth = 3;
+  [[-2.2, 62], [-1.45, 82], [-0.72, 96], [0, 104], [0.72, 96], [1.45, 82], [2.2, 62]].forEach(([a, r]) => {
+    g.save(); g.translate(cx, cy + 60); g.rotate(a * 0.4); g.beginPath(); g.moveTo(0, 0); g.quadraticCurveTo(-36, -r * 0.6, 0, -r); g.quadraticCurveTo(36, -r * 0.6, 0, 0); g.fill(); g.stroke(); g.restore();
+  });
+  // the foot: lotus petals
+  for (let x = 70; x < W - 70; x += 48) { g.fillStyle = goldA; g.beginPath(); g.moveTo(x - 20, foot[1] + 100); g.quadraticCurveTo(x - 22, foot[1] + 40, x, foot[1] + 22); g.quadraticCurveTo(x + 22, foot[1] + 40, x + 20, foot[1] + 100); g.fill(); }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
+})();
+const DOOR_MAT = new THREE.MeshStandardMaterial({ map: doorTex, roughness: 0.32, metalness: 0.12 });
+const BRONZE = S(0x8a6a35, { metalness: 0.75, roughness: 0.35 });
 {
   const HALF = 7 - 0.55, W = HALF - 0.05, OPEN = 1.5; // from the post's inner face to the middle; how far they swing in
   [-1, 1].forEach((sg) => {
     const hinge = new THREE.Group(); hinge.position.set(sg * HALF, 0, 36); scene.add(hinge);
     hinge.rotation.y = sg < 0 ? OPEN : -OPEN;            // swung in, toward the temple
-    add(new THREE.BoxGeometry(W, 5, 0.25), MAT.wood, -sg * W / 2, 2.75, 0, hinge);                 // the leaf
-    [1.1, 2.75, 4.4].forEach((y) => add(new THREE.BoxGeometry(W - 0.2, 0.18, 0.32), MAT.woodDark, -sg * W / 2, y, 0, hinge, false)); // rails
-    add(new THREE.BoxGeometry(W, 0.2, 0.3), MAT.gold, -sg * W / 2, 5.3, 0, hinge, false);           // a gold top rail
+    const lx = -sg * W / 2;
+    add(new THREE.BoxGeometry(W, 5, 0.25), DOOR_MAT, lx, 2.75, 0, hinge);                          // the leaf
+    // raised gilded frames: round the edge, and between the panels (heights match the painting)
+    [[W, 0.14, 5.18], [W, 0.14, 0.32]].forEach(([w, h, y]) => add(new THREE.BoxGeometry(w, h, 0.31), MAT.gold, lx, y, 0, hinge, false));
+    [-1, 1].forEach((e) => add(new THREE.BoxGeometry(0.14, 5, 0.31), MAT.gold, lx + e * (W / 2 - 0.07), 2.75, 0, hinge, false));
+    [4.22, 1.28].forEach((y) => add(new THREE.BoxGeometry(W - 0.2, 0.09, 0.29), MAT.gold, lx, y, 0, hinge, false));
+    // a bronze ring handle on each face, near the meeting edge
+    [-1, 1].forEach((f) => {
+      const hx = -sg * (W - 0.45);
+      add(new THREE.CylinderGeometry(0.16, 0.16, 0.04, 20).rotateX(Math.PI / 2), BRONZE, hx, 2.4, f * 0.145, hinge, false);
+      add(new THREE.TorusGeometry(0.13, 0.025, 8, 20), BRONZE, hx, 2.27, f * 0.18, hinge, false);
+    });
+    add(new THREE.BoxGeometry(W, 0.2, 0.3), MAT.gold, lx, 5.3, 0, hinge, false);           // a gold top rail
     const th = hinge.rotation.y, c = Math.cos(th), sn = Math.sin(th), ox = -sg * W / 2;
     blockers.push({ x: hinge.position.x + ox * c, z: 36 - ox * sn, c, s: sn, hx: W / 2, hz: 0.2 });
   });
