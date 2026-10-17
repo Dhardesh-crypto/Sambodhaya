@@ -1734,19 +1734,49 @@ function tieCloth() {
   scene.add(g); bodhiBands[n] = g;
 }
 
+/* ---------------- the tool rack (ที่เก็บอุปกรณ์) ---------------- */
+// The broom and the watering can share one low teak rack by the plaza, facing the entrance road, each on its own
+// gold-ringed place. While a child holds one, its ring glows and an arrow bobs above it, seen from across the
+// courtyard, so it is plain where it goes back. Picking up and putting back are the same button at the rack.
+const RACK = { x: -7.2, z: 12.7 }, RACK_TOP = 0.08;
+const BROOM_AT = { x: RACK.x - 0.12, z: RACK.z - 0.6 }, CAN_AT = { x: RACK.x + 0.05, z: RACK.z + 0.62 };
+const rackMarks = {};
+{
+  const g = new THREE.Group(); g.position.set(RACK.x, groundAt(RACK.x, RACK.z), RACK.z); scene.add(g);
+  add(new THREE.BoxGeometry(1.0, RACK_TOP, 2.3), MAT.wood, 0, RACK_TOP / 2, 0, g);                              // the platform
+  [-1.05, 1.05].forEach((z) => add(new THREE.BoxGeometry(0.09, 1.3, 0.09), MAT.wood, -0.42, 0.65, z, g));      // two posts at the back
+  add(new THREE.BoxGeometry(0.07, 0.07, 2.2), MAT.wood, -0.42, 1.18, 0, g);                                     // the rail the broom leans on
+  const gold = (r) => { const m = new THREE.Mesh(new THREE.RingGeometry(r, r + 0.05, 40), new THREE.MeshBasicMaterial({ color: 0xd9a92b, transparent: true, side: THREE.DoubleSide })); m.rotation.x = -Math.PI / 2; return m; };
+  [["broom", BROOM_AT, 0.32], ["can", CAN_AT, 0.32]].forEach(([id, at, r]) => {
+    const ring = gold(r); ring.position.set(at.x - RACK.x, RACK_TOP + 0.005, at.z - RACK.z); g.add(ring);         // its place, always marked
+    const glow = gold(r + 0.07); glow.material = glow.material.clone(); glow.material.color.set(0xffd64a); glow.position.copy(ring.position); glow.position.y += 0.004; glow.visible = false; g.add(glow);
+    const arrow = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.42, 16), new THREE.MeshBasicMaterial({ color: 0xffc83a })); arrow.rotation.x = Math.PI; arrow.visible = false; g.add(arrow);
+    rackMarks[id] = { glow, arrow, x: ring.position.x, z: ring.position.z };
+  });
+  colliders.push({ x: RACK.x - 0.35, z: RACK.z - 0.6, r: 0.45 }, { x: RACK.x - 0.35, z: RACK.z + 0.6, r: 0.45 });
+  sign(tx("ที่เก็บอุปกรณ์", "Tool rack"), tx("วางไม้กวาดและบัวรดน้ำคืนที่วงสีทอง", "Put the broom and can back on the gold rings"), "🧹", RACK.x - 0.4, 2.75, RACK.z, 2.4);
+}
+// on picking a tool up: where it goes back
+function rackHint() { toast(`🧹 ${esc(tx("เสร็จแล้ววางคืนที่ชั้นเก็บอุปกรณ์ ตรงวงสีทอง", "When you're done, put it back on the tool rack, on its gold ring"))}`, 5); }
+// while a tool is held (by either child), its place glows and an arrow bobs above it
+function rackMark(id, held, t) {
+  const m = rackMarks[id]; m.glow.visible = m.arrow.visible = held;
+  if (!held) return;
+  m.glow.material.opacity = 0.55 + 0.45 * Math.sin(t * 4);
+  m.arrow.position.set(m.x, 1.55 + Math.sin(t * 3) * 0.12, m.z);
+}
+
 /* ---------------- sweeping the courtyard (กวาดลานวัด) ---------------- */
-// A broom leans by the plaza. Picking it up, the boy sweeps as he walks: fallen Bodhi leaves before the broom are
-// brushed away. Now and then a leaf falls from the tree. Putting it back is the same button at the stand.
-const BROOM_AT = { x: -6.4, z: 12.6 };
+// A broom leans on the tool rack. Picking it up, the boy sweeps as he walks: fallen Bodhi leaves before the broom are
+// brushed away. Now and then a leaf falls from the tree.
 let broom = { held: false, obj: new THREE.Group(), phase: 0, swept: 0 };
 const BROOM_PLACE = { id: "broom", icon: "🧹", th: "กวาดลานวัด", en: "Sweep the courtyard", sub: ["หยิบไม้กวาด", "Pick up the broom"] };
-const BROOM_BACK = { id: "broom", icon: "🧹", th: "วางไม้กวาด", en: "Put the broom back", sub: ["วางไว้ที่เดิม", "Lean it back where it was"] };
+const BROOM_BACK = { id: "broom", icon: "🧹", th: "วางไม้กวาด", en: "Put the broom back", sub: ["พิงไว้ที่ชั้นเก็บอุปกรณ์", "Lean it on the tool rack, on its gold ring"] };
 {
   const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 1.9, 8), MAT.wood); handle.position.y = 0.95 + 0.25; handle.castShadow = true;
   const head = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.55, 10, 1, true), S(0xc9a560, { roughness: 1, side: THREE.DoubleSide })); head.position.y = 0.27; head.castShadow = true;
   const tie = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.08, 10), S(0xa03a2a)); tie.position.y = 0.52;
   broom.obj.add(handle, head, tie); scene.add(broom.obj);
-  colliders.push({ x: BROOM_AT.x - 0.3, z: BROOM_AT.z, r: 0.3 });
 }
 function putBroomBack() { broom.held = false; }
 const fallenLeaves = [];
@@ -1762,7 +1792,8 @@ for (let i = 0; i < (HIGH ? 34 : 16); i++) dropLeaf(false);
 let leafClock = 8;
 function broomStep(dt, moving) {
   // the broom: leaning at its stand, or in his hands, its head swinging over the ground as he sweeps
-  if (!broom.held) { broom.obj.position.set(BROOM_AT.x, 0, BROOM_AT.z); broom.obj.rotation.set(0, 0, -0.22); }
+  rackMark("broom", broom.held, performance.now() / 1000);
+  if (!broom.held) { broom.obj.position.set(BROOM_AT.x, groundAt(RACK.x, RACK.z) + RACK_TOP, BROOM_AT.z); broom.obj.rotation.set(0, 0, 0.22); } // leaning back on the rail
   else {
     const stroke = Math.floor(broom.phase / Math.PI); broom.phase += dt * (moving ? 5 : 1.4);
     const fwd = new THREE.Vector3(Math.sin(player.yaw), 0, Math.cos(player.yaw)), right = new THREE.Vector3(-fwd.z, 0, fwd.x);
@@ -1794,13 +1825,13 @@ function poseBroom(model, B) {
 }
 
 /* ---------------- watering the plants (รดน้ำต้นไม้) ---------------- */
-// A watering can stands by a water jar across the entrance road from the broom. Picking it up, the child carries it
+// A watering can stands on the tool rack beside the broom, by a water jar. Picking it up, the child carries it
 // at the side; at a potted plant (the two by the gate, the bonsai either side of every hall's steps) E waters it:
 // the arm comes forward, the can tips and a fine stream falls at the foot of the plant. Each plant once a visit.
-const CAN_AT = { x: 6.6, z: 12.6 }, CAN_DUR = 3.4;
+const CAN_DUR = 3.4, CAN_SIZE = 2; // (CAN_AT: on the tool rack)
 let can = { held: false, obj: new THREE.Group(), t: -1, plant: null, stand: null, faceYaw: 0, watered: new Set(), w: 0, tilt: 0, spill: 0, splash: 0 };
 const CAN_PLACE = { id: "can", icon: "🪴", th: "รดน้ำต้นไม้", en: "Water the plants", sub: ["หยิบบัวรดน้ำ", "Pick up the watering can"] };
-const CAN_BACK = { id: "can", icon: "🪴", th: "วางบัวรดน้ำ", en: "Put the can back", sub: ["วางไว้ที่เดิม", "Set it back where it was"] };
+const CAN_BACK = { id: "can", icon: "🪴", th: "วางบัวรดน้ำ", en: "Put the can back", sub: ["วางไว้ที่ชั้นเก็บอุปกรณ์", "Set it on the tool rack, on its gold ring"] };
 const WATER_PLACE = { id: "water", icon: "💧", th: "รดน้ำต้นไม้", en: "Water the plant", sub: ["ค่อย ๆ รดที่โคนต้น", "Gently, at the foot of the plant"] };
 const CAN_GRIP = new THREE.Vector3(0, 0.31, 0), CAN_ROSE = new THREE.Vector3(0, 0.275, 0.32); // the top of the handle; the spout's rose
 {
@@ -1810,10 +1841,10 @@ const CAN_GRIP = new THREE.Vector3(0, 0.31, 0), CAN_ROSE = new THREE.Vector3(0, 
   const rose = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.022, 0.025, 10), metal); rose.position.copy(CAN_ROSE); rose.rotation.x = Math.PI / 4;
   const handle = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.012, 6, 14, Math.PI), metal); handle.position.y = 0.22; handle.rotation.y = Math.PI / 2;
   [body, spout, handle].forEach((m) => { m.castShadow = true; });
-  can.obj.add(body, spout, rose, handle); scene.add(can.obj);
+  can.obj.add(body, spout, rose, handle); can.obj.scale.setScalar(CAN_SIZE); scene.add(can.obj);
   can.stream = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ color: 0xcfeeff, transparent: true, opacity: 0.55, depthWrite: false })); // the water, from the rose to the soil
   can.stream.visible = false; scene.add(can.stream);
-  props("jar", 1.1, [[CAN_AT.x + 1.0, CAN_AT.z + 0.1, 0.4]]); colliders.push({ x: CAN_AT.x + 1.0, z: CAN_AT.z + 0.1, r: 0.6 });
+  props("jar", 1.1, [[RACK.x - 0.1, RACK.z + 1.8, 0.4]]); colliders.push({ x: RACK.x - 0.1, z: RACK.z + 1.8, r: 0.6 });
 }
 function putCanBack() { can.held = false; can.t = -1; can.w = can.tilt = 0; can.stream.visible = false; }
 // the nearest plant not yet watered, within reach
@@ -1831,10 +1862,11 @@ function startWater(i) {
 }
 function placeCan(grip) {
   const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(can.tilt, player.yaw, 0, "YXZ"));
-  can.obj.quaternion.copy(q); can.obj.position.copy(grip).sub(CAN_GRIP.clone().applyQuaternion(q));
+  can.obj.quaternion.copy(q); can.obj.position.copy(grip).sub(CAN_GRIP.clone().multiplyScalar(CAN_SIZE).applyQuaternion(q));
 }
 function canStep(dt) {
-  if (!can.held) { can.obj.position.set(CAN_AT.x, groundAt(CAN_AT.x, CAN_AT.z), CAN_AT.z); can.obj.rotation.set(0, -0.6, 0); return; }
+  rackMark("can", can.held, performance.now() / 1000);
+  if (!can.held) { can.obj.position.set(CAN_AT.x, groundAt(RACK.x, RACK.z) + RACK_TOP, CAN_AT.z); can.obj.rotation.set(0, Math.PI / 2, 0); return; } // on the rack, its spout to the road
   if (can.t >= 0) {
     const t = (can.t += dt);
     if (t < 0.6) { player.x += (can.stand.x - player.x) * Math.min(1, dt * 8); player.z += (can.stand.z - player.z) * Math.min(1, dt * 8); }
@@ -4488,8 +4520,8 @@ function openPlace(p) {
   if (p.id === "fish") { startFeed(); return; }
   if (p.merit) { startMerit(meritHere()); return; }
   if (p.id === "cat") { startPetCat(); return; }
-  if (p.id === "broom") { broom.held = !broom.held; if (broom.held) putCanBack(); near = null; return; }
-  if (p.id === "can") { can.held = !can.held; if (can.held) putBroomBack(); near = null; return; }
+  if (p.id === "broom") { broom.held = !broom.held; if (broom.held) { putCanBack(); rackHint(); } near = null; return; }
+  if (p.id === "can") { can.held = !can.held; if (can.held) { putBroomBack(); rackHint(); } near = null; return; }
   if (p.id === "water") { startWater(p.key); return; }
   if (p.id === "fold") { startFold(); return; }
   if (p.id === "monk") { openMonk(p); return; }
@@ -5651,8 +5683,12 @@ function kidStep(dt) {
   if (onBridge(player.x, player.z) && feed.t < 0 && kraap.t < 0 && 2.5 < bestD) { best = fest.now === "loykrathong" ? { id: "bridge", icon: "🪷", th: "ลอยกระทง", en: "Loy Krathong", sub: ["ลอยกระทง · ให้อาหารปลา", "Float a krathong · feed the fish"] } : FISH_PLACE; bestD = 2.5; }
   if (merit.t < 0 && kraap.t < 0) { const mh = meritHere(); if (mh) { best = { ...MERIT[mh.kind].place, merit: mh }; bestD = 0.5; } } // standing at it: the offering comes first
   if (catNear() && 1.9 < bestD) { best = CAT_PLACE; bestD = 1.9; }
-  if (Math.hypot(player.x - BROOM_AT.x, player.z - BROOM_AT.z) < 1.8 && 2.3 < bestD && !heldElsewhere("broom")) { best = broom.held ? BROOM_BACK : BROOM_PLACE; bestD = 2.3; }
-  if (Math.hypot(player.x - CAN_AT.x, player.z - CAN_AT.z) < 1.8 && 2.3 < bestD && !heldElsewhere("can")) { best = can.held ? CAN_BACK : CAN_PLACE; bestD = 2.3; }
+  { // the tool rack: holding a tool, it goes back to its place; empty-handed, the nearer tool is picked up
+    const tools = Math.hypot(player.x - RACK.x, player.z - RACK.z) < 2.4 ? [["broom", BROOM_AT, broom.held, BROOM_PLACE, BROOM_BACK], ["can", CAN_AT, can.held, CAN_PLACE, CAN_BACK]]
+      .map(([id, at, held, take, back]) => ({ id, d: Math.hypot(player.x - at.x, player.z - at.z), held, take, back })).filter((t) => !heldElsewhere(t.id)) : [];
+    const t = tools.find((u) => u.held) || tools.sort((a, b) => a.d - b.d)[0];
+    if (t && 2.3 < bestD) { best = t.held ? t.back : t.take; bestD = 2.3; }
+  }
   if (foldHere() && 1.6 < bestD) { best = FOLD_PLACE; bestD = 1.6; }
   if (can.held && can.t < 0) { const w = potHere(); if (w && w.d < bestD) { best = { ...WATER_PLACE, key: w.i }; bestD = w.d; } }
   if (almsScene.on) for (const m of almsMonks) { const d = Math.hypot(player.x - (m.x + Math.sin(m.yaw) * ALMS_STAND), player.z - (m.z + Math.cos(m.yaw) * ALMS_STAND)); if (d < 1.5 && d < bestD) { best = { ...ALMS_PLACE, monk: m }; bestD = d; } }
