@@ -1266,14 +1266,59 @@ function waterfall(x, zTop, yTop, yPool, width) {
 
 const BIG_BUDDHA_H = 21, BIG_BUDDHA_TURN = -Math.PI / 2; // the great white Buddha above the waterfall: its height; turns it to face the temple
 /* ---------------- practice garden: four observation stones and a waterfall wall ---------------- */
+// The cliff: a rugged face of weathered rock in front of the solid core, with uneven ledges and bulges, a skyline
+// that rises and falls, and a recess down the middle that the water falls through, pouring over a rock lip at the
+// top. Big boulders stand at its feet; a rim of stones of every size edges the pool.
+const rockNoise = (() => { // smooth value noise, the same every visit
+  const h = (x, y) => { const n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return n - Math.floor(n); };
+  const sm = (t) => t * t * (3 - 2 * t);
+  const v = (x, y) => { const xi = Math.floor(x), yi = Math.floor(y), xf = sm(x - xi), yf = sm(y - yi);
+    const a = h(xi, yi), b = h(xi + 1, yi), c = h(xi, yi + 1), d = h(xi + 1, yi + 1); return a + (b - a) * xf + (c - a) * yf + (a - b - c + d) * xf * yf; };
+  return (x, y) => v(x, y) * 0.55 + v(x * 2.1 + 7, y * 2.1 + 3) * 0.3 + v(x * 4.3 + 1, y * 4.3 + 9) * 0.15;
+})();
+function cliffFace({ w, h, z, notch = 2.7, lipY }) {
+  const geo = new THREE.PlaneGeometry(w, h, 110, 52), pos = geo.attributes.position, uv = geo.attributes.uv;
+  const sstep = (a, b, t) => { const k = Math.min(1, Math.max(0, (t - a) / (b - a))); return k * k * (3 - 2 * k); };
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), y0 = pos.getY(i) + h / 2, ax = Math.abs(x), inNotch = 1 - sstep(notch - 0.6, notch + 0.5, ax);
+    let top = h - 0.9 + 1.4 * rockNoise(x * 0.33 + 4, 1.7);                     // the skyline,
+    if (lipY) top += (lipY + 0.12 - top) * (1 - sstep(notch, notch + 1.6, ax)); // level with the lip where the water comes over
+    const y = y0 * top / h;
+    let out = 0.15 + 1.25 * rockNoise(x * 0.32, y * 0.38) + 0.35 * rockNoise(x * 1.3 + 5, y * 1.1);  // bulges,
+    out += 0.3 * sstep(0.35, 0.65, (y * 0.62 + rockNoise(x * 0.25, 9) * 1.6) % 1);              // ledges (the rock's beds),
+    out -= 0.35 * Math.pow(Math.abs(Math.sin(x * 1.15 + rockNoise(y * 0.3, x * 0.1) * 3)), 14);  // and upright cracks
+    out += 0.7 * (1 - sstep(0, 1.6, y));                                         // the scree flaring out at the foot
+    out -= inNotch * (1.15 + 0.15 * rockNoise(x, y * 2));                         // the recess behind the water
+    if (lipY) out += inNotch * 1.25 * sstep(lipY - 0.9, lipY - 0.1, y);          // the lip the water pours over
+    out -= 0.9 * sstep(top - 0.9, top, y);                                       // rounded back over the top
+    pos.setXYZ(i, x, y, out);
+    uv.setXY(i, (x + w / 2) / 3.2, y / 3.2);
+  }
+  geo.computeVertexNormals();
+  const m = new THREE.Mesh(geo, P("mossy_rock", 1, 1, { color: 0xd8d2c4 })); m.position.z = z; m.castShadow = m.receiveShadow = true; scene.add(m); camBlock.push(m);
+  return m;
+}
 {
-  add(new THREE.BoxGeometry(22, 9, 3), MAT.rock, 0, 4.5, -60);
-  props("boulder", 7, [[-7.5, -59, 0.4], [7.5, -59.5, 2.5], [-3.6, -58.6, 1.2, 4.5], [3.8, -58.8, 4, 4.8]]);
+  add(new THREE.BoxGeometry(22, 8.6, 3), MAT.rock, 0, 4.3, -62);                        // the solid core, behind the face
+  cliffFace({ w: 22.4, h: 9.6, z: -59.25, lipY: 9 });
+  props("boulder", 7, [[-7.5, -59, 0.4], [7.5, -59.5, 2.5]]);
+  // the pool's rim: stones of every size, half sunk, round the water
+  {
+    const n = 46, geo = new THREE.IcosahedronGeometry(1, 1), m = new THREE.InstancedMesh(geo, P("mossy_rock", 1, 1, { color: 0xcfc8b8 }), n), o = new THREE.Object3D();
+    for (let i = 0; i < n; i++) { // bigger toward the cliff, small and scattered at the front
+      const k = i / (n - 1), a = Math.PI * (-0.04 + 1.08 * k), side = Math.abs(Math.cos(a));
+      const sz = (0.18 + 0.32 * rockNoise(i * 1.7, 0.5)) * (0.8 + 0.9 * side) + (rockNoise(i * 3.1, 2) > 0.62 ? 0.3 : 0);
+      const r = 4.95 + 0.35 * (rockNoise(i * 2.3, 4) - 0.5) + sz * 0.3;
+      o.position.set(Math.cos(a) * r, 0.1 + sz * 0.12, -55.5 + Math.sin(a) * r); // (the half toward the garden; the cliff closes the back)
+      o.rotation.set(i * 0.7, i * 1.3, i * 0.4); o.scale.set(sz * (1.1 + 0.5 * rockNoise(i, 7)), sz * 0.55, sz * (0.9 + 0.4 * rockNoise(7, i))); o.updateMatrix(); m.setMatrixAt(i, o.matrix);
+    }
+    m.castShadow = m.receiveShadow = true; scene.add(m);
+  }
   props("bamboo", 7, [[-13, -50, 0], [-15, -55, 1], [13, -50, 2], [15, -55, 3], [-11, -57, 4], [11, -57, 5]]);
   add(new THREE.CylinderGeometry(5, 5, 0.4, 24), MAT.water, 0, 0.2, -55.5, scene, false);
   waterfall(0, -58.35, 9, 0.42, 4.6);
   colliders.push({ x: 0, z: -56, r: 5 });
-  blockers.push({ x: 0, z: -60, c: 1, s: 0, hx: 11, hz: 1.6 });
+  blockers.push({ x: 0, z: -59.6, c: 1, s: 0, hx: 11, hz: 2.0 });
   // above the waterfall, a great white Buddha image (Maravijaya, ปางมารวิชัย) sits on a rock terrace, facing the
   // temple; seen from all over the grounds, like the great white Buddhas on Thai hillsides. The water seems to pour
   // from beneath its seat. Soft floodlights light it at night.
