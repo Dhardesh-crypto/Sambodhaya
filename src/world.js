@@ -210,6 +210,46 @@ function props(name, h, list, { fallback, shadow = true, parent = scene, extra =
   }
 }
 
+// plaster, lotus petals, frieze and shutters: shared by the halls, the temple wall and the Bodhi tree's platform
+const wallCanvas = (w, h, draw) => { const c = document.createElement("canvas"); c.width = w; c.height = h; draw(c.getContext("2d"), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; t.anisotropy = 8; return t; };
+const plasterTex = wallCanvas(512, 512, (g, w, h) => {
+  g.fillStyle = "#f6f1e8"; g.fillRect(0, 0, w, h);
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 2600; i++) { g.fillStyle = `rgba(${rnd() < 0.5 ? "120,110,95" : "255,255,255"},${0.04 + rnd() * 0.06})`; g.fillRect(rnd() * w, rnd() * h, 1 + rnd() * 3, 1 + rnd() * 3); } // the trowelled lime
+  for (let i = 0; i < 9; i++) { const x = rnd() * w, gr = g.createLinearGradient(0, 0, 0, h * (0.2 + rnd() * 0.3)); gr.addColorStop(0, "rgba(120,108,90,.10)"); gr.addColorStop(1, "rgba(120,108,90,0)"); g.fillStyle = gr; g.fillRect(x, 0, 4 + rnd() * 10, h); } // faint streaks from the eaves
+  const damp = g.createLinearGradient(0, h, 0, h * 0.72); damp.addColorStop(0, "rgba(96,98,78,.32)"); damp.addColorStop(1, "rgba(96,98,78,0)"); g.fillStyle = damp; g.fillRect(0, h * 0.72, w, h * 0.28); // rising damp at the foot
+});
+const petalTex = wallCanvas(256, 64, (g, w, h) => { // a band of upright lotus petals
+  g.fillStyle = "#e9e1d2"; g.fillRect(0, 0, w, h);
+  for (let x = 0; x < w; x += 32) { const gr = g.createLinearGradient(x, 0, x + 32, 0); gr.addColorStop(0, "#d9d0bf"); gr.addColorStop(0.5, "#fbf8f1"); gr.addColorStop(1, "#d9d0bf");
+    g.fillStyle = gr; g.strokeStyle = "#a99c86"; g.lineWidth = 2; g.beginPath(); g.moveTo(x + 2, h); g.quadraticCurveTo(x + 1, h * 0.35, x + 16, 4); g.quadraticCurveTo(x + 31, h * 0.35, x + 30, h); g.fill(); g.stroke(); }
+});
+const friezeTex = wallCanvas(256, 64, (g, w, h) => { // gold triangles hanging from a gold rail, on red
+  g.fillStyle = "#8e1f17"; g.fillRect(0, 0, w, h); g.fillStyle = "#e0b24a"; g.fillRect(0, 0, w, 9);
+  for (let x = 0; x < w; x += 64) {
+    g.fillStyle = "#e0b24a"; g.beginPath(); g.moveTo(x + 4, 9); g.lineTo(x + 32, h - 6); g.lineTo(x + 60, 9); g.fill();
+    g.fillStyle = "#8e1f17"; g.beginPath(); g.moveTo(x + 16, 9); g.lineTo(x + 32, h - 26); g.lineTo(x + 48, 9); g.fill();
+    g.fillStyle = "#f2cf6a"; g.beginPath(); g.arc(x + 32, h - 5, 4, 0, Math.PI * 2); g.fill();
+  }
+});
+const shutterTex = wallCanvas(512, 512, (g, w, h) => { // two leaves of black lacquer, painted in gold
+  g.fillStyle = "#14100c"; g.fillRect(0, 0, w, h);
+  g.strokeStyle = "#d9a640"; g.fillStyle = "#d9a640";
+  [0, w / 2].forEach((x0) => {
+    const lw = w / 2, cx = x0 + lw / 2;
+    g.lineWidth = 6; g.strokeRect(x0 + 14, 14, lw - 28, h - 28); g.lineWidth = 2; g.strokeRect(x0 + 26, 26, lw - 52, h - 52);
+    g.lineWidth = 3; g.beginPath(); g.moveTo(cx, 60); g.lineTo(cx, h - 60); g.stroke(); // a stem up the middle, with leaves and flowers
+    for (let y = 90, k = 0; y < h - 80; y += 46, k++) [-1, 1].forEach((sg) => { g.beginPath(); g.moveTo(cx, y); g.quadraticCurveTo(cx + sg * 40, y - 30, cx + sg * 70, y - 6); g.quadraticCurveTo(cx + sg * 38, y - 4, cx, y); g.fill(); if (k % 2) { g.beginPath(); g.arc(cx + sg * 78, y - 10, 7, 0, Math.PI * 2); g.fill(); } });
+    g.beginPath(); g.moveTo(cx, h / 2 - 40); g.lineTo(cx + 34, h / 2); g.lineTo(cx, h / 2 + 40); g.lineTo(cx - 34, h / 2); g.closePath(); g.fill(); // the lozenge at the heart
+    g.fillStyle = "#14100c"; g.beginPath(); g.arc(cx, h / 2, 12, 0, Math.PI * 2); g.fill(); g.fillStyle = "#d9a640";
+  });
+});
+const WALL_PLASTER = new THREE.MeshStandardMaterial({ map: plasterTex, color: 0xe4ddd0, roughness: 0.92 }); // (a touch below white: the sun and the bloom do the rest)
+const WALL_WHITE = S(0xe2dbcd, { roughness: 0.9 });
+const WALL_PETALS = new THREE.MeshStandardMaterial({ map: petalTex, roughness: 0.85 });
+const WALL_FRIEZE = new THREE.MeshStandardMaterial({ map: friezeTex, roughness: 0.5, metalness: 0.2 });
+const WALL_SHUTTER = new THREE.MeshStandardMaterial({ map: shutterTex, roughness: 0.35, metalness: 0.15 });
+
 /* ---------------- ground, plaza and paths ---------------- */
 // the ground: the temple island, a moat around it, and the land beyond
 const MOAT = { r1: 79, r2: 86, bed: -1.5, water: -0.45 };
@@ -237,8 +277,44 @@ const BRIDGE = { zc: (MOAT.r1 + MOAT.r2) / 2, half: (MOAT.r2 - MOAT.r1) / 2 + 2 
     add(new THREE.CylinderGeometry(0.6, 0.6, 0.04, 10), MAT.pad, Math.cos(a) * r, MOAT.water + 0.03, Math.sin(a) * r, scene, false);
   }
 }
-// paving is laid flush: its surface is only a few centimetres above the grass, where feet walk
-add(new THREE.CylinderGeometry(16, 16, 0.2, 64), P("brick_pavement_02", 11, 11, { color: new THREE.Color(1.75, 1.5, 1.2) }), 0, -0.06, 0, scene, false);
+// paving is laid flush: its surface is only a few centimetres above the grass, where feet walk.
+// The plaza: sandstone flagstones laid in rings round the Bodhi tree, each slab its own shade, joints staggered from
+// ring to ring; a ring of river pebbles at the foot of the tree's platform, and a band of darker stone at the edge.
+const plazaTex = (() => {
+  const N = HIGH ? 2048 : 1024, R = 16, px = N / (2 * R), c = document.createElement("canvas"); c.width = c.height = N; const g = c.getContext("2d");
+  let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  g.fillStyle = "#6f6456"; g.fillRect(0, 0, N, N); // the joints
+  const slab = (r0, r1, a0, a1, base) => {
+    const k = 0.74 + rnd() * 0.36, warm = rnd() * 14 - 7, col = base.map((v, j) => Math.round(Math.min(255, v * k + (j === 0 ? warm : j === 2 ? -warm : 0))));
+    g.fillStyle = `rgb(${col})`; g.beginPath();
+    const gap = 0.035 * px, rr0 = r0 * px + gap, rr1 = r1 * px - gap, da = gap / (r1 * px);
+    g.arc(N / 2, N / 2, rr1, a0 + da, a1 - da); g.arc(N / 2, N / 2, rr0, a1 - da * r1 / r0, a0 + da * r1 / r0, true); g.closePath(); g.fill();
+    for (let i = 0; i < (r1 - r0) * (a1 - a0) * r1 * 60; i++) { // the grain of the stone
+      const a = a0 + rnd() * (a1 - a0), r = (r0 + rnd() * (r1 - r0)) * px;
+      g.fillStyle = `rgba(${rnd() < 0.5 ? "60,50,40" : "255,250,240"},${0.05 + rnd() * 0.08})`; g.fillRect(N / 2 + Math.cos(a) * r, N / 2 + Math.sin(a) * r, 1 + rnd() * 2.5, 1 + rnd() * 2.5);
+    }
+    if (rnd() < 0.25) { // a weathered patch: lichen or old stain
+      const a = (a0 + a1) / 2, r = (r0 + r1) / 2 * px, x = N / 2 + Math.cos(a) * r, y = N / 2 + Math.sin(a) * r, rad = (0.2 + rnd() * 0.3) * px;
+      const gr = g.createRadialGradient(x, y, 0, x, y, rad); gr.addColorStop(0, rnd() < 0.5 ? "rgba(95,100,70,.28)" : "rgba(70,58,45,.25)"); gr.addColorStop(1, "rgba(0,0,0,0)"); g.fillStyle = gr; g.fillRect(x - rad, y - rad, 2 * rad, 2 * rad);
+    }
+  };
+  const sand = [178, 162, 138];
+  for (let r = 7.6; r < 15.2; r += 1.1) { // rings of slabs, each slab about a metre and a quarter along the ring
+    const r1 = Math.min(15.2, r + 1.1), n = Math.round(2 * Math.PI * r1 / 1.25), off = rnd() * 6.28;
+    for (let i = 0; i < n; i++) slab(r, r1, off + i / n * 6.283, off + (i + 1) / n * 6.283, sand);
+  }
+  const n2 = 96; for (let i = 0; i < n2; i++) slab(15.2, 16, i / n2 * 6.283, (i + 1) / n2 * 6.283, [150, 132, 110]); // the border
+  for (let i = 0; i < 4200; i++) { // the pebbles by the platform
+    const a = rnd() * 6.283, r = (6.95 + rnd() * 0.62) * px, s = (0.035 + rnd() * 0.05) * px, v = 120 + rnd() * 110;
+    g.fillStyle = `rgb(${v},${v * 0.95},${v * 0.88})`; g.beginPath(); g.ellipse(N / 2 + Math.cos(a) * r, N / 2 + Math.sin(a) * r, s, s * 0.75, rnd() * 3, 0, 6.283); g.fill();
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
+})();
+{
+  const geo = new THREE.CylinderGeometry(16, 16, 0.2, 128), uv = geo.attributes.uv, pos = geo.attributes.position;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, 0.5 + pos.getX(i) / 32, 0.5 - pos.getZ(i) / 32); // the top seen from above: the texture laid flat
+  add(geo, new THREE.MeshStandardMaterial({ map: plazaTex, color: 0xd8d2c8, roughness: 0.9 }), 0, -0.06, 0, scene, false);
+}
 const paths = []; // for footsteps: stone on paths, grass elsewhere
 const path = (x1, z1, x2, z2, w = 5) => {
   paths.push({ x1, z1, x2, z2, w });
@@ -261,14 +337,48 @@ const LANE = { x1: 22, z1: -9, x2: 34, z2: -9, w: 1.5 };
 
 /* ---------------- the great tree at the centre ---------------- */
 {
-  add(new THREE.CylinderGeometry(6.5, 7, 1.2, 48), P("beige_wall_001", 6, 1, { color: 0xfff8ee }), 0, 0.6, 0);
-  add(new THREE.TorusGeometry(6.55, 0.09, 8, 64), MAT.gold, 0, 1.2, 0, scene, false).rotation.x = Math.PI / 2;
-  add(new THREE.CylinderGeometry(5.8, 5.8, 0.3, 48), S(0x5a4632, { roughness: 1 }), 0, 1.25, 0, scene, false);
+  // the platform round the tree: white plaster on a moulded plinth, a band of lotus petals, a rounded lotus coping
+  // with a thin gold line beneath it, and inside, the earth: roots, moss and fallen leaves, mounded toward the trunk
+  const ring = (r0, r1, h, y, mat, uS = 1) => { const g = new THREE.CylinderGeometry(r0, r1, h, 96, 1, true), uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setX(i, uv.getX(i) * uS); return add(g, mat, 0, y, 0, scene, false); };
+  add(new THREE.CylinderGeometry(7.15, 7.25, 0.3, 96), WALL_WHITE, 0, 0.15, 0, scene, false);              // the plinth
+  ring(6.95, 7.0, 0.28, 0.44, WALL_PETALS, 2 * Math.PI * 7 / 1.6);                                          // the petals
+  ring(6.82, 6.92, 0.72, 0.94, WALL_PLASTER, 2 * Math.PI * 6.9 / 4);                                        // the wall
+  add(new THREE.TorusGeometry(6.88, 0.05, 6, 96), MAT.gold, 0, 1.28, 0, scene, false).rotation.x = Math.PI / 2; // the gold line
+  add(new THREE.TorusGeometry(6.78, 0.2, 10, 96).scale(1, 1, 0.62), WALL_WHITE, 0, 1.42, 0, scene, false).rotation.x = Math.PI / 2; // the coping
+  const soilTex = (() => {
+    const N = 1024, c = document.createElement("canvas"); c.width = c.height = N; const g = c.getContext("2d");
+    let seed = 5; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    g.fillStyle = "#5b4733"; g.fillRect(0, 0, N, N);
+    for (let i = 0; i < 9000; i++) { const v = 60 + rnd() * 60; g.fillStyle = `rgba(${v + 20},${v},${v * 0.7},0.35)`; g.fillRect(rnd() * N, rnd() * N, 2 + rnd() * 4, 2 + rnd() * 4); } // crumbs of earth
+    for (let i = 0; i < 26; i++) { const x = rnd() * N, y = rnd() * N, r = 30 + rnd() * 90; const gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, "rgba(92,118,62,.55)"); gr.addColorStop(1, "rgba(92,118,62,0)"); g.fillStyle = gr; g.fillRect(x - r, y - r, 2 * r, 2 * r); } // moss
+    for (let i = 0; i < 260; i++) { // fallen Bodhi leaves, heart-shaped with a long tip
+      const x = rnd() * N, y = rnd() * N, s = 7 + rnd() * 6, a = rnd() * 6.28, col = [[138, 150, 70], [184, 160, 70], [150, 112, 56], [110, 82, 46]][Math.floor(rnd() * 4)];
+      g.save(); g.translate(x, y); g.rotate(a); g.fillStyle = `rgb(${col})`; g.beginPath(); g.moveTo(0, -s); g.bezierCurveTo(s, -s * 1.4, s * 1.3, s * 0.4, 0, s * 1.9); g.bezierCurveTo(-s * 1.3, s * 0.4, -s, -s * 1.4, 0, -s); g.fill();
+      g.strokeStyle = "rgba(60,45,25,.5)"; g.lineWidth = 1; g.beginPath(); g.moveTo(0, -s); g.lineTo(0, s * 1.8); g.stroke(); g.restore();
+    }
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
+  })();
+  { // the earth: a shallow mound inside the coping
+    const geo = new THREE.CircleGeometry(6.7, 64, 0, Math.PI * 2), pos = geo.attributes.position;
+    for (let i = 0; i < pos.count; i++) { const r = Math.hypot(pos.getX(i), pos.getY(i)); pos.setZ(i, 0.25 * (1 - (r / 6.7) ** 2) + 0.04 * Math.sin(pos.getX(i) * 2.1) * Math.cos(pos.getY(i) * 1.7)); }
+    geo.computeVertexNormals();
+    const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: soilTex, roughness: 1 })); m.rotation.x = -Math.PI / 2; m.position.y = 1.32; m.receiveShadow = true; scene.add(m);
+  }
   const simple = new THREE.Group(); scene.add(simple);
   add(new THREE.CylinderGeometry(1.4, 2.2, 10, 8), MAT.trunk, 0, 6, 0, simple);
   [[-2.5, 7, 0.8, -0.6], [2.4, 8, -0.4, 0.7], [0.5, 9, 2.2, 0.3]].forEach(([x, y, z, r]) => { const b = add(new THREE.CylinderGeometry(0.5, 0.8, 6, 6), MAT.trunk, x, y, z, simple); b.rotation.z = r; b.rotation.x = z * 0.2; });
   [[0, 14, 0, 8], [-6, 12, 2, 5.5], [6, 12.5, -1, 5.5], [2, 15, 5, 5], [-3, 15.5, -5, 5], [5, 11, 5, 4.5], [-5, 11, -4, 4.5]].forEach(([x, y, z, r], i) =>
     add(new THREE.IcosahedronGeometry(r, 1), i % 2 ? MAT.leaf : MAT.leafLight, x, y, z, simple));
+  // ไม้ค้ำโพธิ์: forked wooden poles that people offer to prop up the Bodhi tree, leaning in from the earth to the
+  // trunk, a few wrapped with a coloured cloth
+  [0.3, 1.25, 2.2, 3.1, 4.05, 5.1].forEach((a, i) => {
+    const r0 = 3.9 - (i % 2) * 0.4, r1 = 1.1, y1 = 3.9 + (i % 3) * 0.2; // (steep, their forks against the trunk below the cloths)
+    const p0 = new THREE.Vector3(Math.cos(a) * r0, 1.4, Math.sin(a) * r0), p1 = new THREE.Vector3(Math.cos(a) * r1, y1, Math.sin(a) * r1);
+    const dir = p1.clone().sub(p0), len = dir.length(), q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
+    const pole = add(new THREE.CylinderGeometry(0.07, 0.09, len, 7), MAT.woodDark, ...p0.clone().addScaledVector(dir, 0.5).toArray()); pole.quaternion.copy(q);
+    [-1, 1].forEach((f) => { const t = add(new THREE.CylinderGeometry(0.04, 0.06, 0.55, 6), MAT.woodDark, ...p1.toArray(), scene, false); t.quaternion.copy(q).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), f * 0.45)); t.position.add(new THREE.Vector3(0, 0.22, 0).applyQuaternion(t.quaternion)); }); // the fork
+    if (i % 2 === 0) { const c = add(new THREE.CylinderGeometry(0.1, 0.11, 0.35, 8), [MAT.lacquer, S(0xe8b730), S(0x2f7a4c)][i / 2], ...p0.clone().addScaledVector(dir, 0.35).toArray(), scene, false); c.quaternion.copy(q); }
+  });
   // the Bodhi tree model replaces the simple one once it has loaded
   loadProp("bodhi").then((m) => { if (m) simple.visible = false; });
   props("bodhi", 18, [[0, 0, 0.6, 1.4]]); infoSpot("bodhi", 0, 5, 0, 8, 4.2);
@@ -474,44 +584,6 @@ function thaiRoof(parent, sections, { shadow = true, block = true } = {}) {
 // pilasters with gold lotus capitals; windows with black lacquer shutters painted in gold (ลายรดน้ำ) under a gold
 // crown-shaped frame (ซุ้มหน้าต่าง); and a gold frieze of hanging triangles (กรวยเชิง) under the eaves.
 // Outside only: the walls inside, with their boards and murals, stay as they are.
-const wallCanvas = (w, h, draw) => { const c = document.createElement("canvas"); c.width = w; c.height = h; draw(c.getContext("2d"), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; t.anisotropy = 8; return t; };
-const plasterTex = wallCanvas(512, 512, (g, w, h) => {
-  g.fillStyle = "#f6f1e8"; g.fillRect(0, 0, w, h);
-  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  for (let i = 0; i < 2600; i++) { g.fillStyle = `rgba(${rnd() < 0.5 ? "120,110,95" : "255,255,255"},${0.04 + rnd() * 0.06})`; g.fillRect(rnd() * w, rnd() * h, 1 + rnd() * 3, 1 + rnd() * 3); } // the trowelled lime
-  for (let i = 0; i < 9; i++) { const x = rnd() * w, gr = g.createLinearGradient(0, 0, 0, h * (0.2 + rnd() * 0.3)); gr.addColorStop(0, "rgba(120,108,90,.10)"); gr.addColorStop(1, "rgba(120,108,90,0)"); g.fillStyle = gr; g.fillRect(x, 0, 4 + rnd() * 10, h); } // faint streaks from the eaves
-  const damp = g.createLinearGradient(0, h, 0, h * 0.72); damp.addColorStop(0, "rgba(96,98,78,.32)"); damp.addColorStop(1, "rgba(96,98,78,0)"); g.fillStyle = damp; g.fillRect(0, h * 0.72, w, h * 0.28); // rising damp at the foot
-});
-const petalTex = wallCanvas(256, 64, (g, w, h) => { // a band of upright lotus petals
-  g.fillStyle = "#e9e1d2"; g.fillRect(0, 0, w, h);
-  for (let x = 0; x < w; x += 32) { const gr = g.createLinearGradient(x, 0, x + 32, 0); gr.addColorStop(0, "#d9d0bf"); gr.addColorStop(0.5, "#fbf8f1"); gr.addColorStop(1, "#d9d0bf");
-    g.fillStyle = gr; g.strokeStyle = "#a99c86"; g.lineWidth = 2; g.beginPath(); g.moveTo(x + 2, h); g.quadraticCurveTo(x + 1, h * 0.35, x + 16, 4); g.quadraticCurveTo(x + 31, h * 0.35, x + 30, h); g.fill(); g.stroke(); }
-});
-const friezeTex = wallCanvas(256, 64, (g, w, h) => { // gold triangles hanging from a gold rail, on red
-  g.fillStyle = "#8e1f17"; g.fillRect(0, 0, w, h); g.fillStyle = "#e0b24a"; g.fillRect(0, 0, w, 9);
-  for (let x = 0; x < w; x += 64) {
-    g.fillStyle = "#e0b24a"; g.beginPath(); g.moveTo(x + 4, 9); g.lineTo(x + 32, h - 6); g.lineTo(x + 60, 9); g.fill();
-    g.fillStyle = "#8e1f17"; g.beginPath(); g.moveTo(x + 16, 9); g.lineTo(x + 32, h - 26); g.lineTo(x + 48, 9); g.fill();
-    g.fillStyle = "#f2cf6a"; g.beginPath(); g.arc(x + 32, h - 5, 4, 0, Math.PI * 2); g.fill();
-  }
-});
-const shutterTex = wallCanvas(512, 512, (g, w, h) => { // two leaves of black lacquer, painted in gold
-  g.fillStyle = "#14100c"; g.fillRect(0, 0, w, h);
-  g.strokeStyle = "#d9a640"; g.fillStyle = "#d9a640";
-  [0, w / 2].forEach((x0) => {
-    const lw = w / 2, cx = x0 + lw / 2;
-    g.lineWidth = 6; g.strokeRect(x0 + 14, 14, lw - 28, h - 28); g.lineWidth = 2; g.strokeRect(x0 + 26, 26, lw - 52, h - 52);
-    g.lineWidth = 3; g.beginPath(); g.moveTo(cx, 60); g.lineTo(cx, h - 60); g.stroke(); // a stem up the middle, with leaves and flowers
-    for (let y = 90, k = 0; y < h - 80; y += 46, k++) [-1, 1].forEach((sg) => { g.beginPath(); g.moveTo(cx, y); g.quadraticCurveTo(cx + sg * 40, y - 30, cx + sg * 70, y - 6); g.quadraticCurveTo(cx + sg * 38, y - 4, cx, y); g.fill(); if (k % 2) { g.beginPath(); g.arc(cx + sg * 78, y - 10, 7, 0, Math.PI * 2); g.fill(); } });
-    g.beginPath(); g.moveTo(cx, h / 2 - 40); g.lineTo(cx + 34, h / 2); g.lineTo(cx, h / 2 + 40); g.lineTo(cx - 34, h / 2); g.closePath(); g.fill(); // the lozenge at the heart
-    g.fillStyle = "#14100c"; g.beginPath(); g.arc(cx, h / 2, 12, 0, Math.PI * 2); g.fill(); g.fillStyle = "#d9a640";
-  });
-});
-const WALL_PLASTER = new THREE.MeshStandardMaterial({ map: plasterTex, color: 0xe4ddd0, roughness: 0.92 }); // (a touch below white: the sun and the bloom do the rest)
-const WALL_WHITE = S(0xe2dbcd, { roughness: 0.9 });
-const WALL_PETALS = new THREE.MeshStandardMaterial({ map: petalTex, roughness: 0.85 });
-const WALL_FRIEZE = new THREE.MeshStandardMaterial({ map: friezeTex, roughness: 0.5, metalness: 0.2 });
-const WALL_SHUTTER = new THREE.MeshStandardMaterial({ map: shutterTex, roughness: 0.35, metalness: 0.15 });
 const crownGeo = (() => { // the window's crown: a gold frame rising in tiers to a point, drawn as its right half and mirrored
   const half = [[0.72, 0], [0.72, 0.14], [0.6, 0.22], [0.58, 0.42], [0.46, 0.5], [0.42, 0.72], [0.3, 0.8], [0.25, 0.98], [0.14, 1.06], [0.08, 1.22], [0, 1.4]];
   const pts = [...half, ...half.slice(0, -1).reverse().map(([x, y]) => [-x, y])];
