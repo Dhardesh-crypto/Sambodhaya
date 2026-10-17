@@ -369,16 +369,6 @@ const LANE = { x1: 22, z1: -9, x2: 34, z2: -9, w: 1.5 };
   [[-2.5, 7, 0.8, -0.6], [2.4, 8, -0.4, 0.7], [0.5, 9, 2.2, 0.3]].forEach(([x, y, z, r]) => { const b = add(new THREE.CylinderGeometry(0.5, 0.8, 6, 6), MAT.trunk, x, y, z, simple); b.rotation.z = r; b.rotation.x = z * 0.2; });
   [[0, 14, 0, 8], [-6, 12, 2, 5.5], [6, 12.5, -1, 5.5], [2, 15, 5, 5], [-3, 15.5, -5, 5], [5, 11, 5, 4.5], [-5, 11, -4, 4.5]].forEach(([x, y, z, r], i) =>
     add(new THREE.IcosahedronGeometry(r, 1), i % 2 ? MAT.leaf : MAT.leafLight, x, y, z, simple));
-  // ไม้ค้ำโพธิ์: forked wooden poles that people offer to prop up the Bodhi tree, leaning in from the earth to the
-  // trunk, a few wrapped with a coloured cloth
-  [0.3, 1.25, 2.2, 3.1, 4.05, 5.1].forEach((a, i) => {
-    const r0 = 3.9 - (i % 2) * 0.4, r1 = 1.1, y1 = 3.9 + (i % 3) * 0.2; // (steep, their forks against the trunk below the cloths)
-    const p0 = new THREE.Vector3(Math.cos(a) * r0, 1.4, Math.sin(a) * r0), p1 = new THREE.Vector3(Math.cos(a) * r1, y1, Math.sin(a) * r1);
-    const dir = p1.clone().sub(p0), len = dir.length(), q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
-    const pole = add(new THREE.CylinderGeometry(0.07, 0.09, len, 7), MAT.woodDark, ...p0.clone().addScaledVector(dir, 0.5).toArray()); pole.quaternion.copy(q);
-    [-1, 1].forEach((f) => { const t = add(new THREE.CylinderGeometry(0.04, 0.06, 0.55, 6), MAT.woodDark, ...p1.toArray(), scene, false); t.quaternion.copy(q).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), f * 0.45)); t.position.add(new THREE.Vector3(0, 0.22, 0).applyQuaternion(t.quaternion)); }); // the fork
-    if (i % 2 === 0) { const c = add(new THREE.CylinderGeometry(0.1, 0.11, 0.35, 8), [MAT.lacquer, S(0xe8b730), S(0x2f7a4c)][i / 2], ...p0.clone().addScaledVector(dir, 0.35).toArray(), scene, false); c.quaternion.copy(q); }
-  });
   // the Bodhi tree model replaces the simple one once it has loaded
   loadProp("bodhi").then((m) => { if (m) simple.visible = false; });
   props("bodhi", 18, [[0, 0, 0.6, 1.4]]); infoSpot("bodhi", 0, 5, 0, 8, 4.2);
