@@ -2230,23 +2230,44 @@ catLoad();
 
 // pigeons on the plaza: they walk and peck; when someone comes close (or the dog) they clatter up and fly to
 // a tree, and come back down a while later somewhere quieter. At night they roost (out of sight).
+// Each wing is two parts, the arm and the hand (the darker primaries), hinged at the wrist. On the ground the wings
+// lie folded along the flanks; they open at take-off and fold again after landing. In flight the downstroke drives
+// with the hand spread, and on the upstroke the wrist bends and the hand sweeps back, the body bobbing with each beat:
+// quick, deep beats to climb away, steadier ones with glides on the way, and a landing with the body tipped up,
+// the wings raised in a V for braking beats and the tail fanned.
 const birds = [];
+const wingShape = (pts) => { const sh = new THREE.Shape(); pts.forEach(([x, z], i) => (i ? sh.lineTo(x, z) : sh.moveTo(x, z))); const g = new THREE.ExtrudeGeometry(sh, { depth: 0.01, bevelEnabled: false }); g.rotateX(Math.PI / 2); g.translate(0, 0.005, 0); return g; }; // drawn as (out, forward); lies flat
+const ARM_LEN = 0.14;
+const armGeo = wingShape([[0, 0.05], [ARM_LEN, 0.045], [ARM_LEN, -0.075], [0.07, -0.088], [0, -0.085]]);
+const handGeo = wingShape([[0, 0.045], [0.1, 0.022], [0.175, -0.035], [0.15, -0.06], [0.1, -0.072], [0, -0.075]]);
+const _qa = new THREE.Quaternion(), _qb = new THREE.Quaternion(), _ex = new THREE.Vector3(1, 0, 0), _ey = new THREE.Vector3(0, 1, 0), _ez = new THREE.Vector3(0, 0, 1);
+const WING_FOLDED = (() => { // along the flank: the span back and a little in (the tips meet over the tail), the leading edge up and tucked in
+  const x = new THREE.Vector3(-0.2, -0.04, -1).normalize(), y = new THREE.Vector3().crossVectors(new THREE.Vector3(-0.3, 1, 0), x).normalize(), z = new THREE.Vector3().crossVectors(x, y);
+  return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+})();
 {
-  const body = new THREE.SphereGeometry(0.12, 10, 8), head = new THREE.SphereGeometry(0.075, 10, 8), beak = new THREE.ConeGeometry(0.022, 0.07, 6), wing = new THREE.BoxGeometry(0.3, 0.015, 0.16), tail = new THREE.BoxGeometry(0.12, 0.012, 0.14);
+  const body = new THREE.SphereGeometry(0.12, 10, 8), head = new THREE.SphereGeometry(0.075, 10, 8), beak = new THREE.ConeGeometry(0.022, 0.07, 6), tail = new THREE.BoxGeometry(0.12, 0.012, 0.14);
   const looks = [[0x8d929c, 0x5e6470, 0x6f8f86], [0x9aa0aa, 0x6b7180, 0x7a6f8f], [0xb8b2a8, 0x7e7468, 0x8f8a7a], [0x6f7480, 0x4a4f5a, 0x5f7f78]];
   const beakMat = S(0x2b2b2b);
   for (let i = 0; i < (HIGH ? 9 : 5); i++) {
-    const [cb, cw, cn] = looks[i % looks.length], mb = S(cb, { roughness: 0.8 }), mw = S(cw, { roughness: 0.8 }), mn = S(cn, { roughness: 0.5, metalness: 0.2 });
+    const [cb, cw, cn] = looks[i % looks.length], mb = S(cb, { roughness: 0.8 }), mw = S(cw, { roughness: 0.8, side: THREE.DoubleSide }), mn = S(cn, { roughness: 0.5, metalness: 0.2 });
+    const mp = S(new THREE.Color(cw).multiplyScalar(0.6).getHex(), { roughness: 0.8, side: THREE.DoubleSide }); // the darker primaries
     const g = new THREE.Group(), b = new THREE.Mesh(body, mb); b.scale.set(1, 0.9, 1.6); b.position.y = 0.17; b.castShadow = true; g.add(b);
     const hp = new THREE.Group(); hp.position.set(0, 0.27, 0.15); g.add(hp);
     const hd = new THREE.Mesh(head, mn); hd.castShadow = true; hp.add(hd);
     const bk = new THREE.Mesh(beak, beakMat); bk.rotation.x = Math.PI / 2; bk.position.set(0, -0.01, 0.09); hp.add(bk);
-    const wings = [-1, 1].map((sg) => { const p = new THREE.Group(); p.position.set(sg * 0.08, 0.22, 0); const m = new THREE.Mesh(wing, mw); m.position.x = sg * 0.14; p.add(m); g.add(p); return p; });
+    // a wing: mirrored for the left side, so both are posed as the right one
+    const wings = [-1, 1].map((sg) => {
+      const side = new THREE.Group(); side.scale.x = sg; g.add(side);
+      const arm = new THREE.Group(); side.add(arm); const am = new THREE.Mesh(armGeo, mw); am.castShadow = true; arm.add(am);
+      const hand = new THREE.Group(); hand.position.x = ARM_LEN; arm.add(hand); const hm = new THREE.Mesh(handGeo, mp); hm.castShadow = true; hand.add(hm);
+      return { side, arm, hand };
+    });
     const tl = new THREE.Mesh(tail, mw); tl.position.set(0, 0.17, -0.25); tl.rotation.x = -0.2; g.add(tl);
     [-1, 1].forEach((sg) => add(new THREE.CylinderGeometry(0.008, 0.008, 0.1, 4), S(0xc0605a), sg * 0.04, 0.05, 0.02, g, false));
     g.scale.setScalar(1.15);
     scene.add(g);
-    birds.push({ g, hp, wings, state: "ground", x: 0, z: 0, y: 0, yaw: Math.random() * 6, t: Math.random() * 5, peck: 0, hop: 0, flight: null, perch: 0 });
+    birds.push({ g, hp, wings, tail: tl, state: "ground", x: 0, z: 0, y: 0, yaw: Math.random() * 6, t: Math.random() * 5, peck: 0, hop: 0, flight: null, perch: 0, fold: 1, beat: 0 });
   }
 }
 const BIRD_GROUND = [[-6, -11], [7, -12], [-12, 3], [12, 2], [-8, 8], [9, -6]];
@@ -2260,6 +2281,18 @@ function fly(b, to, y1) {
   const from = new THREE.Vector3(b.x, b.y, b.z), dist = Math.hypot(to[0] - b.x, to[1] - b.z);
   b.flight = { from, to: new THREE.Vector3(to[0], y1, to[1]), mid: new THREE.Vector3((b.x + to[0]) / 2, Math.max(b.y, y1) + 3 + dist * 0.12, (b.z + to[1]) / 2), t: 0, dur: Math.max(1.6, dist / 8) };
   b.state = "fly";
+}
+// the wings' pose: fold 1 = folded; up = the arm's angle above level, sweep = swung back; bend = the hand's further
+// angle at the wrist (down is negative), handBack = the hand swept back at the wrist
+function poseWings(b, up, sweep, bend, handBack) {
+  for (const w of b.wings) {
+    w.side.position.set(0, 0.22 - 0.01 * b.fold, 0.02 - 0.02 * b.fold); // the shoulders (each wing's side is mirrored)
+    w.arm.position.set(0.075 + 0.035 * b.fold, 0, 0);
+    _qa.setFromAxisAngle(_ey, sweep).multiply(_qb.setFromAxisAngle(_ez, up));
+    w.arm.quaternion.copy(_qa).slerp(WING_FOLDED, b.fold);
+    _qa.setFromAxisAngle(_ey, handBack).multiply(_qb.setFromAxisAngle(_ez, bend));
+    w.hand.quaternion.copy(_qa).slerp(_qb.identity(), b.fold);
+  }
 }
 let flutterAt = 0;
 function birdsStep(dt) {
@@ -2283,18 +2316,29 @@ function birdsStep(dt) {
       if (b.hop > 0) { b.x += Math.sin(b.yaw) * dt * 0.7; b.z += Math.cos(b.yaw) * dt * 0.7; if (Math.hypot(b.x, b.z) < 7.6 || Math.hypot(b.x, b.z) > 15.5) b.yaw += Math.PI; }
       b.hp.rotation.x = b.peck > 0 ? Math.sin((0.5 - b.peck) / 0.5 * Math.PI) * 1.1 : 0;
       b.hp.position.z = 0.15 + (b.hop > 0 ? Math.sin(b.t * 12) * 0.03 : 0); // the pigeon's nodding walk
-      b.wings.forEach((w, i) => { w.rotation.z = 0; });
+      b.fold = Math.min(1, b.fold + dt * 4); poseWings(b, 0, 0, 0, 0); b.tail.scale.x = 1;
+      b.g.children[0].position.y = 0.17;
       b.y = 0.03;
     } else if (b.state === "fly") {
       const f = b.flight; f.t += dt / f.dur; const u = Math.min(1, f.t), iu = 1 - u;
       const p = f.from.clone().multiplyScalar(iu * iu).addScaledVector(f.mid, 2 * iu * u).addScaledVector(f.to, u * u);
       const v = f.mid.clone().sub(f.from).multiplyScalar(2 * iu).addScaledVector(f.to.clone().sub(f.mid), 2 * u);
       b.yaw = Math.atan2(v.x, v.z); b.x = p.x; b.z = p.z; b.y = p.y;
-      b.g.rotation.x = -Math.atan2(v.y, Math.hypot(v.x, v.z)) * 0.5;
-      const flap = u > 0.85 ? 0.35 : Math.sin(b.t * 30) * 0.9; // gliding in to land
-      b.wings.forEach((w, i) => { w.rotation.z = (i ? 1 : -1) * flap; });
+      const pitch = -Math.atan2(v.y, Math.hypot(v.x, v.z)) * 0.5, el = u * f.dur; // (el: seconds in the air)
+      b.fold = Math.max(0, b.fold - dt * 9); // the wings open as it springs up
+      const land = smooth(0.82, 0.92, u), climb = 1 - smooth(0.35, 0.8, el), glide = v.y < 0 && land < 0.01 && Math.sin(f.t * 9 + b.t * 0.3) > 0.35; // (a glide now and then on the way down)
+      const hz = 9 * climb + 6 * (1 - climb) + 2 * land, amp = glide ? 0 : 0.85 + 0.35 * climb - 0.35 * land, mid = glide ? 0.12 : 0.15 + 0.45 * land; // deep and quick to climb, a raised V to land
+      b.beat += dt * hz * Math.PI * 2;
+      const ph = b.beat % (Math.PI * 2), down = ph < Math.PI * 1.1; // the downstroke takes a little longer than the upstroke
+      const up = mid + amp * Math.cos(ph < Math.PI * 1.1 ? ph / 1.1 : Math.PI + (ph - Math.PI * 1.1) / 0.9); // from the top (ph 0) down, and back up
+      const lag = glide ? -0.05 : amp * 0.55 * Math.sin(ph - 0.9);   // the hand trails the arm
+      const fold = !glide && !down ? Math.sin((ph - Math.PI * 1.1) / 0.9) : 0; // on the upstroke the wrist bends and the hand sweeps back
+      poseWings(b, up, glide ? 0.05 : 0.12 * fold, lag - 0.35 * fold, glide ? 0.08 : 0.75 * fold);
+      b.g.rotation.x = pitch * (1 - land) - 0.85 * land; // tipping up to land
+      b.g.children[0].position.y = 0.17 - (glide ? 0 : 0.018 * Math.cos(ph)); // the body bobs against the wings
+      b.tail.scale.x = 1 + 0.9 * land + 0.3 * climb;                       // the tail fans to brake (and to climb)
       b.hp.rotation.x = 0;
-      if (u >= 1) { b.g.rotation.x = 0; b.flight = null; if (f.to.y > 1) { b.state = "perch"; b.perch = 15 + Math.random() * 25; } else { b.state = "ground"; b.y = 0.03; } }
+      if (u >= 1) { b.g.rotation.x = 0; b.tail.scale.x = 1; b.flight = null; if (f.to.y > 1) { b.state = "perch"; b.perch = 15 + Math.random() * 25; } else { b.state = "ground"; b.y = 0.03; } }
     } else { // perched in a tree (hidden among its leaves), or roosting for the night
       b.g.visible = false;
       b.perch -= dt;
