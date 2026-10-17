@@ -398,13 +398,28 @@ const ROOF_PEDIMENT = new THREE.MeshStandardMaterial({ map: pedimentTex, roughne
 const finGeo = (() => { const sh = new THREE.Shape(); sh.moveTo(-0.11, 0); sh.quadraticCurveTo(-0.02, 0.12, 0.05, 0.36); sh.quadraticCurveTo(0.03, 0.12, 0.11, 0); sh.lineTo(-0.11, 0);
   const g = new THREE.ExtrudeGeometry(sh, { depth: 0.035, bevelEnabled: false }); g.translate(0, 0, -0.0175); return g; })(); // one ใบระกา blade
 const _rm = new THREE.Matrix4(), _rq = new THREE.Quaternion(), _rs = new THREE.Vector3(1, 1, 1);
-function thaiRoof(parent, sections, { shadow = true, block = true } = {}) {
+// parts placed one by one into per-material buckets, then merged: one mesh per material
+function mergeBucket() {
   const bucket = new Map(); // material -> geometries (already placed)
-  const put = (mat, geo, pos, euler, scale) => {
-    _rm.compose(pos, _rq.setFromEuler(euler || new THREE.Euler()), scale || _rs);
-    let gg = geo.clone().applyMatrix4(_rm); if (gg.index) gg = gg.toNonIndexed();
-    if (!bucket.has(mat)) bucket.set(mat, []); bucket.get(mat).push(gg);
+  return {
+    put(mat, geo, pos, euler, scale) {
+      _rm.compose(pos, _rq.setFromEuler(euler || new THREE.Euler()), scale || _rs);
+      let gg = geo.clone().applyMatrix4(_rm); if (gg.index) gg = gg.toNonIndexed();
+      if (!bucket.has(mat)) bucket.set(mat, []); bucket.get(mat).push(gg);
+    },
+    done(parent, { shadow = true, block = () => false } = {}) {
+      const meshes = [];
+      for (const [mat, geos] of bucket) {
+        const m = new THREE.Mesh(mergeGeometries(geos), mat); m.castShadow = shadow; m.receiveShadow = true; parent.add(m); meshes.push(m);
+        geos.forEach((gg) => gg.dispose());
+        if (block(mat)) camBlock.push(m);
+      }
+      return meshes;
+    },
   };
+}
+function thaiRoof(parent, sections, { shadow = true, block = true } = {}) {
+  const mb = mergeBucket(), put = mb.put;
   const V = (x, y, z) => new THREE.Vector3(x, y, z), E = (x, y, z, o) => new THREE.Euler(x, y, z, o);
   const tileBox = (L, t, d, T, flipU) => { // a slab whose top carries the tiles, T metres to a tile
     const g = new THREE.BoxGeometry(L, t, d), uv = g.attributes.uv;
@@ -452,14 +467,90 @@ function thaiRoof(parent, sections, { shadow = true, block = true } = {}) {
       }
     }
   }
-  const meshes = [];
-  for (const [mat, geos] of bucket) {
-    const m = new THREE.Mesh(mergeGeometries(geos), mat); m.castShadow = shadow; m.receiveShadow = true; parent.add(m); meshes.push(m);
-    geos.forEach((gg) => gg.dispose());
-    if (block && mat !== MAT.gold) camBlock.push(m);
-  }
-  return meshes;
+  return mb.done(parent, { shadow, block: (mat) => block && mat !== MAT.gold });
 }
+/* ---------------- the halls' outside walls, and the white of the temple wall ---------------- */
+// Whitewashed plaster, a little weathered toward the ground; a moulded base (ฐานบัว) with a band of lotus petals;
+// pilasters with gold lotus capitals; windows with black lacquer shutters painted in gold (ลายรดน้ำ) under a gold
+// crown-shaped frame (ซุ้มหน้าต่าง); and a gold frieze of hanging triangles (กรวยเชิง) under the eaves.
+// Outside only: the walls inside, with their boards and murals, stay as they are.
+const wallCanvas = (w, h, draw) => { const c = document.createElement("canvas"); c.width = w; c.height = h; draw(c.getContext("2d"), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; t.anisotropy = 8; return t; };
+const plasterTex = wallCanvas(512, 512, (g, w, h) => {
+  g.fillStyle = "#f6f1e8"; g.fillRect(0, 0, w, h);
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 2600; i++) { g.fillStyle = `rgba(${rnd() < 0.5 ? "120,110,95" : "255,255,255"},${0.04 + rnd() * 0.06})`; g.fillRect(rnd() * w, rnd() * h, 1 + rnd() * 3, 1 + rnd() * 3); } // the trowelled lime
+  for (let i = 0; i < 9; i++) { const x = rnd() * w, gr = g.createLinearGradient(0, 0, 0, h * (0.2 + rnd() * 0.3)); gr.addColorStop(0, "rgba(120,108,90,.10)"); gr.addColorStop(1, "rgba(120,108,90,0)"); g.fillStyle = gr; g.fillRect(x, 0, 4 + rnd() * 10, h); } // faint streaks from the eaves
+  const damp = g.createLinearGradient(0, h, 0, h * 0.72); damp.addColorStop(0, "rgba(96,98,78,.32)"); damp.addColorStop(1, "rgba(96,98,78,0)"); g.fillStyle = damp; g.fillRect(0, h * 0.72, w, h * 0.28); // rising damp at the foot
+});
+const petalTex = wallCanvas(256, 64, (g, w, h) => { // a band of upright lotus petals
+  g.fillStyle = "#e9e1d2"; g.fillRect(0, 0, w, h);
+  for (let x = 0; x < w; x += 32) { const gr = g.createLinearGradient(x, 0, x + 32, 0); gr.addColorStop(0, "#d9d0bf"); gr.addColorStop(0.5, "#fbf8f1"); gr.addColorStop(1, "#d9d0bf");
+    g.fillStyle = gr; g.strokeStyle = "#a99c86"; g.lineWidth = 2; g.beginPath(); g.moveTo(x + 2, h); g.quadraticCurveTo(x + 1, h * 0.35, x + 16, 4); g.quadraticCurveTo(x + 31, h * 0.35, x + 30, h); g.fill(); g.stroke(); }
+});
+const friezeTex = wallCanvas(256, 64, (g, w, h) => { // gold triangles hanging from a gold rail, on red
+  g.fillStyle = "#8e1f17"; g.fillRect(0, 0, w, h); g.fillStyle = "#e0b24a"; g.fillRect(0, 0, w, 9);
+  for (let x = 0; x < w; x += 64) {
+    g.fillStyle = "#e0b24a"; g.beginPath(); g.moveTo(x + 4, 9); g.lineTo(x + 32, h - 6); g.lineTo(x + 60, 9); g.fill();
+    g.fillStyle = "#8e1f17"; g.beginPath(); g.moveTo(x + 16, 9); g.lineTo(x + 32, h - 26); g.lineTo(x + 48, 9); g.fill();
+    g.fillStyle = "#f2cf6a"; g.beginPath(); g.arc(x + 32, h - 5, 4, 0, Math.PI * 2); g.fill();
+  }
+});
+const shutterTex = wallCanvas(512, 512, (g, w, h) => { // two leaves of black lacquer, painted in gold
+  g.fillStyle = "#14100c"; g.fillRect(0, 0, w, h);
+  g.strokeStyle = "#d9a640"; g.fillStyle = "#d9a640";
+  [0, w / 2].forEach((x0) => {
+    const lw = w / 2, cx = x0 + lw / 2;
+    g.lineWidth = 6; g.strokeRect(x0 + 14, 14, lw - 28, h - 28); g.lineWidth = 2; g.strokeRect(x0 + 26, 26, lw - 52, h - 52);
+    g.lineWidth = 3; g.beginPath(); g.moveTo(cx, 60); g.lineTo(cx, h - 60); g.stroke(); // a stem up the middle, with leaves and flowers
+    for (let y = 90, k = 0; y < h - 80; y += 46, k++) [-1, 1].forEach((sg) => { g.beginPath(); g.moveTo(cx, y); g.quadraticCurveTo(cx + sg * 40, y - 30, cx + sg * 70, y - 6); g.quadraticCurveTo(cx + sg * 38, y - 4, cx, y); g.fill(); if (k % 2) { g.beginPath(); g.arc(cx + sg * 78, y - 10, 7, 0, Math.PI * 2); g.fill(); } });
+    g.beginPath(); g.moveTo(cx, h / 2 - 40); g.lineTo(cx + 34, h / 2); g.lineTo(cx, h / 2 + 40); g.lineTo(cx - 34, h / 2); g.closePath(); g.fill(); // the lozenge at the heart
+    g.fillStyle = "#14100c"; g.beginPath(); g.arc(cx, h / 2, 12, 0, Math.PI * 2); g.fill(); g.fillStyle = "#d9a640";
+  });
+});
+const WALL_PLASTER = new THREE.MeshStandardMaterial({ map: plasterTex, color: 0xe4ddd0, roughness: 0.92 }); // (a touch below white: the sun and the bloom do the rest)
+const WALL_WHITE = S(0xe2dbcd, { roughness: 0.9 });
+const WALL_PETALS = new THREE.MeshStandardMaterial({ map: petalTex, roughness: 0.85 });
+const WALL_FRIEZE = new THREE.MeshStandardMaterial({ map: friezeTex, roughness: 0.5, metalness: 0.2 });
+const WALL_SHUTTER = new THREE.MeshStandardMaterial({ map: shutterTex, roughness: 0.35, metalness: 0.15 });
+const crownGeo = (() => { // the window's crown: a gold frame rising in tiers to a point, drawn as its right half and mirrored
+  const half = [[0.72, 0], [0.72, 0.14], [0.6, 0.22], [0.58, 0.42], [0.46, 0.5], [0.42, 0.72], [0.3, 0.8], [0.25, 0.98], [0.14, 1.06], [0.08, 1.22], [0, 1.4]];
+  const pts = [...half, ...half.slice(0, -1).reverse().map(([x, y]) => [-x, y])];
+  const sh = new THREE.Shape(); pts.forEach(([x, y], i) => (i ? sh.lineTo(x, y) : sh.moveTo(x, y)));
+  return new THREE.ExtrudeGeometry(sh, { depth: 0.06, bevelEnabled: false });
+})();
+const boxUV = (w, h, d, uScale, vScale = 1) => { const g = new THREE.BoxGeometry(w, h, d), uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * uScale, uv.getY(i) * vScale); return g; };
+// one outside wall face: len long, its outer face at (cx, cz), facing outward along yaw (0 = +z)
+function wallFace(mb, { len, cx, cz, yaw, FY, H, windows = true }) {
+  const c = Math.cos(yaw), s = Math.sin(yaw), rot = new THREE.Euler(0, yaw, 0);
+  const at = (u, y, n) => new THREE.Vector3(cx + u * c + n * s, y, cz - u * s + n * c);
+  const put = (mat, geo, u, y, n) => mb.put(mat, geo, at(u, y, n), rot);
+  put(WALL_PLASTER, boxUV(len, H, 0.04, len / 4), 0, FY + H / 2, 0.02);
+  // the moulded base: a plinth, the band of petals, a fillet
+  put(WALL_WHITE, new THREE.BoxGeometry(len + 0.3, 0.32, 0.24), 0, FY + 0.16, 0.12);
+  put(WALL_PETALS, boxUV(len + 0.2, 0.26, 0.16, (len + 0.2) / 1.6), 0, FY + 0.45, 0.08);
+  put(WALL_WHITE, new THREE.BoxGeometry(len + 0.24, 0.07, 0.2), 0, FY + 0.615, 0.1);
+  // the frieze under the eaves
+  put(WALL_FRIEZE, boxUV(len, 0.5, 0.05, len / 2), 0, FY + H - 0.3, 0.065);
+  // pilasters at the bay lines, and a window in each bay wide enough
+  const nb = Math.max(2, Math.round(len / 2.9)), step = (len - 0.7) / nb, ph = H - 1.25;
+  for (let i = 0; i <= nb; i++) {
+    const u = -len / 2 + 0.35 + i * step;
+    put(WALL_WHITE, new THREE.BoxGeometry(0.42, ph, 0.14), u, FY + 0.65 + ph / 2, 0.09);
+    put(WALL_WHITE, new THREE.BoxGeometry(0.56, 0.12, 0.2), u, FY + 0.71, 0.1);
+    put(MAT.gold, new THREE.BoxGeometry(0.5, 0.1, 0.2), u, FY + H - 0.66, 0.12);
+    put(MAT.gold, new THREE.BoxGeometry(0.62, 0.12, 0.24), u, FY + H - 0.56, 0.14);
+  }
+  if (!windows) return;
+  for (let i = 0; i < nb; i++) {
+    const u = -len / 2 + 0.35 + (i + 0.5) * step; if (step < 1.8) continue;
+    put(MAT.gold, new THREE.BoxGeometry(1.15, 1.9, 0.04), u, FY + 2.0, 0.06);    // the gilded frame
+    put(WALL_SHUTTER, new THREE.BoxGeometry(0.95, 1.7, 0.06), u, FY + 2.0, 0.09); // the shutters
+    put(WALL_WHITE, new THREE.BoxGeometry(1.35, 0.1, 0.2), u, FY + 1.06, 0.1);   // the sill
+    mb.put(MAT.gold, crownGeo, at(u, FY + 2.95, 0.05), rot);                     // the crown above
+    mb.put(MAT.lacquer, crownGeo, at(u, FY + 3.02, 0.08), rot, new THREE.Vector3(0.68, 0.66, 1));
+  }
+}
+
 // carved brackets (คันทวย) under the eaves: from a column, an S-curve out and up to the roof's edge
 function eaveBracket(parent, lx, y0, lz, out, up) {
   const curve = new THREE.CatmullRomCurve3([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, up * 0.2, out * 0.35), new THREE.Vector3(0, up * 0.55, out * 0.55), new THREE.Vector3(0, up * 0.85, out * 0.8), new THREE.Vector3(0, up, out)]);
@@ -498,6 +589,12 @@ function sala({ x, z, rot = 0, W = 13, D = 10, H = 5.6, walls = true }) {
   if (walls) {
     const wall = (w, d, lx, lz) => { const m = add(new THREE.BoxGeometry(w, H, d), MAT.wall, lx, FY + H / 2, lz, g); camBlock.push(m); };
     wall(W, 0.4, 0, -D / 2); wall(0.4, D, -W / 2, 0); wall(0.4, D, W / 2, 0);
+    { // the outside faces: back and both sides
+      const mb = mergeBucket();
+      wallFace(mb, { len: W + 0.4, cx: 0, cz: -D / 2 - 0.2, yaw: Math.PI, FY, H });
+      [-1, 1].forEach((sg) => wallFace(mb, { len: D, cx: sg * (W / 2 + 0.2), cz: 0, yaw: sg * Math.PI / 2, FY, H }));
+      mb.done(g, { shadow: false });
+    }
     block(0, -D / 2, W / 2, 0.3); block(-W / 2, 0, 0.3, D / 2); block(W / 2, 0, 0.3, D / 2);
     // red lacquer wainscot inside
     add(new THREE.BoxGeometry(W - 0.5, 1, 0.05), MAT.lacquer, 0, FY + 0.5, -D / 2 + 0.23, g, false);
@@ -1341,32 +1438,60 @@ kinds.forEach(([name, h], k) => {
 
 const YAKSHA_H = 6.2; // the guardians stand about as tall as the gateway's posts
 /* ---------------- the temple wall (kampaeng kaew): white, with lotus-bud posts ---------------- */
+// White plaster on a moulded plinth, topped with a rounded lotus coping (บัวคว่ำบัวหงาย); between the lengths, square
+// posts with a stepped capital, a bowl of lotus petals and a gilded lotus bud (บัวตูม). Every piece is instanced.
 {
-  const R = 76, segs = 72, wallMat = P("beige_wall_001", 3, 1, { color: 0xfffaf2 });
+  const R = 76, segs = 72, wallMat = WALL_PLASTER;
   const segLen = 2 * Math.PI * R / segs;
   const list = [];
   for (let i = 0; i < segs; i++) { const a = (i + 0.5) / segs * Math.PI * 2; const x = Math.cos(a) * R, z = Math.sin(a) * R; if (z > 60 && Math.abs(x) < 4) continue; list.push([x, z, a]); }
-  const body = new THREE.InstancedMesh(new THREE.BoxGeometry(segLen + 0.05, 1.8, 0.6), wallMat, list.length);
-  const cap = new THREE.InstancedMesh(new THREE.BoxGeometry(segLen + 0.1, 0.25, 0.9), MAT.lacquer, list.length);
-  const postB = new THREE.InstancedMesh(new THREE.BoxGeometry(0.9, 2.4, 0.9), wallMat, list.length);
-  const bud = new THREE.InstancedMesh(new THREE.SphereGeometry(0.45, 12, 8), MAT.gold, list.length);
+  const L = segLen + 0.06, lathe = (pts, n = 14) => new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), n);
+  // [geometry, material, height of its middle, on a post (else along the wall)]
+  const parts = [
+    [new THREE.BoxGeometry(L, 1.8, 0.6), wallMat, 0.9, false],
+    [new THREE.BoxGeometry(L, 0.3, 0.84), WALL_WHITE, 0.15, false],                                  // the plinth
+    [new THREE.BoxGeometry(L, 0.08, 0.72), WALL_WHITE, 0.34, false],
+    [new THREE.BoxGeometry(L, 0.1, 0.8), WALL_WHITE, 1.85, false],                                   // the coping: a fillet,
+    [new THREE.CylinderGeometry(0.3, 0.3, L, 16).rotateZ(Math.PI / 2).scale(1, 0.5, 1), WALL_WHITE, 1.93, false], // a rounded lotus roll,
+    [new THREE.BoxGeometry(L, 0.07, 0.24), WALL_WHITE, 2.08, false],                                 // and a ridge
+    [new THREE.BoxGeometry(1.08, 0.36, 1.08), WALL_WHITE, 0.18, true],                               // the post: its foot,
+    [new THREE.BoxGeometry(0.8, 2.0, 0.8), wallMat, 1.36, true],                                     // shaft,
+    [new THREE.BoxGeometry(0.98, 0.12, 0.98), WALL_WHITE, 2.42, true],                               // stepped capital,
+    [new THREE.BoxGeometry(0.88, 0.1, 0.88), WALL_WHITE, 2.53, true],
+    [lathe([[0, 0], [0.3, 0], [0.42, 0.1], [0.46, 0.22], [0.34, 0.26], [0, 0.26]]), WALL_WHITE, 2.58, true], // a bowl of petals,
+    [lathe([[0, 0], [0.28, 0.02], [0.34, 0.2], [0.3, 0.42], [0.18, 0.62], [0.06, 0.78], [0, 0.86]]), MAT.gold, 2.8, true], // the lotus bud
+  ];
   const o = new THREE.Object3D();
-  list.forEach(([x, z, a], i) => {
-    o.position.set(x, 0.9, z); o.rotation.set(0, -a + Math.PI / 2, 0); o.scale.set(1, 1, 1); o.updateMatrix(); body.setMatrixAt(i, o.matrix);
-    o.position.y = 1.9; o.updateMatrix(); cap.setMatrixAt(i, o.matrix);
-    const pa = a + Math.PI / segs; o.position.set(Math.cos(pa) * R, 1.2, Math.sin(pa) * R); o.updateMatrix(); postB.setMatrixAt(i, o.matrix);
-    o.position.y = 2.65; o.scale.set(1, 1.4, 1); o.updateMatrix(); bud.setMatrixAt(i, o.matrix);
-  });
-  [body, cap, postB, bud].forEach((m) => { m.castShadow = true; m.receiveShadow = true; scene.add(m); });
+  for (const [geo, mat, y, onPost] of parts) {
+    const m = new THREE.InstancedMesh(geo, mat, list.length);
+    list.forEach(([x, z, a], i) => {
+      const pa = onPost ? a + Math.PI / segs : a;
+      o.position.set(onPost ? Math.cos(pa) * R : x, y, onPost ? Math.sin(pa) * R : z); o.rotation.set(0, -a + Math.PI / 2, 0); o.updateMatrix(); m.setMatrixAt(i, o.matrix);
+    });
+    m.castShadow = true; m.receiveShadow = true; scene.add(m);
+  }
 
   // the gateway in the wall, where the bridge arrives
   const GZ = Math.sqrt(R * R - 25);
   [-1, 1].forEach((sg) => {
-    add(new THREE.BoxGeometry(1.4, 6.2, 1.4), wallMat, sg * 4.6, 3.1, GZ);
-    add(new THREE.BoxGeometry(1.6, 0.25, 1.6), MAT.gold, sg * 4.6, 0.9, GZ, scene, false);
-    add(new THREE.BoxGeometry(1.6, 0.3, 1.6), MAT.gold, sg * 4.6, 6.0, GZ, scene, false);
+    // a gate pillar: a moulded foot, a white shaft with a red panel framed in gold on each face, a lotus capital
+    const px = sg * 4.6;
+    add(new THREE.BoxGeometry(1.9, 0.6, 1.9), WALL_WHITE, px, 0.3, GZ);
+    add(new THREE.BoxGeometry(1.7, 0.15, 1.7), MAT.gold, px, 0.68, GZ, scene, false);
+    add(new THREE.BoxGeometry(1.4, 4.7, 1.4), wallMat, px, 0.75 + 2.35, GZ);
+    for (let k = 0; k < 4; k++) {
+      const ang = k * Math.PI / 2, nx = Math.sin(ang), nz = Math.cos(ang);
+      const f = add(new THREE.BoxGeometry(0.9, 3.1, 0.04), MAT.gold, px + nx * 0.71, 3.2, GZ + nz * 0.71, scene, false); f.rotation.y = ang;
+      const p = add(new THREE.BoxGeometry(0.72, 2.92, 0.05), MAT.lacquer, px + nx * 0.72, 3.2, GZ + nz * 0.72, scene, false); p.rotation.y = ang;
+      const d = add(new THREE.BoxGeometry(0.3, 0.3, 0.05), MAT.gold, px + nx * 0.75, 3.2, GZ + nz * 0.75, scene, false); d.rotation.set(0, ang, Math.PI / 4); // a gold lozenge at its heart
+    }
+    add(new THREE.BoxGeometry(1.62, 0.18, 1.62), MAT.gold, px, 5.5, GZ, scene, false);
+    add(new THREE.BoxGeometry(1.5, 0.3, 1.5), WALL_WHITE, px, 5.74, GZ);
+    add(new THREE.BoxGeometry(1.6, 0.3, 1.6), MAT.gold, px, 6.0, GZ, scene, false);
     add(new THREE.BoxGeometry(1.5, 1.8, 0.6), wallMat, sg * 6, 0.9, GZ - 0.1);           // short wall to meet the ring
-    add(new THREE.BoxGeometry(1.6, 0.25, 0.9), MAT.lacquer, sg * 6, 1.9, GZ - 0.1, scene, false);
+    add(new THREE.BoxGeometry(1.6, 0.3, 0.84), WALL_WHITE, sg * 6, 0.15, GZ - 0.1, scene, false);
+    add(new THREE.BoxGeometry(1.6, 0.1, 0.8), WALL_WHITE, sg * 6, 1.85, GZ - 0.1, scene, false);
+    add(new THREE.CylinderGeometry(0.3, 0.3, 1.6, 16).rotateZ(Math.PI / 2).scale(1, 0.5, 1), WALL_WHITE, sg * 6, 1.93, GZ - 0.1, scene, false);
   });
   add(new THREE.BoxGeometry(10.6, 0.8, 1.6), MAT.lacquer, 0, 6.5, GZ);
   add(new THREE.BoxGeometry(10.7, 0.12, 1.7), MAT.gold, 0, 6.1, GZ, scene, false);
