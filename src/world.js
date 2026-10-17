@@ -9,6 +9,7 @@ import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { VRMLoaderPlugin, VRMUtils } from "@pixiv/three-vrm";
 import { createSound } from "./sound.js";
 
@@ -331,6 +332,141 @@ function gable(w, d, h, mat) {
   const g = new THREE.ExtrudeGeometry(s, { depth: d, bevelEnabled: false }); g.translate(0, 0, -d / 2);
   return new THREE.Mesh(g, mat);
 }
+/* ---------------- the Thai temple roof ---------------- */
+// Built the way central Thai temple roofs are: glazed orange tiles with a green border band, the gable fronts
+// (หน้าบัน) set back under the roof edge, red with gold flame-scroll carving (กนก) about a lotus, gold bargeboards
+// (ป้านลม) crested with a row of blade-like fins (ใบระกา), a curved bird-head finial (ช่อฟ้า) at the peak and an
+// upturned swan's tail (หางหงส์) at each lower end. A roof is a list of sections (ridge along z, gables at the
+// two ends); the halls stack two roofs (ซ้อน) and step the lower one down toward the front and back (ลด).
+// Every part goes into a few shared buckets that are merged at the end: a whole roof is a handful of meshes.
+const roofTex = (() => { // glazed tiles, light so the material's colour tints them; the rounded ends point down the slope (+u)
+  const c = document.createElement("canvas"); c.width = c.height = 256; const g = c.getContext("2d");
+  g.fillStyle = "#b9b0a4"; g.fillRect(0, 0, 256, 256);
+  for (let col = 0; col < 5; col++) for (let row = -1; row < 5; row++) {
+    const x = col * 64 - 8, y = row * 64 + (col % 2) * 32; // each column of tiles laps over the next, down the slope
+    const gr = g.createLinearGradient(x, 0, x + 64, 0); gr.addColorStop(0, "#d8d1c6"); gr.addColorStop(0.55, "#fffaf0"); gr.addColorStop(1, "#cfc6b8");
+    g.fillStyle = gr; g.strokeStyle = "#6f665c"; g.lineWidth = 3;
+    g.beginPath(); g.moveTo(x, y + 2); g.lineTo(x + 40, y + 2); g.arc(x + 40, y + 32, 30, -Math.PI / 2, Math.PI / 2); g.lineTo(x, y + 62); g.closePath(); g.fill(); g.stroke();
+    g.fillStyle = "rgba(255,255,255,.55)"; g.beginPath(); g.ellipse(x + 46, y + 22, 9, 4, -0.6, 0, Math.PI * 2); g.fill(); // the glaze catching the light
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; return t;
+})();
+const pedimentTex = (() => { // red ground, gold frame, gold flame scrolls rising from a lotus in the middle
+  const W = 1024, Hh = 512, c = document.createElement("canvas"); c.width = W; c.height = Hh; const g = c.getContext("2d");
+  const tri = (inset) => { g.beginPath(); g.moveTo(inset * 1.9, Hh - inset); g.lineTo(W / 2, inset * 1.1); g.lineTo(W - inset * 1.9, Hh - inset); g.closePath(); };
+  g.fillStyle = "#d9a640"; tri(0); g.fill();
+  g.fillStyle = "#7d1810"; tri(22); g.fill();
+  g.strokeStyle = "#f2cf6a"; g.lineWidth = 5; tri(34); g.stroke();
+  g.save(); tri(40); g.clip();
+  const gold = (x, y, s, a, flip) => { // one flame-scroll leaf (กนก): a teardrop that sweeps up into a curled tip
+    g.save(); g.translate(x, y); g.rotate(a); g.scale(flip ? -s : s, s);
+    const gr = g.createLinearGradient(0, 20, 0, -40); gr.addColorStop(0, "#b8862a"); gr.addColorStop(1, "#ffe08a"); g.fillStyle = gr;
+    g.beginPath(); g.moveTo(0, 18); g.bezierCurveTo(-20, 8, -16, -22, 4, -34); g.bezierCurveTo(14, -40, 22, -30, 12, -26); g.bezierCurveTo(4, -22, 8, -10, 16, -6); g.bezierCurveTo(22, 4, 12, 16, 0, 18); g.fill();
+    g.restore();
+  };
+  // a vine of scrolls filling the field: stems curving out from the middle, a flame leaf at every turn, mirrored
+  g.lineCap = "round";
+  for (let row = 0; row < 11; row++) {
+    const y = Hh - 64 - row * 36, half = (y - 40) * (W / 2 - 60) / (Hh - 80) - 30; // (the field narrows toward the apex)
+    if (half < 30) break;
+    [-1, 1].forEach((sg) => {
+      g.strokeStyle = "#e9bf5c"; g.lineWidth = 4; g.beginPath(); g.moveTo(W / 2 + sg * 40, y + 6);
+      for (let x = 40; x < half; x += 44) g.quadraticCurveTo(W / 2 + sg * (x + 22), y + (x / 44 % 2 ? -16 : 16), W / 2 + sg * (x + 44), y + 6);
+      g.stroke();
+      for (let x = 58, k = 0; x < half; x += 44, k++) {
+        gold(W / 2 + sg * x, y + (k % 2 ? -4 : 12), 0.78 - row * 0.025, sg * (k % 2 ? 2.4 : 0.55), sg < 0);
+        gold(W / 2 + sg * (x + 20), y + (k % 2 ? 10 : -6), 0.42, sg * (k % 2 ? 0.3 : 2.6), sg > 0); // a small leaf curling the other way
+      }
+    });
+  }
+  // up the middle, above the lotus: a tower of flames narrowing to the apex
+  for (let k = 0, y = Hh - 190; y > 70; k++, y -= 40) { const sc = 0.9 - k * 0.07; gold(W / 2 - 14 * sc, y, sc, -0.25, false); gold(W / 2 + 14 * sc, y, sc, 0.25, true); }
+  // a band of little gold teeth inside the frame, along the foot and up both sides
+  g.fillStyle = "#f2cf6a";
+  for (let x = 90; x < W - 90; x += 22) { g.beginPath(); g.moveTo(x, Hh - 44); g.lineTo(x + 11, Hh - 60); g.lineTo(x + 22, Hh - 44); g.fill(); }
+  // the lotus in the middle
+  g.fillStyle = "#f6d27a"; g.strokeStyle = "#9a6a1c"; g.lineWidth = 3;
+  [[-2.1, 70], [-1.4, 86], [-0.7, 96], [0, 100], [0.7, 96], [1.4, 86], [2.1, 70]].forEach(([a, r]) => {
+    g.save(); g.translate(W / 2, Hh - 70); g.rotate(a * 0.42); g.beginPath(); g.moveTo(0, 0); g.quadraticCurveTo(-34, -r * 0.6, 0, -r); g.quadraticCurveTo(34, -r * 0.6, 0, 0); g.fill(); g.stroke(); g.restore();
+  });
+  g.restore();
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
+})();
+const ROOF_TILE = new THREE.MeshStandardMaterial({ map: roofTex, color: 0xe8692e, roughness: 0.38, metalness: 0.08 });
+const ROOF_BORDER = new THREE.MeshStandardMaterial({ map: roofTex, color: 0x3f9a62, roughness: 0.38, metalness: 0.08 });
+const ROOF_PEDIMENT = new THREE.MeshStandardMaterial({ map: pedimentTex, roughness: 0.5, metalness: 0.25 });
+const finGeo = (() => { const sh = new THREE.Shape(); sh.moveTo(-0.11, 0); sh.quadraticCurveTo(-0.02, 0.12, 0.05, 0.36); sh.quadraticCurveTo(0.03, 0.12, 0.11, 0); sh.lineTo(-0.11, 0);
+  const g = new THREE.ExtrudeGeometry(sh, { depth: 0.035, bevelEnabled: false }); g.translate(0, 0, -0.0175); return g; })(); // one ใบระกา blade
+const _rm = new THREE.Matrix4(), _rq = new THREE.Quaternion(), _rs = new THREE.Vector3(1, 1, 1);
+function thaiRoof(parent, sections, { shadow = true, block = true } = {}) {
+  const bucket = new Map(); // material -> geometries (already placed)
+  const put = (mat, geo, pos, euler, scale) => {
+    _rm.compose(pos, _rq.setFromEuler(euler || new THREE.Euler()), scale || _rs);
+    let gg = geo.clone().applyMatrix4(_rm); if (gg.index) gg = gg.toNonIndexed();
+    if (!bucket.has(mat)) bucket.set(mat, []); bucket.get(mat).push(gg);
+  };
+  const V = (x, y, z) => new THREE.Vector3(x, y, z), E = (x, y, z, o) => new THREE.Euler(x, y, z, o);
+  const tileBox = (L, t, d, T, flipU) => { // a slab whose top carries the tiles, T metres to a tile
+    const g = new THREE.BoxGeometry(L, t, d), uv = g.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, (flipU ? 1 - uv.getX(i) : uv.getX(i)) * L / T, uv.getY(i) * d / T);
+    return g;
+  };
+  for (const { w, d, h, y, z = 0, ends = [-1, 1], chofa = false, hong = true, over = 0.7 } of sections) {
+    const half = w / 2, ang = Math.atan2(h, half), slope = Math.hypot(half, h) + over, t = 0.14, cs = Math.cos(ang), sn = Math.sin(ang);
+    const dl = d + 0.5; // the tiles reach a little past the gable fronts
+    [-1, 1].forEach((sg) => { // the two slopes, each from the ridge down past the eave
+      const mid = slope / 2 - 0.05, px = sg * (mid * cs), py = y + h - mid * sn; // (along the slope from the ridge)
+      const rot = E(0, 0, -sg * ang);
+      put(ROOF_TILE, tileBox(slope, t, dl, 0.5, sg < 0), V(px, py, z), rot);
+      // the green border: along the eave, and up both rakes, lying on the tiles
+      const tx = (u) => V(sg * (u * cs), y + h - u * sn, z), lift = new THREE.Vector3(sg * sn, cs, 0).multiplyScalar(t / 2 + 0.03);
+      put(ROOF_BORDER, tileBox(0.75, 0.05, dl + 0.02, 0.5, sg < 0), tx(slope - 0.05 - 0.375).add(lift), rot);
+      [-1, 1].forEach((e) => put(ROOF_BORDER, tileBox(slope - 0.7, 0.05, 0.55, 0.5, sg < 0), tx((slope - 0.75) / 2).add(lift).setZ(z + e * (dl / 2 - 0.275)), rot));
+    });
+    put(MAT.gold, new THREE.BoxGeometry(0.34, 0.3, dl + 0.1), V(0, y + h + 0.05, z)); // the ridge
+    for (const e of ends) {
+      const fz = z + e * dl / 2, ry = e > 0 ? 0 : Math.PI;
+      // the gable front, set back under the edge
+      const pw = w * 0.92 - 0.6, ph = h * 0.92;
+      const sh = new THREE.Shape(); sh.moveTo(-pw / 2, 0); sh.lineTo(0, ph); sh.lineTo(pw / 2, 0); sh.lineTo(-pw / 2, 0);
+      const pg = new THREE.ShapeGeometry(sh), puv = pg.attributes.uv, pp = pg.attributes.position;
+      for (let i = 0; i < puv.count; i++) puv.setXY(i, (pp.getX(i) + pw / 2) / pw, pp.getY(i) / ph);
+      put(ROOF_PEDIMENT, pg, V(0, y + 0.02, fz - e * 0.45), E(0, ry, 0));
+      // the bargeboards up both rakes, crested with blades, and a swan's tail at each foot
+      [-1, 1].forEach((sg) => {
+        const L = Math.hypot(half + over * cs, h + over * sn), mx = sg * (half + over * cs) / 2, my = y + h - (h + over * sn) / 2;
+        put(MAT.gold, new THREE.BoxGeometry(L, 0.34, 0.14), V(mx, my + 0.12, fz + e * 0.04), E(0, 0, -sg * ang));
+        const n = Math.floor((L - 0.6) / 0.34);
+        for (let i = 1; i <= n; i++) { const u = i * 0.34 + 0.15; put(MAT.gold, finGeo, V(sg * u * cs, y + h - u * sn + 0.27 + 0.02 * (0.34 / cs), fz + e * 0.04), E(0, ry, -sg * 0.18)); }
+        if (hong) { // หางหงส์: the foot of the bargeboard turns up and out, ending in a little curl
+          const fx = sg * (half + over * cs), fy = y - over * sn + 0.12;
+          const curve = new THREE.CatmullRomCurve3([V(fx - sg * 0.25, fy + 0.15, 0), V(fx, fy, 0), V(fx + sg * 0.3, fy + 0.2, 0), V(fx + sg * 0.38, fy + 0.6, 0), V(fx + sg * 0.22, fy + 0.82, 0), V(fx + sg * 0.12, fy + 0.68, 0)]);
+          put(MAT.gold, new THREE.TubeGeometry(curve, 20, 0.07, 6), V(0, 0, fz + e * 0.04));
+        }
+      });
+      if (chofa) { // ช่อฟ้า: a slender neck rising from the peak and curving out into a bird's head with a hooked beak
+        const cy = y + h + 0.15, curve = new THREE.CatmullRomCurve3([V(0, 0, -0.1), V(0, 0.45, 0.05), V(0, 0.9, 0.3), V(0, 1.2, 0.68), V(0, 1.18, 1.0), V(0, 1.02, 1.12)]);
+        put(MAT.gold, new THREE.TubeGeometry(curve, 24, 0.08, 6), V(0, cy, fz), E(0, ry, 0));
+        put(MAT.gold, new THREE.SphereGeometry(0.13, 10, 8), V(0, cy + 1.13, fz + e * 0.82), E(0, ry, 0)); // the head
+        put(MAT.gold, new THREE.ConeGeometry(0.07, 0.3, 6), V(0, cy + 0.98, fz + e * 1.1), E(e * 2.6, 0, 0)); // the beak, hooked down
+      }
+    }
+  }
+  const meshes = [];
+  for (const [mat, geos] of bucket) {
+    const m = new THREE.Mesh(mergeGeometries(geos), mat); m.castShadow = shadow; m.receiveShadow = true; parent.add(m); meshes.push(m);
+    geos.forEach((gg) => gg.dispose());
+    if (block && mat !== MAT.gold) camBlock.push(m);
+  }
+  return meshes;
+}
+// carved brackets (คันทวย) under the eaves: from a column, an S-curve out and up to the roof's edge
+function eaveBracket(parent, lx, y0, lz, out, up) {
+  const curve = new THREE.CatmullRomCurve3([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, up * 0.2, out * 0.35), new THREE.Vector3(0, up * 0.55, out * 0.55), new THREE.Vector3(0, up * 0.85, out * 0.8), new THREE.Vector3(0, up, out)]);
+  const m = new THREE.Mesh(new THREE.TubeGeometry(curve, 16, 0.06, 6), MAT.gold); m.position.set(lx, y0, lz); m.castShadow = true; parent.add(m);
+  const n = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), MAT.gold); n.position.set(lx, y0 + up * 0.55, lz + out * 0.55); parent.add(n); // the naga's coil
+}
+
 // A sala you can walk into: stone base, wooden floor, red lacquer columns, a two-tier roof with
 // gold gable panels and chofa finials. Walls on three sides (front open), or none for a pavilion.
 // Everything is built in the hall's own coordinates: +z is the open front.
@@ -377,17 +513,15 @@ function sala({ x, z, rot = 0, W = 13, D = 10, H = 5.6, walls = true }) {
   }
   beam(W + 0.6, 0, D / 2 + 0.2);
   camBlock.push(add(new THREE.BoxGeometry(W + 0.4, 0.25, D + 0.6), MAT.woodDark, 0, FY + H + 0.12, 0.1, g));
-  // two-tier roof
-  [[W + 3.4, D + 3.4, H * 0.68, FY + H + 0.2], [W * 0.72, D * 0.86, H * 0.57, FY + H + H * 0.43]].forEach(([rw, rd, rh, ry]) => {
-    const r = gable(rw, rd, rh, MAT.roof); r.position.y = ry; r.castShadow = true; g.add(r); camBlock.push(r);
-    [-1, 1].forEach((sg) => {
-      const e = gable(rw + 0.3, 0.25, rh + 0.15, MAT.roofEdge); e.position.set(0, ry - 0.05, sg * rd / 2); g.add(e);
-      const pnl = gable(rw * 0.55, 0.12, rh * 0.55, MAT.gold); pnl.position.set(0, ry + 0.25, sg * (rd / 2 + 0.1)); g.add(pnl);
-      const f = add(new THREE.ConeGeometry(0.25, 1.8, 6), MAT.gold, 0, ry + rh + 0.7, sg * rd / 2, g); f.rotation.x = sg * 0.55;
-    });
-    const bt = new THREE.BoxGeometry(0.25, 0.25, rd + 0.3);
-    [-1, 1].forEach((sg) => { const b = add(bt, MAT.roofGreen, sg * rw / 2, ry + 0.05, 0, g, false); b.rotation.z = sg * 0.1; });
-  });
+  // the roof: a lower roof stepping down at front and back (ลด), and an upper roof stacked over it (ซ้อน)
+  const lw = W + 2.4, ld = D + 3.0, lh = H * 0.74, ly = FY + H + 0.2, cd = ld * 0.62, ed = ld * 0.21, drop = 0.55;
+  thaiRoof(g, [
+    { w: lw, d: cd, h: lh, y: ly, hong: false },                                                                      // the lower roof's middle
+    ...[-1, 1].map((e) => ({ w: lw, d: ed, h: lh, y: ly - drop, z: e * (cd / 2 + ed / 2 - 0.25), ends: [e], chofa: true })), // its lower ends
+    { w: W * 0.74, d: D * 0.86, h: H * 0.57, y: FY + H + H * 0.43, chofa: true },                                    // the upper roof
+  ]);
+  // carved brackets from the front columns up to the eaves
+  if (walls) for (let i = 1; i < n; i++) { let lx = -W / 2 + 0.3 + i * (W - 0.6) / n; if (Math.abs(lx) < 1.3) lx = Math.sign(lx) * 1.3; eaveBracket(g, lx, FY + H - 1.5, D / 2 + 0.45, 1.1, 1.2); }
   // warm light inside
   const lamp = new THREE.PointLight(0xffd2a0, walls ? 14 : 6, Math.max(W, D) + 2, 2); lamp.position.set(0, FY + H - 0.3, walls ? -D / 4 : 0); g.add(lamp);
   hallLamps.push({ light: lamp, day: lamp.intensity, night: walls ? 34 : 18 });
@@ -1236,7 +1370,7 @@ const YAKSHA_H = 6.2; // the guardians stand about as tall as the gateway's post
   });
   add(new THREE.BoxGeometry(10.6, 0.8, 1.6), MAT.lacquer, 0, 6.5, GZ);
   add(new THREE.BoxGeometry(10.7, 0.12, 1.7), MAT.gold, 0, 6.1, GZ, scene, false);
-  const gr = gable(11.4, 3, 2.8, MAT.roof); gr.position.set(0, 6.9, GZ); gr.castShadow = true; scene.add(gr);
+  { const gg = new THREE.Group(); gg.position.z = GZ; scene.add(gg); thaiRoof(gg, [{ w: 11.4, d: 3, h: 3.0, y: 6.9, chofa: true }], { block: false }); }
   // the two guardian giants (ยักษ์ทวารบาล), as at the gates of Wat Arun: on white pedestals either side of the
   // gateway, just outside the wall, facing out over the naga bridge to meet those who come. Green on the left as
   // you arrive, white on the right; friendly rather than fearsome, in the boy's style.
@@ -1245,11 +1379,6 @@ const YAKSHA_H = 6.2; // the guardians stand about as tall as the gateway's post
     add(new THREE.BoxGeometry(2.3, 0.7, 1.9), wallMat, sg * YX, 0.35, YZ);
     add(new THREE.BoxGeometry(2.45, 0.12, 2.05), MAT.gold, sg * YX, 0.72, YZ, scene, false);
     props(name, YAKSHA_H, [[sg * YX, YZ, MONK_TURN, 0.78]]); infoSpot("yaksha", sg * YX, 3.2, YZ, 2.2, 2.8);
-  });
-  [-1, 1].forEach((sg) => {
-    const e = gable(11.7, 0.25, 2.95, MAT.roofEdge); e.position.set(0, 6.85, GZ + sg * 1.5); scene.add(e);
-    const pnl = gable(6.2, 0.12, 1.55, MAT.gold); pnl.position.set(0, 7.1, GZ + sg * 1.6); scene.add(pnl);
-    const f = add(new THREE.ConeGeometry(0.22, 1.6, 6), MAT.gold, 0, 10.3, GZ + sg * 1.5); f.rotation.x = sg * 0.55;
   });
   sign(tx("วัดสัมโพธายะ", "Sambodhaya Temple"), tx("ยินดีต้อนรับ เดินช้า ๆ ได้", "Welcome. Take your time."), "☸", 0, 12.4, GZ, 6);
 }
