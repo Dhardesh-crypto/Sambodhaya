@@ -165,16 +165,16 @@ Deployed as-is (no build step on Netlify; see `netlify.toml`) to https://sambodh
 
 **The Universal Hall's back wall** shows the Maravijaya, the Buddha's victory over Mara, in the same way either side of the red cloth: on the left Mara's army on elephants and horses is swept away by the flood Mae Thorani wrings from her hair; on the right the army kneels in the waves with hands in a wai while celestial beings scatter golden flowers (`img/murals/maravijaya-left.jpg`, `-right.jpg`, Higgsfield). In both halls the red cloth behind the image reaches the ceiling.
 
-## Form submissions in Airtable
+## Form submissions in Supabase
 
-Every accepted Netlify Forms submission (spam filtered out) is also copied into Airtable by `netlify/functions/submission-created.mjs`, which Netlify runs on its own. The submission always stays in Netlify too; if Airtable is not set up or refuses a row, nothing is lost.
+Every accepted Netlify Forms submission (spam filtered out) is also copied into Supabase by `netlify/functions/submission-created.mjs`, which Netlify runs on its own. The submission always stays in Netlify too; if Supabase is not set up or refuses a row, nothing is lost.
 
-Settings, in Netlify → Site configuration → Environment variables (never in the code or in chat): `AIRTABLE_TOKEN` (a personal access token with the scope `data.records:write`, access to this base only) and `AIRTABLE_BASE_ID` (starts with `app`).
+The rows go to the **Goosemania Kanban board** Supabase project (no extra cost), in two tables of their own: **sambodhaya_donations** (submitted, name, amount_thb, method, note, email, thanks, language, slip, submission_id, delete_after, status: Awaiting check / Verified / Problem) and **sambodhaya_feedback** (submitted, type, message, page, language, device, email, attachment, submission_id). View and edit them in the Supabase dashboard → Table Editor.
 
-The base has two tables, with fields named exactly:
-- **Donations**: Submitted (date with time), Name (text), Amount (THB) (number), Method (text), Note (long text), Email (email), Thanks (text), Language (text), Slip (URL), Submission ID (text), Delete after (date), Status (single select: Awaiting check, Verified, Problem)
-- **Feedback**: Submitted (date with time), Type (text), Message (long text), Page (text), Language (text), Device (text), Email (email), Attachment (URL), Submission ID (text)
+The tables are closed to the API. The site's only way in is the database function `sambodhaya_submit(form, fields, secret)`, which adds one row and refuses calls without the secret kept in `private.sambodhaya_settings`. So the site cannot read anything, in these tables or in the Kanban board.
 
-The support page promises slips are kept 90 days: each donation row gets a "Delete after" date; delete the row (and the submission in Netlify) by then. The Slip link is Netlify's; if it has expired, open the submission in the Netlify dashboard (Forms → donation) by its Submission ID.
+Settings, in Netlify → Site configuration → Environment variables (never in the code or in chat): `SUPABASE_URL`, `SUPABASE_KEY` (the project's publishable key) and `SAMBODHAYA_SECRET` (the value in `private.sambodhaya_settings`).
+
+The support page promises slips are kept 90 days: each donation row gets a `delete_after` date, and a nightly database job (pg_cron, `sambodhaya-delete-old-donations`, 03:15 UTC) removes the row on that date. Delete the submission in Netlify (Forms → donation) by then too. The slip link is Netlify's; if it has expired, open the submission in the Netlify dashboard by its submission_id.
 
 **Greeting a monk:** kneeling with the wai before a teacher, the child first says the polite greeting, นมัสการครับ (Namassakan krab) for the boy and นมัสการค่ะ (Namassakan kha) for the girl, as a former monk in Thailand gave them; then the monk answers. The words are shown beneath, in either language the Thai words with their meaning; the voice (MiniMax: Bram for the boy, Skye for the girl; `audio/greet-boy.mp3`, `greet-girl.mp3`) is heard only with the sound on.
