@@ -200,14 +200,46 @@ function props(name, h, list, { fallback, shadow = true, parent = scene, extra =
     dome.visible = false; hemi.intensity = 0.45; pm.dispose();
     skyHdr = hdr; applyTime(); // (keeps night if it is night)
   });
-  // soft rolling hills fading into the haze
-  const hillGeo = new THREE.SphereGeometry(1, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2);
-  const hillMats = [S(0x6f9a5a, { roughness: 1 }), S(0x86a77a, { roughness: 1 }), S(0x9fb39a, { roughness: 1 })];
-  for (let i = 0; i < 22; i++) {
-    const a = (i / 22) * Math.PI * 2 + 0.1, d = 185 + (i % 3) * 25, h = 22 + ((i * 37) % 28), w = 40 + (i % 4) * 10;
-    const m = add(hillGeo, hillMats[i % 3], Math.cos(a) * d, -1, Math.sin(a) * d, scene, false);
-    m.scale.set(w, h, w * 0.8); m.rotation.y = i;
-  }
+  // the mountains: three ranges all round, each a continuous ridge with peaks, saddles and valleys. The nearest is
+  // forest green, the next bluer, the farthest pale in the haze (the fog does the rest, as the air does); a few steep
+  // limestone towers (เขาหินปูน) rise from the middle range with grey cliffs, as in Thai hill country. Lowland lies
+  // in front, so nothing floats.
+  const nz = (() => { // smooth value noise, the same every visit
+    const h = (x, y) => { const n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return n - Math.floor(n); };
+    const sm = (t) => t * t * (3 - 2 * t);
+    return (x, y) => { const xi = Math.floor(x), yi = Math.floor(y), xf = sm(x - xi), yf = sm(y - yi);
+      const a = h(xi, yi), b = h(xi + 1, yi), c = h(xi, yi + 1), d = h(xi + 1, yi + 1); return a + (b - a) * xf + (c - a) * yf + (a - b - c + d) * xf * yf; };
+  })();
+  const ring = (t, f, seed) => nz(Math.cos(t) * f + seed, Math.sin(t) * f + seed * 1.7); // noise round the circle, seamless
+  const lowland = new THREE.Mesh(new THREE.RingGeometry(119, 300, 128, 1), S(0x7c9a5c, { roughness: 1 }));
+  lowland.rotation.x = -Math.PI / 2; lowland.position.y = -0.6; scene.add(lowland);
+  const HAZE = new THREE.Color(0xc4cfd2); // the air between: soft blue-grey (the ranges keep out of the warm fog)
+  const range = ({ R, depth, base, amp, seed, colLow, colHigh, rock = 0, towers = 0, haze = 0 }) => {
+    const N = 420, M = 14, pos = [], col = [], idx = [], cLow = new THREE.Color(colLow), cHigh = new THREE.Color(colHigh), cRock = new THREE.Color(0x8b877a), c = new THREE.Color();
+    const heightAt = (t) => {
+      let h = base + amp * (0.55 * ring(t, 3, seed) + 0.3 * ring(t, 9, seed + 3) + 0.15 * ring(t, 22, seed + 7));
+      if (towers) { const k = ring(t, 9, seed + 11), u = Math.min(1, Math.max(0, (k - 0.62) / 0.06)); h += towers * u * u * (3 - 2 * u); } // the towers: steep sides, rounded tops
+      return h;
+    };
+    for (let i = 0; i <= N; i++) {
+      const t = i / N * Math.PI * 2, top = heightAt(t), steep = Math.abs(heightAt(t + 0.004) - heightAt(t - 0.004)) / 2.4;
+      for (let j = 0; j <= M; j++) {
+        const f = j / M, y = -1 + (top + 1) * (1 - (1 - f) ** 1.8), r = R - depth * (1 - f) + 6 * (ring(t, 30, seed + j) - 0.5); // the foot comes forward; the ridge stands back
+        pos.push(Math.cos(t) * r, y, Math.sin(t) * r);
+        const canopy = ring(t * 1 + f * 0.3, 60, seed + j * 0.37); // the mottled forest
+        c.copy(cLow).lerp(cHigh, Math.min(1, f * 0.8 + canopy * 0.35));
+        if (rock && steep > 0.9 && f > 0.2 && f < 0.92) c.lerp(cRock, Math.min(0.85, (steep - 0.9) * rock) * (0.7 + 0.3 * canopy)); // cliffs (the tops stay green)
+        c.lerp(HAZE, haze * (0.75 + 0.25 * f)); // (the tops a little paler than the feet)
+        col.push(c.r, c.g, c.b);
+      }
+    }
+    for (let i = 0; i < N; i++) for (let j = 0; j < M; j++) { const a = i * (M + 1) + j, b = a + M + 1; idx.push(a, b, a + 1, b, b + 1, a + 1); }
+    const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx); g.computeVertexNormals();
+    const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, side: THREE.DoubleSide, fog: false })); scene.add(m); return m;
+  };
+  range({ R: 270, depth: 40, base: 24, amp: 40, seed: 31, colLow: 0x6f8f86, colHigh: 0x8fa8a2, haze: 0.62 });                       // the far range, in the haze
+  range({ R: 215, depth: 45, base: 10, amp: 24, seed: 17, colLow: 0x4e7457, colHigh: 0x6f8f6c, rock: 1.4, towers: 20, haze: 0.34 }); // the middle range, with limestone towers
+  range({ R: 165, depth: 35, base: 3, amp: 16, seed: 5, colLow: 0x3f6a3a, colHigh: 0x648a4e, haze: 0.12 });                        // the near hills, in forest
 }
 
 // plaster, lotus petals, frieze and shutters: shared by the halls, the temple wall and the Bodhi tree's platform
