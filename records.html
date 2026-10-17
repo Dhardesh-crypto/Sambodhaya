@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sambodhaya records</title>
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Itim&family=Mali:wght@400;600;700&display=swap">
+<style>
+/* Read-only records for the people who check donation slips: the rows from Supabase (via netlify/functions/records.mjs),
+   only with the key in the link (#k=...). Nothing on this page can change a row. */
+:root {
+  --ink: #3a2a1d; --paper: #fdf8ee; --cream: #fffdf8; --saffron: #e98a2b; --saffron-deep: #a5560f;
+  --leaf: #4f9a5d; --leaf-soft: #e6f3e3; --gold-soft: #fbefc9; --red: #b3392f; --red-soft: #f8e1dc;
+  --muted: #6e5c4c; --line-soft: #e8dcc6;
+  --display: "Itim", "Mali", "Thonburi", system-ui, sans-serif;
+  --body: "Mali", "Itim", "Thonburi", system-ui, sans-serif;
+  color-scheme: light;
+}
+html { background: var(--paper); }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.55; }
+main { max-width: 1280px; margin: 0 auto; padding: 20px 16px 48px; }
+h1, h2 { font-family: var(--display); font-weight: 400; line-height: 1.25; margin: 0; }
+h1 { font-size: 1.7rem; } h2 { font-size: 1.3rem; margin: 32px 0 10px; }
+.top { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
+.quiet { color: var(--muted); font-size: .9rem; }
+button, select, input { font: inherit; color: inherit; }
+button, select { background: var(--cream); border: 1.5px solid var(--ink); border-radius: 999px; padding: 3px 14px; cursor: pointer; }
+input[type="search"] { background: var(--cream); border: 1.5px solid var(--ink); border-radius: 999px; padding: 3px 14px; min-width: 0; flex: 1 1 200px; }
+.tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0; }
+.badge-ro { display: inline-block; font-size: .8rem; background: var(--leaf-soft); border: 1.5px solid var(--ink); border-radius: 999px; padding: 0 10px; }
+details.guide { background: var(--cream); border: 1.5px solid var(--line-soft); border-radius: 14px; padding: 10px 16px; margin-top: 16px; }
+details.guide summary { cursor: pointer; font-family: var(--display); font-size: 1.1rem; }
+details.guide ol { margin: 8px 0 4px; padding-left: 22px; } details.guide li { margin: 4px 0; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-top: 16px; }
+.tile { background: var(--cream); border: 1.5px solid var(--line-soft); border-radius: 14px; padding: 10px 14px; }
+.tile b { display: block; font-family: var(--display); font-weight: 400; font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+.wrap { overflow-x: auto; border: 1.5px solid var(--line-soft); border-radius: 14px; background: var(--cream); }
+table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+th, td { text-align: left; vertical-align: top; padding: 7px 10px; border-bottom: 1px solid var(--line-soft); }
+th { position: sticky; top: 0; background: #f6eedd; font-weight: 600; white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.when, td.nowrap { white-space: nowrap; }
+td.long { min-width: 220px; max-width: 420px; white-space: pre-wrap; overflow-wrap: anywhere; }
+td.id { font-family: ui-monospace, Menlo, monospace; font-size: .78rem; color: var(--muted); }
+.status { display: inline-block; border-radius: 999px; padding: 0 10px; border: 1.5px solid var(--ink); white-space: nowrap; font-size: .82rem; }
+.s-await { background: var(--gold-soft); } .s-ok { background: var(--leaf-soft); } .s-bad { background: var(--red-soft); }
+.soon { color: var(--red); font-weight: 600; }
+a { color: var(--saffron-deep); }
+.empty { padding: 18px; text-align: center; color: var(--muted); }
+.msg { margin-top: 40px; background: var(--cream); border: 1.5px solid var(--line-soft); border-radius: 14px; padding: 18px; max-width: 640px; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <div class="top">
+    <div>
+      <h1 data-th="บันทึกการสมทบทุนและความคิดเห็น" data-en="Donation and feedback records"></h1>
+      <p class="quiet"><span class="badge-ro" data-th="อ่านอย่างเดียว" data-en="Read-only"></span> <span id="asof"></span></p>
+    </div>
+    <div class="tools">
+      <button id="lang" type="button">English</button>
+      <button id="reload" type="button" data-th="โหลดใหม่" data-en="Refresh"></button>
+    </div>
+  </div>
+
+  <div id="msg" class="msg" hidden></div>
+
+  <div id="content" hidden>
+    <details class="guide" open>
+      <summary data-th="วิธีตรวจสลิป" data-en="How to check a slip"></summary>
+      <ol>
+        <li data-th="เปิดสลิป แล้วเทียบจำนวนเงินและวันที่กับรายการเงินเข้าของพร้อมเพย์ 088-953-5999 (นาย วัฒพงษ์ น้อยเวียง)" data-en="Open the slip and compare the amount and date with the money received on PromptPay 088-953-5999 (นาย วัฒพงษ์ น้อยเวียง)."></li>
+        <li data-th="แจ้งผลแก่ผู้ดูแลเว็บไซต์ พร้อมรหัสรายการ: ตรงกัน (Verified) หรือมีปัญหา (Problem) ผู้ดูแลจะเปลี่ยนสถานะให้ หน้านี้แก้ไขไม่ได้" data-en="Tell the site's caretaker the result, with the submission ID: it matches (Verified) or there is a problem (Problem). They change the status; this page cannot."></li>
+        <li data-th="การขอบคุณ: “ส่วนตัว” ขอบคุณทางอีเมลถ้ามีให้ ไม่แสดงชื่อ · “แสดงชื่อ” ใส่ชื่อในรายชื่อผู้สนับสนุน ห้ามแสดงจำนวนเงิน · “(anonymous)” ไม่ต้องติดต่อ" data-en="Thanks: “private” means thank them by email if they gave one, never show the name · “public” means add the name to the supporters list, never the amount · “(anonymous)” means no contact."></li>
+        <li data-th="ข้อมูลและสลิปเก็บไว้ 90 วันตามที่สัญญาไว้ แถวจะถูกลบเองในวัน “ลบหลัง” ลบรายการใน Netlify ด้วยภายในวันนั้น" data-en="Data and slips are kept 90 days, as promised. Each row is deleted by itself on its “delete after” date; delete the submission in Netlify by then too."></li>
+        <li data-th="อย่าส่งต่อลิงก์นี้หรือข้อมูลผู้บริจาค ลิงก์นี้มีกุญแจอยู่ในตัว" data-en="Don't pass this link or donors' details on: the link carries its own key."></li>
+      </ol>
+    </details>
+
+    <div class="tiles" id="tiles"></div>
+
+    <h2 data-th="การสมทบทุน" data-en="Donations"></h2>
+    <div class="tools">
+      <select id="status" aria-label="Status">
+        <option value="" data-th="ทุกสถานะ" data-en="All statuses"></option>
+        <option value="Awaiting check" data-th="รอตรวจ" data-en="Awaiting check"></option>
+        <option value="Verified" data-th="ตรวจแล้ว" data-en="Verified"></option>
+        <option value="Problem" data-th="มีปัญหา" data-en="Problem"></option>
+      </select>
+      <input id="q" type="search" data-th-ph="ค้นหาชื่อ อีเมล หมายเหตุ รหัส" data-en-ph="Search name, email, note, ID">
+      <button id="csv" type="button" data-th="ดาวน์โหลด CSV" data-en="Download CSV"></button>
+    </div>
+    <div class="wrap"><table id="don"></table></div>
+
+    <h2 data-th="ความคิดเห็น" data-en="Feedback"></h2>
+    <div class="wrap"><table id="fb"></table></div>
+  </div>
+</main>
+
+<script>
+(() => {
+  let key = "";
+  let lang = "th", data = null;
+  try { lang = localStorage.getItem("records-lang") || "th"; } catch (e) {}
+  const T = (th, en) => (lang === "en" ? en : th);
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+
+  const STATUS = { "Awaiting check": ["s-await", "รอตรวจ"], Verified: ["s-ok", "ตรวจแล้ว"], Problem: ["s-bad", "มีปัญหา"] };
+  const THANKS = { private: ["ส่วนตัว", "private"], public: ["แสดงชื่อ", "public"] };
+  const bkk = (iso) => new Date(iso).toLocaleString(lang === "en" ? "en-GB" : "th-TH", { timeZone: "Asia/Bangkok", dateStyle: "medium", timeStyle: "short" });
+  const baht = (n) => (n == null ? "" : "฿" + Number(n).toLocaleString("en-US", { maximumFractionDigits: 2 }));
+  const daysLeft = (d) => Math.round((Date.parse(d) - Date.parse(new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" }))) / 86400000); // (calendar days, Thai time)
+  const safeLink = (u, label) => { if (!/^https:\/\//.test(u || "")) return document.createTextNode(""); const a = el("a", null, label); a.href = u; a.target = "_blank"; a.rel = "noopener noreferrer"; return a; };
+
+  function words() {
+    document.documentElement.lang = lang;
+    document.querySelectorAll("[data-th]").forEach((e) => (e.textContent = e.dataset[lang]));
+    document.querySelectorAll("[data-th-ph]").forEach((e) => (e.placeholder = lang === "en" ? e.dataset.enPh : e.dataset.thPh));
+    $("lang").textContent = lang === "en" ? "ภาษาไทย" : "English";
+  }
+
+  function message(th, en) { $("content").hidden = true; const m = $("msg"); m.hidden = false; m.textContent = T(th, en); }
+
+  function table(t, cols, rows, emptyText) {
+    t.replaceChildren();
+    const head = el("tr"); cols.forEach((c) => head.append(el("th", null, T(c.th, c.en)))); t.append(el("thead")); t.tHead.append(head);
+    const body = el("tbody"); t.append(body);
+    if (!rows.length) { const tr = el("tr"), td = el("td", "empty", emptyText); td.colSpan = cols.length; tr.append(td); body.append(tr); return; }
+    rows.forEach((r) => { const tr = el("tr"); cols.forEach((c) => { const td = el("td", c.cls || null); const v = c.cell(r); if (v instanceof Node) td.append(v); else td.textContent = v == null ? "" : v; tr.append(td); }); body.append(tr); });
+  }
+
+  const DON = [
+    { th: "ส่งเมื่อ (เวลาไทย)", en: "Submitted (Thai time)", cls: "when", cell: (r) => bkk(r.submitted) },
+    { th: "สถานะ", en: "Status", cell: (r) => { const s = STATUS[r.status] || ["", r.status]; return el("span", "status " + s[0], T(s[1], r.status)); } },
+    { th: "ชื่อ", en: "Name", cls: "nowrap", cell: (r) => r.name },
+    { th: "จำนวน", en: "Amount", cls: "num", cell: (r) => baht(r.amount_thb) },
+    { th: "สลิป", en: "Slip", cls: "nowrap", cell: (r) => safeLink(r.slip, T("เปิดสลิป", "Open slip")) },
+    { th: "ช่องทาง", en: "Method", cls: "nowrap", cell: (r) => r.method },
+    { th: "การขอบคุณ", en: "Thanks", cls: "nowrap", cell: (r) => (THANKS[r.thanks] ? T(...THANKS[r.thanks]) : r.thanks) },
+    { th: "อีเมล", en: "Email", cls: "nowrap", cell: (r) => r.email },
+    { th: "หมายเหตุ", en: "Note", cls: "long", cell: (r) => r.note },
+    { th: "ภาษา", en: "Language", cell: (r) => r.language },
+    { th: "18+ / ยินยอม", en: "18+ / consent", cls: "nowrap", cell: (r) => r.adult_consent },
+    { th: "ลบหลัง", en: "Delete after", cls: "nowrap", cell: (r) => { const n = daysLeft(r.delete_after), s = el("span", n <= 14 ? "soon" : null, `${r.delete_after} (${n} ${T("วัน", n === 1 ? "day" : "days")})`); return s; } },
+    { th: "รหัสรายการ", en: "Submission ID", cls: "id", cell: (r) => r.submission_id },
+  ];
+  const FB = [
+    { th: "ส่งเมื่อ (เวลาไทย)", en: "Submitted (Thai time)", cls: "when", cell: (r) => bkk(r.submitted) },
+    { th: "ประเภท", en: "Type", cell: (r) => r.type },
+    { th: "ข้อความ", en: "Message", cls: "long", cell: (r) => r.message },
+    { th: "หน้า", en: "Page", cls: "nowrap", cell: (r) => r.page },
+    { th: "ภาษา", en: "Language", cell: (r) => r.language },
+    { th: "อีเมล", en: "Email", cls: "nowrap", cell: (r) => r.email },
+    { th: "ไฟล์แนบ", en: "Attachment", cls: "nowrap", cell: (r) => safeLink(r.attachment, T("เปิดไฟล์", "Open file")) },
+    { th: "อุปกรณ์", en: "Device", cls: "long", cell: (r) => r.device },
+    { th: "รหัสรายการ", en: "Submission ID", cls: "id", cell: (r) => r.submission_id },
+  ];
+
+  function shownDonations() {
+    const st = $("status").value, q = $("q").value.trim().toLowerCase();
+    return data.donations.filter((r) => (!st || r.status === st) && (!q || [r.name, r.email, r.note, r.submission_id, r.method].some((v) => (v || "").toLowerCase().includes(q))));
+  }
+
+  function tiles() {
+    const d = data.donations, sum = (rows) => rows.reduce((a, r) => a + Number(r.amount_thb || 0), 0);
+    const by = (s) => d.filter((r) => r.status === s);
+    const month = new Date().toLocaleString("en-CA", { timeZone: "Asia/Bangkok" }).slice(0, 7);
+    const thisMonth = d.filter((r) => new Date(r.submitted).toLocaleString("en-CA", { timeZone: "Asia/Bangkok" }).slice(0, 7) === month);
+    const box = $("tiles"); box.replaceChildren();
+    [[T("รอตรวจ", "Awaiting check"), by("Awaiting check")], [T("ตรวจแล้ว", "Verified"), by("Verified")], [T("มีปัญหา", "Problem"), by("Problem")], [T("เดือนนี้ (ทั้งหมด)", "This month (all)"), thisMonth]].forEach(([label, rows]) => {
+      const t = el("div", "tile"); t.append(el("span", "quiet", label), el("b", null, baht(sum(rows))), el("span", "quiet", `${rows.length} ${T("รายการ", rows.length === 1 ? "donation" : "donations")}`)); box.append(t);
+    });
+  }
+
+  function render() {
+    words();
+    if (!data) return;
+    $("asof").textContent = T("ข้อมูลเมื่อ ", "As of ") + bkk(data.as_of);
+    tiles();
+    table($("don"), DON, shownDonations(), T("ยังไม่มีรายการ", "No donations yet"));
+    table($("fb"), FB, data.feedback, T("ยังไม่มีความคิดเห็น", "No feedback yet"));
+  }
+
+  async function load() {
+    key = new URLSearchParams(location.hash.slice(1)).get("k") || "";
+    if (!key) return message("หน้านี้เปิดได้ด้วยลิงก์ที่มีกุญแจเท่านั้น ขอลิงก์จากผู้ดูแลเว็บไซต์", "This page opens only with the link that carries its key. Ask the site's caretaker for it.");
+    try {
+      const r = await fetch("/.netlify/functions/records", { headers: { "x-view-key": key }, cache: "no-store" });
+      if (r.status === 401) return message("กุญแจในลิงก์นี้ใช้ไม่ได้แล้ว ขอลิงก์ใหม่จากผู้ดูแลเว็บไซต์", "The key in this link no longer works. Ask the site's caretaker for a new link.");
+      if (!r.ok) throw new Error(r.status);
+      data = await r.json();
+      $("msg").hidden = true; $("content").hidden = false; render();
+    } catch (e) { message("โหลดข้อมูลไม่ได้ ลองกด “โหลดใหม่” อีกครั้งภายหลัง", "The records could not be loaded. Try Refresh again later."); }
+  }
+
+  function csv() {
+    const cols = ["submitted", "status", "name", "amount_thb", "method", "thanks", "email", "note", "language", "adult_consent", "slip", "delete_after", "submission_id"];
+    const q = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
+    const text = "﻿" + [cols.join(","), ...shownDonations().map((r) => cols.map((c) => q(r[c])).join(","))].join("\r\n");
+    const a = el("a"); a.href = URL.createObjectURL(new Blob([text], { type: "text/csv;charset=utf-8" })); a.download = `sambodhaya-donations-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
+  $("lang").onclick = () => { lang = lang === "en" ? "th" : "en"; try { localStorage.setItem("records-lang", lang); } catch (e) {} render(); };
+  $("reload").onclick = load;
+  window.addEventListener("hashchange", load);
+  $("status").onchange = render;
+  $("q").oninput = render;
+  $("csv").onclick = csv;
+  words();
+  load();
+})();
+</script>
+</body>
+</html>
