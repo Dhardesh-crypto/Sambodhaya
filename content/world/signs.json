@@ -1,0 +1,60 @@
+{
+  "gate": {
+    "title": {
+      "th": "วัดสัมโพธายะ",
+      "en": "Sambodhaya Temple"
+    },
+    "sub": {
+      "th": "ยินดีต้อนรับ เดินช้า ๆ ได้",
+      "en": "Welcome. Take your time."
+    }
+  },
+  "welcome": {
+    "th": "ยินดีต้อนรับ",
+    "en": "Welcome"
+  },
+  "leave": {
+    "th": "ออกจากวัดได้เสมอ",
+    "en": "Leave any time"
+  },
+  "tool_rack": {
+    "title": {
+      "th": "ที่เก็บอุปกรณ์",
+      "en": "Tool rack"
+    },
+    "sub": {
+      "th": "วางไม้กวาดและบัวรดน้ำคืนที่วงสีทอง",
+      "en": "Put the broom and can back on the gold rings"
+    }
+  },
+  "garden_stones": [
+    {
+      "icon": "🧍",
+      "name": {
+        "th": "กาย",
+        "en": "Body"
+      }
+    },
+    {
+      "icon": "💗",
+      "name": {
+        "th": "ความรู้สึก",
+        "en": "Feelings"
+      }
+    },
+    {
+      "icon": "🧠",
+      "name": {
+        "th": "จิต",
+        "en": "Mind"
+      }
+    },
+    {
+      "icon": "☸",
+      "name": {
+        "th": "ธรรม",
+        "en": "Dhamma"
+      }
+    }
+  ]
+}

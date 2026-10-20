@@ -1,0 +1,112 @@
+{
+  "yard": {
+    "icon": "🌳",
+    "name": {
+      "th": "ลานกลาง",
+      "en": "Central Courtyard"
+    },
+    "sub": {
+      "th": "อยากไปไหนวันนี้?",
+      "en": "Where would you like to go today?"
+    }
+  },
+  "library": {
+    "icon": "📚",
+    "name": {
+      "th": "หอหลักฐาน · ห้องสมุด",
+      "en": "Evidence Library"
+    },
+    "sub": {
+      "th": "ดูต้นทาง หลักฐาน และสถานะการตรวจ",
+      "en": "Sources, evidence and checking status"
+    }
+  },
+  "learn": {
+    "icon": "🧘",
+    "name": {
+      "th": "ศาลาเรียนรู้",
+      "en": "Learning Hall"
+    },
+    "sub": {
+      "th": "เรียน ฝึก และสังเกตไปทีละก้าว",
+      "en": "Learn, practise and observe, one step at a time"
+    }
+  },
+  "media": {
+    "icon": "🎬",
+    "name": {
+      "th": "ศาลาสื่อ",
+      "en": "Media Hall"
+    },
+    "sub": {
+      "th": "อ่าน ฟัง หรือดู",
+      "en": "Read, listen or watch"
+    }
+  },
+  "access": {
+    "icon": "🌍",
+    "name": {
+      "th": "ศาลาสากล",
+      "en": "Universal Hall"
+    },
+    "sub": {
+      "th": "หลายภาษาและการเข้าถึง",
+      "en": "Languages and access"
+    }
+  },
+  "rest": {
+    "icon": "🪷",
+    "name": {
+      "th": "พื้นที่พัก",
+      "en": "Rest Area"
+    },
+    "sub": {
+      "th": "พักใจได้เสมอ",
+      "en": "Rest any time"
+    }
+  },
+  "care": {
+    "icon": "🤝",
+    "name": {
+      "th": "ผู้ดูแลวัดและหมาวัด",
+      "en": "Caretaker & temple dog"
+    },
+    "sub": {
+      "th": "มีคำถาม หรืออยากให้ช่วย",
+      "en": "Questions, or need a hand"
+    }
+  },
+  "garden": {
+    "icon": "🌿",
+    "name": {
+      "th": "สวนสังเกตใจ",
+      "en": "Practice Garden"
+    },
+    "sub": {
+      "th": "กาย • ความรู้สึก • จิต • ธรรม",
+      "en": "Body • feelings • mind • Dhamma"
+    }
+  },
+  "journey": {
+    "icon": "👣",
+    "name": {
+      "th": "เส้นทางของฉัน",
+      "en": "My Journey"
+    },
+    "sub": {
+      "th": "ตามรอยเรื่องของพระพุทธเจ้าทีละก้าว",
+      "en": "Follow the Buddha's story step by step"
+    }
+  },
+  "exit": {
+    "icon": "🚪",
+    "name": {
+      "th": "ประตูออกจากวัด",
+      "en": "Exit gate"
+    },
+    "sub": {
+      "th": "เมื่อพร้อมแล้ว ออกจากวัดได้เสมอ",
+      "en": "When you're ready, you can always leave"
+    }
+  }
+}

@@ -177,14 +177,20 @@ Deployed as-is (no build step on Netlify; see `netlify.toml`) to https://sambodh
 
 **The Universal Hall's back wall** shows the Maravijaya, the Buddha's victory over Mara, in the same way either side of the red cloth: on the left Mara's army on elephants and horses is swept away by the flood Mae Thorani wrings from her hair; on the right the army kneels in the waves with hands in a wai while celestial beings scatter golden flowers (`img/murals/maravijaya-left.jpg`, `-right.jpg`, Higgsfield). In both halls the red cloth behind the image reaches the ceiling.
 
-## Content (what the temple says)
+## Content (what the temple says) and the content admin
 
-Everything the temple says lives in `content/`, apart from the code:
-- `content/lessons/U01.json` … `U08.json`: the lessons (title, question, story, life, sources, boundary, status, exercises), each text in Thai (`th`) and English (`en`); the eight stories of My Journey and the Learning Hall's boards take their titles from here.
-- `content/sources.json`: the source identifiers the lessons point to (by key); `content/library.json`: the Library's AMBER notes and the description of the wheel image.
-- `content/world.json`: the 3D temple's hall names and subtitles, signs (gate, welcome/leave, tool rack), the four garden stones, the hall boards, the descriptions of the eight story paintings, and the info cards. In the Emerald Buddha card, `{season}` is filled in with the current season.
+Everything the temple says lives in `content/`, apart from the code, and is edited at **/admin** (Sveltia CMS):
+- `content/lessons/U01.json` … `U08.json`: the lessons (title, question, story, life, sources, boundary, status, exercises and a few optional notes), each text in Thai (`th`) and English (`en`); the eight stories of My Journey and the Learning Hall's boards take their titles from here.
+- `content/sources.json`: the source identifiers the lessons point to (by key); `content/library.json`: the Library's AMBER notes and the wheel image's description and related sources.
+- `content/world/`: the 3D temple's hall names and subtitles (`places.json`), signs and the four garden stones (`signs.json`), the hall boards (`boards.json`), the info cards (`cards.json`; in the Emerald Buddha card `{season}` is filled in with the current season), and what each story painting shows (`stories.json`).
 
-`python3 src/build.py` checks every file (valid JSON, no empty Thai or English text, every source key known, one painting per lesson; a broken edit stops the build) and writes `content/site.json` for the 3D world and `index.html` for the 2D site. Kept in the code on purpose, out of the editors' reach: the bank and PromptPay details (`SUPPORT` in `src/content.js`), the monks' names, and the buttons and menus.
+**How an edit goes live:** an editor signs in at https://sambodhaya.netlify.app/admin with their GitHub account and saves; each save is a commit on GitHub (who, what, when; any change can be undone there). The Netlify site is linked to the repository, so every push to `main` runs `python3 src/build.py` (see `netlify.toml`), which checks every file (valid JSON, no Thai or English text left empty, every source key known, one painting per lesson; a broken edit stops the build and the live site stays as it was), writes `content/site.json` for the 3D world and `index.html` for the 2D site, and copies only what the site serves into `dist/`, which Netlify publishes. An emptied optional field counts as absent.
+
+**The admin's forms** are written by `python3 src/admin_config.py` into `admin/config.yml` (Sveltia CMS, pinned in `admin/index.html`). Fields the forms don't show are kept when an editor saves. Lessons can't be added or deleted there (the Journey has eight stones).
+
+**Editors:** each needs a GitHub account with write access to the repository (GitHub → the repository → Settings → Collaborators). Sign-in goes through Netlify's GitHub sign-in (a GitHub OAuth app whose ID and secret are entered in Netlify → Project configuration → Access & security → OAuth). Write access also allows changing the code through GitHub itself: invite only people the temple trusts.
+
+Kept in the code on purpose, out of the editors' reach: the bank and PromptPay details (`SUPPORT` in `src/content.js`), the monks' names, and the buttons and menus.
 
 ## Form submissions in Supabase
 

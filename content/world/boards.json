@@ -1,0 +1,87 @@
+{
+  "learn_story": {
+    "head": {
+      "th": "เรื่องที่ ",
+      "en": "Story "
+    },
+    "foot": {
+      "th": "เดินมาใกล้ ๆ แล้วกด E",
+      "en": "Walk close and press E"
+    }
+  },
+  "library": {
+    "head": {
+      "th": "หอหลักฐาน",
+      "en": "Evidence Library"
+    },
+    "icon": "📚",
+    "title": {
+      "th": "ดูต้นทาง หลักฐาน และสถานะการตรวจ",
+      "en": "Sources, evidence and checking status"
+    },
+    "foot": {
+      "th": "📜 ต้นทาง · 📝 คำแปล · 💡 คำอธิบาย · 🕯️ ยังรอตรวจ",
+      "en": "📜 source · 📝 translation · 💡 explanation · 🕯️ under review"
+    }
+  },
+  "media": [
+    {
+      "icon": "📖",
+      "title": {
+        "th": "อ่าน",
+        "en": "Read"
+      }
+    },
+    {
+      "icon": "🎧",
+      "title": {
+        "th": "ฟัง",
+        "en": "Listen"
+      }
+    },
+    {
+      "icon": "🎬",
+      "title": {
+        "th": "ดู",
+        "en": "Watch"
+      }
+    },
+    {
+      "icon": "🕯️",
+      "title": {
+        "th": "ยังรอตรวจ",
+        "en": "Under review"
+      },
+      "foot": {
+        "th": "ภาพวงล้อเป็นสื่ออธิบายของวัด",
+        "en": "The wheel is the temple's explanatory media"
+      }
+    }
+  ],
+  "universal": {
+    "head": {
+      "th": "ศาลาสากล",
+      "en": "Universal Hall"
+    },
+    "icon": "🌍",
+    "title": {
+      "th": "ภาษาไทย · English",
+      "en": "ภาษาไทย · English"
+    },
+    "foot": {
+      "th": "เลือกภาษา ขนาดตัวอักษร และการเคลื่อนไหวได้ในหน้าเว็บของศาลานี้",
+      "en": "Choose language and motion settings on this hall's web page"
+    }
+  },
+  "care": {
+    "head": {
+      "th": "ผู้ดูแลวัดและหมาวัด",
+      "en": "Caretaker & temple dog"
+    },
+    "icon": "🤝",
+    "title": {
+      "th": "มีคำถาม หรืออยากให้ช่วย",
+      "en": "Questions, or need a hand"
+    }
+  }
+}
