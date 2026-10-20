@@ -188,6 +188,8 @@ Everything the temple says lives in `content/`, apart from the code, and is edit
 
 **The admin's forms** are written by `python3 src/admin_config.py` into `admin/config.yml` (Sveltia CMS, pinned in `admin/index.html`). Fields the forms don't show are kept when an editor saves. Lessons can't be added or deleted there (the Journey has eight stones).
 
+**Editor guide:** `docs/editor-guide.pdf` (Thai and English side by side), printed from `docs/editor-guide.html` with Chrome (`--headless=new --print-to-pdf`, which shapes Thai properly). Hand it to new editors; it isn't published on the site.
+
 **Editors:** each needs a GitHub account with write access to the repository (GitHub → the repository → Settings → Collaborators). Sign-in goes through Netlify's GitHub sign-in (a GitHub OAuth app whose ID and secret are entered in Netlify → Project configuration → Access & security → OAuth). Write access also allows changing the code through GitHub itself: invite only people the temple trusts.
 
 Kept in the code on purpose, out of the editors' reach: the bank and PromptPay details (`SUPPORT` in `src/content.js`), the monks' names, and the buttons and menus.

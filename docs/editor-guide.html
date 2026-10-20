@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>คู่มือผู้แก้ไขเนื้อหา · Editor guide · Sambodhaya</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap">
+<style>
+  /* Printed to PDF with Chrome (see the README): A4, Thai on the left, English on the right of every section */
+  @page { size: A4; margin: 16mm 15mm 16mm 15mm; }
+  :root { --ink: #2f241a; --muted: #6e5c4c; --line: #e2d6c2; --saffron: #c26a1b; --paper: #fffdf8; --soft: #fbf3e6; }
+  * { box-sizing: border-box; }
+  html { background: #fff; }
+  body { margin: 0; font-family: "Sarabun", sans-serif; color: var(--ink); font-size: 10.6pt; line-height: 1.55; }
+  h1 { font-size: 21pt; margin: 0 0 2mm; line-height: 1.2; }
+  h1 small { display: block; font-size: 13pt; font-weight: 400; color: var(--muted); }
+  .cover { border-bottom: 2px solid var(--saffron); padding-bottom: 5mm; margin-bottom: 6mm; }
+  .lede { display: grid; grid-template-columns: 1fr 1fr; gap: 8mm; margin-top: 4mm; }
+  .lede p { margin: 0; }
+  section { margin: 0 0 6mm; }
+  h2 { break-after: avoid; font-size: 13pt; margin: 0 0 2.5mm; padding: 1.5mm 3mm; background: var(--soft); border-left: 4px solid var(--saffron); border-radius: 2px; }
+  h2 .n { color: var(--saffron); margin-right: 2mm; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 8mm; }
+  .two > div:first-child { border-right: 1px solid var(--line); padding-right: 8mm; }
+  h3 { font-size: 10.8pt; margin: 0 0 1mm; }
+  p { margin: 0 0 2mm; }
+  ol, ul { margin: 0 0 2mm; padding-left: 5mm; }
+  li, p, .note { break-inside: avoid; }
+  li { margin: 0 0 1mm; }
+  code, .ui { font-family: "Sarabun", sans-serif; font-weight: 600; background: #f3ece0; border: 1px solid #e3d7c4; border-radius: 3px; padding: 0 1.2mm; white-space: nowrap; }
+  .url { font-weight: 600; color: var(--saffron); }
+  .note { background: var(--paper); border: 1px solid var(--line); border-radius: 4px; padding: 2mm 3mm; margin: 2mm 0; }
+  .warn { border-color: #e6b8a8; background: #fff6f2; }
+  .en { color: #3b3026; }
+  .foot { margin-top: 6mm; border-top: 1px solid var(--line); padding-top: 3mm; font-size: 9pt; color: var(--muted); display: grid; grid-template-columns: 1fr 1fr; gap: 8mm; }
+  .page-break { break-before: page; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>คู่มือผู้แก้ไขเนื้อหา วัดสัมโพธายะ<small>Editor guide · Sambodhaya</small></h1>
+  <div class="lede">
+    <p>คู่มือนี้อธิบายวิธีแก้ไขเนื้อหาของเว็บไซต์วัดสัมโพธายะ (บทเรียน ป้าย กระดานในศาลา และการ์ดความรู้ในวัด 3 มิติ) ผ่านหน้าแก้ไขเนื้อหา โดยไม่ต้องเขียนโค้ด ทุกครั้งที่บันทึก การเปลี่ยนแปลงจะขึ้นเว็บไซต์เองภายในประมาณหนึ่งนาที</p>
+    <p class="en">This guide explains how to edit what the Sambodhaya website says (the lessons, the signs, the hall boards and the info cards in the 3D temple) through the content admin, without any code. Each time you save, the change goes live by itself in about a minute.</p>
+  </div>
+</div>
+
+<section>
+  <h2><span class="n">1</span>เริ่มต้นใช้งาน · Getting started</h2>
+  <div class="two">
+    <div>
+      <h3>สิ่งที่ต้องมี</h3>
+      <ul>
+        <li>บัญชี GitHub (สมัครฟรีที่ <span class="url">github.com</span>)</li>
+        <li>คำเชิญจากผู้ดูแลเว็บไซต์ ให้เข้าร่วมคลังข้อมูล <code>Sambodhaya</code> ซึ่งจะส่งมาทางอีเมล กด <span class="ui">Accept invitation</span> ในอีเมลนั้น</li>
+      </ul>
+      <h3>เข้าสู่ระบบ</h3>
+      <ol>
+        <li>เปิด <span class="url">sambodhaya.netlify.app/admin</span></li>
+        <li>กด <span class="ui">Sign In with GitHub</span></li>
+        <li>ครั้งแรกเท่านั้น GitHub จะถามว่าอนุญาต <span class="ui">Sambodhaya admin</span> หรือไม่ ให้กด <span class="ui">Authorize</span></li>
+      </ol>
+      <p>เมื่อเข้าได้แล้ว ด้านซ้ายจะมี <span class="ui">Lessons</span> <span class="ui">Temple (3D)</span> และ <span class="ui">Library</span></p>
+    </div>
+    <div class="en">
+      <h3>What you need</h3>
+      <ul>
+        <li>A GitHub account (free at <span class="url">github.com</span>)</li>
+        <li>An invitation from the site's caretaker to the <code>Sambodhaya</code> repository; it comes by e-mail: press <span class="ui">Accept invitation</span> in it</li>
+      </ul>
+      <h3>Signing in</h3>
+      <ol>
+        <li>Open <span class="url">sambodhaya.netlify.app/admin</span></li>
+        <li>Press <span class="ui">Sign In with GitHub</span></li>
+        <li>The first time only, GitHub asks whether to allow <span class="ui">Sambodhaya admin</span>: press <span class="ui">Authorize</span></li>
+      </ol>
+      <p>Once in, you see <span class="ui">Lessons</span>, <span class="ui">Temple (3D)</span> and <span class="ui">Library</span> on the left.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="n">2</span>สิ่งที่แก้ไขได้ · What you can edit</h2>
+  <div class="two">
+    <div>
+      <ul>
+        <li><b>Lessons</b> บทเรียน U01–U08: ชื่อเรื่อง คำถาม เรื่องสั้น ในชีวิตประจำวัน หมายเหตุต่าง ๆ แหล่งที่มา สถานะการตรวจ และแบบฝึกหัด</li>
+        <li><b>Temple (3D)</b> วัด 3 มิติ: ชื่อและคำบรรยายของศาลา (<span class="ui">Hall names &amp; subtitles</span>) ป้าย (<span class="ui">Signs</span>) กระดานในศาลา (<span class="ui">Hall boards</span>) การ์ดความรู้ (<span class="ui">Info cards</span>) และคำบรรยายภาพเรื่องราวทั้งแปด (<span class="ui">Story paintings</span>)</li>
+        <li><b>Library</b> ห้องสมุด: รายการแหล่งที่มา (<span class="ui">Sources</span>) และหมายเหตุ AMBER กับคำบรรยายภาพวงล้อ</li>
+      </ul>
+      <div class="note">สิ่งที่ <b>แก้ไขที่นี่ไม่ได้</b> โดยตั้งใจ: ข้อมูลบัญชีธนาคารและพร้อมเพย์ ชื่อพระอาจารย์ และปุ่มหรือเมนูของเว็บไซต์ หากต้องการเปลี่ยน ให้ติดต่อผู้ดูแลเว็บไซต์</div>
+    </div>
+    <div class="en">
+      <ul>
+        <li><b>Lessons</b> U01–U08: title, question, the short story, everyday life, the notes, sources, checking status and the exercises</li>
+        <li><b>Temple (3D)</b>: hall names and subtitles (<span class="ui">Hall names &amp; subtitles</span>), signs (<span class="ui">Signs</span>), the boards in the halls (<span class="ui">Hall boards</span>), the info cards (<span class="ui">Info cards</span>) and what the eight story paintings show (<span class="ui">Story paintings</span>)</li>
+        <li><b>Library</b>: the source list (<span class="ui">Sources</span>), the AMBER notes and the description of the wheel image</li>
+      </ul>
+      <div class="note">What you <b>can't</b> edit here, on purpose: the bank and PromptPay details, the monks' names, and the site's buttons and menus. To change those, contact the site's caretaker.</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="n">3</span>แก้ไขและบันทึก · Editing and saving</h2>
+  <div class="two">
+    <div>
+      <ol>
+        <li>เลือกหมวดด้านซ้าย แล้วเลือกรายการที่ต้องการ เช่น <span class="ui">U03 · Trying a path that was too harsh</span></li>
+        <li>ข้อความทุกช่องมีสองกล่อง: <span class="ui">ไทย · Thai</span> และ <span class="ui">English</span> แก้ไขทั้งสองภาษาให้ตรงกัน</li>
+        <li>บางส่วนพับเก็บไว้ กดลูกศร <b>›</b> เพื่อเปิด</li>
+        <li>กด <span class="ui">Save</span> ที่มุมขวาบน จะขึ้นข้อความ <span class="ui">Entry saved.</span></li>
+        <li>รอประมาณหนึ่งนาที แล้วโหลดหน้าเว็บไซต์ใหม่ (หรือเข้าวัด 3 มิติใหม่) เพื่อดูการเปลี่ยนแปลง</li>
+      </ol>
+      <p>ทุกครั้งที่บันทึก ระบบจะเก็บไว้ว่าใครแก้อะไร เมื่อไร จึงย้อนกลับได้เสมอ</p>
+    </div>
+    <div class="en">
+      <ol>
+        <li>Choose a section on the left, then the item, e.g. <span class="ui">U03 · Trying a path that was too harsh</span></li>
+        <li>Every text has two boxes: <span class="ui">ไทย · Thai</span> and <span class="ui">English</span>. Keep both languages saying the same thing.</li>
+        <li>Some parts are folded away: press the arrow <b>›</b> to open them.</li>
+        <li>Press <span class="ui">Save</span> at the top right; <span class="ui">Entry saved.</span> appears.</li>
+        <li>Wait about a minute, then reload the website (or enter the 3D temple again) to see the change.</li>
+      </ol>
+      <p>Every save records who changed what and when, so a change can always be undone.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="n">4</span>หลักการสำคัญ · Rules to keep</h2>
+  <div class="two">
+    <div>
+      <ul>
+        <li><b>กรอกทั้งสองภาษาเสมอ</b> ข้อความใดที่มีภาษาไทย ต้องมีภาษาอังกฤษด้วย และกลับกัน (ยกเว้นช่องที่ไม่บังคับ ซึ่งเว้นว่างทั้งสองภาษาได้)</li>
+        <li><b>อย่าเปลี่ยนรหัสบทเรียน</b> (<code>Code</code> เช่น U03) เว็บไซต์และวัด 3 มิติหาบทเรียนจากรหัสนี้</li>
+        <li><b>แหล่งที่มา</b> ช่อง <span class="ui">Source key</span> ต้องเป็นรหัสที่มีอยู่ใน <span class="ui">Library → Sources</span> เช่น <code>MN26</code></li>
+        <li><b>คำตอบที่ถูกในแบบฝึกหัด</b> นับจาก 0: <code>0</code> = ตัวเลือกแรก <code>1</code> = ตัวเลือกที่สอง</li>
+        <li><b>การ์ดพระแก้วมรกต</b> คำว่า <code>{season}</code> จะถูกแทนด้วยฤดูปัจจุบันโดยอัตโนมัติ อย่าลบออก</li>
+        <li><b>เนื้อหาคำสอนภาษาไทย</b> ต้องตรงกับห้องสมุด (Library ใน Notion) ให้แก้ที่ห้องสมุดก่อน แล้วจึงแก้ที่นี่ ภาษาอังกฤษเป็นฉบับร่างที่แปลโดย AI และแสดงว่ายังไม่ได้ตรวจ</li>
+        <li><b>ป้ายในวัด 3 มิติ</b> ควรสั้น ข้อความยาวเกินไปจะตัดหรือย่อเล็กลง</li>
+        <li>หากสองคนแก้ไขรายการเดียวกันพร้อมกัน คนที่บันทึกทีหลังอาจต้องโหลดใหม่และแก้อีกครั้ง ตกลงกันก่อนว่าใครแก้ส่วนไหน</li>
+      </ul>
+    </div>
+    <div class="en">
+      <ul>
+        <li><b>Always fill in both languages.</b> A text with Thai needs English too, and the other way round (an optional field may be left empty in both).</li>
+        <li><b>Don't change a lesson's code</b> (<code>Code</code>, e.g. U03): the website and the 3D temple find the lesson by it.</li>
+        <li><b>Sources:</b> a <span class="ui">Source key</span> must be one listed in <span class="ui">Library → Sources</span>, e.g. <code>MN26</code>.</li>
+        <li><b>The right answer of an exercise</b> is counted from 0: <code>0</code> = the first option, <code>1</code> = the second.</li>
+        <li><b>The Emerald Buddha card:</b> <code>{season}</code> is filled in with the current season by itself; don't remove it.</li>
+        <li><b>The Thai teaching text</b> must match the Library (in Notion): correct it there first, then here. The English is an AI draft translation and is shown as unreviewed.</li>
+        <li><b>Signs in the 3D temple</b> should be short; long text gets cut or shrinks.</li>
+        <li>If two people edit the same item at once, the one who saves second may have to reload and redo the change. Agree beforehand who edits what.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="n">5</span>ถ้าการแก้ไขไม่ขึ้นเว็บไซต์ · If a change doesn't appear</h2>
+  <div class="two">
+    <div>
+      <ol>
+        <li>รอ 1–2 นาที แล้วโหลดหน้าใหม่ (บางครั้งเบราว์เซอร์จำหน้าเก่าไว้)</li>
+        <li>หากยังไม่ขึ้น แสดงว่าระบบตรวจเนื้อหาได้หยุดการเผยแพร่ไว้ เว็บไซต์จะยังแสดงฉบับก่อนหน้าตามปกติ จึงไม่มีอะไรเสียหาย</li>
+        <li>สาเหตุที่พบบ่อย: ข้อความภาษาไทยหรืออังกฤษว่างไว้ หรือใช้รหัสแหล่งที่มาที่ไม่มีอยู่</li>
+        <li>เปิดรายการนั้น แก้ให้ถูก แล้วบันทึกอีกครั้ง หากไม่แน่ใจ แจ้งผู้ดูแลเว็บไซต์ว่าแก้อะไร และเวลาที่บันทึก</li>
+      </ol>
+    </div>
+    <div class="en">
+      <ol>
+        <li>Wait 1–2 minutes and reload (sometimes the browser keeps the old page).</li>
+        <li>If it still doesn't show, the content check has held the change back. The website keeps showing the previous version, so nothing breaks.</li>
+        <li>Common causes: a Thai or English text left empty, or a source key that doesn't exist.</li>
+        <li>Open the item, correct it and save again. If you're unsure, tell the site's caretaker what you changed and when you saved.</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="n">6</span>แก้ไขผิดพลาด · Undoing a mistake</h2>
+  <div class="two">
+    <div>
+      <ul>
+        <li>วิธีที่ง่ายที่สุด: เปิดรายการนั้น แก้กลับเป็นข้อความเดิม แล้วบันทึก</li>
+        <li>หากจำข้อความเดิมไม่ได้ ผู้ดูแลเว็บไซต์ย้อนกลับได้จากประวัติใน GitHub ทุกการบันทึกมีชื่อว่า <span class="ui">Update …</span> พร้อมชื่อผู้แก้และเวลา</li>
+      </ul>
+    </div>
+    <div class="en">
+      <ul>
+        <li>The simplest way: open the item, change the text back and save.</li>
+        <li>If you don't remember the old text, the site's caretaker can restore it from the history on GitHub: every save is listed as <span class="ui">Update …</span> with who made it and when.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="n">7</span>ความปลอดภัย · Keeping it safe</h2>
+  <div class="two">
+    <div>
+      <ul>
+        <li>อย่าให้ผู้อื่นใช้บัญชี GitHub ของคุณ และตั้งการยืนยันตัวตนสองชั้น (2FA) ในการตั้งค่าของ GitHub</li>
+        <li>บนคอมพิวเตอร์ที่ใช้ร่วมกัน ให้ออกจากระบบเมื่อเสร็จ: กดรูปโปรไฟล์มุมขวาบน แล้วเลือก <span class="ui">Sign Out</span></li>
+        <li>สิทธิ์ของคุณใน GitHub ใช้แก้โค้ดของเว็บไซต์ได้ด้วย ให้แก้เฉพาะในหน้าแก้ไขเนื้อหาเท่านั้น</li>
+      </ul>
+    </div>
+    <div class="en">
+      <ul>
+        <li>Don't let anyone else use your GitHub account, and turn on two-factor authentication (2FA) in your GitHub settings.</li>
+        <li>On a shared computer, sign out when you're done: press your picture at the top right and choose <span class="ui">Sign Out</span>.</li>
+        <li>Your access on GitHub would also let you change the website's code: only edit through the content admin.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<div class="foot">
+  <div>หน้าแก้ไขเนื้อหา: <span class="url">sambodhaya.netlify.app/admin</span> · ฉบับ ตุลาคม 2569</div>
+  <div>Content admin: <span class="url">sambodhaya.netlify.app/admin</span> · October 2026 edition</div>
+</div>
+
+</body>
+</html>
