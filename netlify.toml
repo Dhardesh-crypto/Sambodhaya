@@ -1,5 +1,8 @@
+# Netlify builds the site on every push to main (also when an editor saves in /admin): src/build.py checks the
+# content, builds index.html and content/site.json, and copies what the site serves into dist/.
 [build]
-  publish = "."
+  command = "python3 src/build.py"
+  publish = "dist"
 
 [functions]
   directory = "netlify/functions"

@@ -11,7 +11,7 @@ This script
     esbuild and inlined into src/shell.html.
 It stops with a plain message if a content file is broken, so a bad edit never reaches the site.
 """
-import json, pathlib, subprocess, sys
+import json, pathlib, shutil, subprocess, sys
 
 src = pathlib.Path(__file__).resolve().parent
 root = src.parent
@@ -64,3 +64,13 @@ js = subprocess.run(["npx", "--yes", "esbuild", "--loader=jsx", "--minify", "--t
 shell = (src / "shell.html").read_text(encoding="utf-8")
 (root / "index.html").write_text(shell.replace("/*APP*/", js), encoding="utf-8")
 print(f"wrote content/site.json and index.html ({len(lessons)} lessons)")
+
+# what the site serves, and nothing else
+PUBLIC = ["index.html", "world.html", "records.html", "content", "src/world.js", "src/sound.js", "img", "assets", "audio"]
+dist = root / "dist"
+shutil.rmtree(dist, ignore_errors=True)
+for name in PUBLIC:
+    a, b = root / name, dist / name
+    b.parent.mkdir(parents=True, exist_ok=True)
+    (shutil.copytree if a.is_dir() else shutil.copy2)(a, b)
+print("copied the site into dist/")
