@@ -258,7 +258,7 @@
               "label": "Source key",
               "widget": "string",
               "required": true,
-              "hint": "A key from Temple → Sources, e.g. MN26"
+              "hint": "A key from Library → Sources, e.g. MN26"
             },
             {
               "name": "use",

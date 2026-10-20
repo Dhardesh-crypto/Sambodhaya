@@ -46,7 +46,7 @@ lesson_fields = [
     text("phrase", "Pali phrase", required=False),
     {"name": "media", "label": "Show the wheel image with this lesson", "widget": "boolean", "required": False},
     {"name": "sources", "label": "Sources", "widget": "list", "summary": "{{fields.key}}",
-     "fields": [text("key", "Source key", hint="A key from Temple → Sources, e.g. MN26"), text("use", "How it is used")]},
+     "fields": [text("key", "Source key", hint="A key from Library → Sources, e.g. MN26"), text("use", "How it is used")]},
     {"name": "exercises", "label": "Exercises", "widget": "list", "summary": "{{fields.q}}",
      "fields": [
          text("q", "Question", long=True),
