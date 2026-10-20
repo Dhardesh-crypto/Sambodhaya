@@ -177,6 +177,15 @@ Deployed as-is (no build step on Netlify; see `netlify.toml`) to https://sambodh
 
 **The Universal Hall's back wall** shows the Maravijaya, the Buddha's victory over Mara, in the same way either side of the red cloth: on the left Mara's army on elephants and horses is swept away by the flood Mae Thorani wrings from her hair; on the right the army kneels in the waves with hands in a wai while celestial beings scatter golden flowers (`img/murals/maravijaya-left.jpg`, `-right.jpg`, Higgsfield). In both halls the red cloth behind the image reaches the ceiling.
 
+## Content (what the temple says)
+
+Everything the temple says lives in `content/`, apart from the code:
+- `content/lessons/U01.json` … `U08.json`: the lessons (title, question, story, life, sources, boundary, status, exercises), each text in Thai (`th`) and English (`en`); the eight stories of My Journey and the Learning Hall's boards take their titles from here.
+- `content/sources.json`: the source identifiers the lessons point to (by key); `content/library.json`: the Library's AMBER notes and the description of the wheel image.
+- `content/world.json`: the 3D temple's hall names and subtitles, signs (gate, welcome/leave, tool rack), the four garden stones, the hall boards, the descriptions of the eight story paintings, and the info cards. In the Emerald Buddha card, `{season}` is filled in with the current season.
+
+`python3 src/build.py` checks every file (valid JSON, no empty Thai or English text, every source key known, one painting per lesson; a broken edit stops the build) and writes `content/site.json` for the 3D world and `index.html` for the 2D site. Kept in the code on purpose, out of the editors' reach: the bank and PromptPay details (`SUPPORT` in `src/content.js`), the monks' names, and the buttons and menus.
+
 ## Form submissions in Supabase
 
 Every accepted Netlify Forms submission (spam filtered out) is also copied into Supabase by `netlify/functions/submission-created.mjs`, which Netlify runs on its own. The submission always stays in Netlify too; if Supabase is not set up or refuses a row, nothing is lost.

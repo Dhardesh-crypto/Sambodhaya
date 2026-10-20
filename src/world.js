@@ -22,40 +22,32 @@ if (matchMedia("(prefers-reduced-motion: reduce)").matches) settings.calmMotion 
 { const q = (location.search.match(/[?&]lang=(th|en)\b/) || [])[1]; if (q) { settings.lang = q; write("settings", { ...read("settings", {}), lang: q }); } }
 const L = settings.lang === "en" ? "en" : "th";
 const tx = (th, en) => (L === "en" ? en : th);
+// What the temple says (hall names, signs, boards, info cards, the stories) lives in content/, edited through /admin;
+// src/build.py joins it into content/site.json. Here only the code: where things stand and how they behave.
+const CONTENT = await fetch("content/site.json", { cache: "no-cache" }).then((r) => r.json());
+const txo = (o) => tx(o.th, o.en); // a {th, en} text in the visitor's language
 document.documentElement.lang = L;
 document.querySelectorAll("[data-th]").forEach((el) => { el.textContent = el.dataset[L]; });
 
 /* ---------------- places: each opens the matching page of the site ---------------- */
 const PLACES = [
-  { id: "yard", icon: "🌳", th: "ลานกลาง", en: "Central Courtyard", sub: ["อยากไปไหนวันนี้?", "Where would you like to go today?"], href: "index.html#yard", pos: [0, 9], r: 9 },
-  { id: "library", icon: "📚", th: "หอหลักฐาน · ห้องสมุด", en: "Evidence Library", sub: ["ดูต้นทาง หลักฐาน และสถานะการตรวจ", "Sources, evidence and checking status"], href: "index.html#library", pos: [-30, -16], r: 8 },
-  { id: "learn", icon: "🧘", th: "ศาลาเรียนรู้", en: "Learning Hall", sub: ["เรียน ฝึก และสังเกตไปทีละก้าว", "Learn, practise and observe, one step at a time"], href: "index.html#learn", pos: [-14, -29.5], r: 5 },
-  { id: "media", icon: "🎬", th: "ศาลาสื่อ", en: "Media Hall", sub: ["อ่าน ฟัง หรือดู", "Read, listen or watch"], href: "index.html#media", pos: [13, -30], r: 8 },
-  { id: "access", icon: "🌍", th: "ศาลาสากล", en: "Universal Hall", sub: ["หลายภาษาและการเข้าถึง", "Languages and access"], href: "index.html#access", pos: [30, -16], r: 8 },
-  { id: "rest", icon: "🪷", th: "พื้นที่พัก", en: "Rest Area", sub: ["พักใจได้เสมอ", "Rest any time"], href: "index.html#rest", pos: [-28, 14], r: 8 },
-  { id: "care", icon: "🤝", th: "ผู้ดูแลวัดและหมาวัด", en: "Caretaker & temple dog", sub: ["มีคำถาม หรืออยากให้ช่วย", "Questions, or need a hand"], href: "index.html#care", pos: [28, 14], r: 8 },
-  { id: "garden", icon: "🌿", th: "สวนสังเกตใจ", en: "Practice Garden", sub: ["กาย • ความรู้สึก • จิต • ธรรม", "Body • feelings • mind • Dhamma"], href: "index.html#garden", pos: [0, -50], r: 9 },
-  { id: "journey", icon: "👣", th: "เส้นทางของฉัน", en: "My Journey", sub: ["ตามรอยเรื่องของพระพุทธเจ้าทีละก้าว", "Follow the Buddha's story step by step"], href: "index.html#journey", pos: [27, 47], r: 3 },
-  { id: "exit", icon: "🚪", th: "ประตูออกจากวัด", en: "Exit gate", sub: ["เมื่อพร้อมแล้ว ออกจากวัดได้เสมอ", "When you're ready, you can always leave"], href: "index.html#exit", pos: [7, 37], r: 4 },
+  { id: "yard", href: "index.html#yard", pos: [0, 9], r: 9 },
+  { id: "library", href: "index.html#library", pos: [-30, -16], r: 8 },
+  { id: "learn", href: "index.html#learn", pos: [-14, -29.5], r: 5 },
+  { id: "media", href: "index.html#media", pos: [13, -30], r: 8 },
+  { id: "access", href: "index.html#access", pos: [30, -16], r: 8 },
+  { id: "rest", href: "index.html#rest", pos: [-28, 14], r: 8 },
+  { id: "care", href: "index.html#care", pos: [28, 14], r: 8 },
+  { id: "garden", href: "index.html#garden", pos: [0, -50], r: 9 },
+  { id: "journey", href: "index.html#journey", pos: [27, 47], r: 3 },
+  { id: "exit", href: "index.html#exit", pos: [7, 37], r: 4 },
 ];
+PLACES.forEach((p) => { const c = CONTENT.places[p.id]; Object.assign(p, { icon: c.icon, th: c.name.th, en: c.name.en, sub: [c.sub.th, c.sub.en] }); });
 // Each story's painting on its board in the Learning Hall: symbols from its source record, in the manner of Thai
 // temple murals, with no figures (img/murals/u01–u08.jpg); what each shows, for those who can't see it
-const MURAL_ALT = [
-  ["ผ้าจีวรสีกรักพับไว้กับบาตร บนทางที่ออกจากบ้านไปสู่ป่า", "A folded ochre robe and an alms bowl on a path leading from a house out to the forest"],
-  ["ใบลานสองมัดบนแท่นเตี้ย ใต้ต้นไม้ และทางที่ทอดยาวต่อไป", "Two bundles of palm-leaf texts on a low stand under a tree, and the path going on beyond"],
-  ["ต้นไม้ไร้ใบบนดินแห้ง กับตะเกียงดวงเล็กที่ยังส่องแสง", "A bare tree on dry ground, with a small lamp still burning"],
-  ["ต้นชมพู่ที่ให้ร่มเงาเย็น กับชามข้าว", "A rose-apple tree giving cool shade, and a bowl of rice"],
-  ["ธรรมจักรในป่าอิสิปตนะ กับกวางสองตัว", "The wheel of Dhamma in the deer park at Isipatana, with two deer"],
-  ["ธรรมจักรแปดซี่เหนือดอกบัว กับคัมภีร์ใบลาน", "An eight-spoked wheel above a lotus, with palm-leaf texts"],
-  ["ตะเกียงที่ส่องสว่าง ข้างคัมภีร์ใบลานพระธรรมและพระวินัย", "A burning lamp beside palm-leaf texts of the Dhamma and the Vinaya"],
-  ["ต้นสาละคู่ออกดอก ดอกร่วงโปรยลงมา", "Twin sal trees in bloom, their blossoms falling"],
-];
+const MURAL_ALT = CONTENT.journey.map((j) => [j.picture.th, j.picture.en]);
 // The eight U01–U08 stepping stones of My Journey (titles from the Library's Child Output Records).
-const JOURNEY = [
-  ["ออกแสวงหา", "Going forth to seek"], ["อาฬาระและอุทกะ", "Āḷāra and Uddaka"], ["ทดลองทางที่หนักเกินไป", "Trying a path that was too harsh"],
-  ["พบทางที่ต่างออกไป", "Finding a different path"], ["เริ่มสอน", "Beginning to teach"], ["เรียนรู้คำสอนสำคัญ", "Learning key teachings"],
-  ["ช่วงสุดท้าย", "The final period"], ["ปรินิพพาน", "Parinibbāna"],
-];
+const JOURNEY = CONTENT.journey.map((j) => [j.title.th, j.title.en]); // (the lessons' own titles)
 
 // Things in the temple that have a card (what it is and why), marked where each is built: see openInfo
 const INFO = [];
@@ -728,6 +720,8 @@ function wrapText(gx, text, maxW) {
   if (cur.trim()) lines.push(cur.trim()); return lines;
 }
 // a framed board: small heading, a round icon, a title and an optional footnote
+// a hall board from the content: its {th, en} texts in the visitor's language
+const hallBoard = (b) => ({ head: b.head ? txo(b.head) : "", icon: b.icon || "", title: b.title ? txo(b.title) : "", foot: b.foot ? txo(b.foot) : "" });
 function boardTexture({ head = "", icon = "", title = "", foot = "", wide = false, picture = null }) {
   const Wd = wide ? 768 : 512, Hd = 640;
   const c = document.createElement("canvas"); c.width = Wd; c.height = Hd;
@@ -824,7 +818,7 @@ PLACES.forEach((p) => {
   const [sx, sz, sy] = h ? h.signAt : ({ garden: [-6.6, -55, 7.4], journey: [15, 49, 5] }[p.id] || [...p.pos, 5]);
   signs.push(sign(L === "en" ? p.en : p.th, p.sub[L === "en" ? 1 : 0], p.icon, sx, sy, sz, 5.2));
 });
-sign(tx("ลานกลาง", "Central Courtyard"), tx("อยากไปไหนวันนี้?", "Where would you like to go today?"), "🌳", 0, 21, 0, 8);
+{ const y = CONTENT.places.yard; sign(txo(y.name), txo(y.sub), y.icon, 0, 21, 0, 8); }
 
 /* ---- The shrine, shared by the Learning Hall and the Universal Hall ----
    Seating follows temple custom: visitors and students sit on the floor; teachers and monks sit on a
@@ -1190,7 +1184,7 @@ function spire(h, k = 0.85) {
   backMural(h, "back"); // symbols only, as the user chose: the Bodhi tree by a lotus pond, and the Dhamma wheel on a lotus
   const spots = [["left", 4.2], ["left", 2.2], ["left", 0.2], ["left", -1.8], ["right", -1.8], ["right", 0.2], ["right", 2.2], ["right", 4.2]];
   spots.forEach(([side, u], i) => {
-    const tex = boardTexture({ head: tx("เรื่องที่ ", "Story ") + (i + 1), icon: "👣", title: L === "en" ? JOURNEY[i][1] : JOURNEY[i][0], foot: tx("เดินมาใกล้ ๆ แล้วกด E", "Walk close and press E"), picture: `img/murals/u0${i + 1}.jpg` });
+    const tex = boardTexture({ head: txo(CONTENT.boards.learn_story.head) + (i + 1), icon: "👣", title: L === "en" ? JOURNEY[i][1] : JOURNEY[i][0], foot: txo(CONTENT.boards.learn_story.foot), picture: `img/murals/u0${i + 1}.jpg` });
     boards.push({ ...wallBoard(h, side, u, tex), i });
   });
   // students and visitors sit on the floor, facing the platform
@@ -1207,7 +1201,7 @@ function spire(h, k = 0.85) {
   props("bookshelf", 2.7, [[-4, -D / 2 + 0.75, Q, FY], [4, -D / 2 + 0.75, Q, FY], [-W / 2 + 0.75, -1.5, Q + Math.PI / 2, FY], [W / 2 - 0.75, -1.5, Q - Math.PI / 2, FY], [-W / 2 + 0.75, 1.8, Q + Math.PI / 2, FY], [W / 2 - 0.75, 1.8, Q - Math.PI / 2, FY]], { parent: g });
   h.block(-4, -D / 2 + 0.75, 1.3, 0.6); h.block(4, -D / 2 + 0.75, 1.3, 0.6);
   h.block(-W / 2 + 0.75, 0.15, 0.6, 2.9); h.block(W / 2 - 0.75, 0.15, 0.6, 2.9);
-  wallBoard(h, "back", 0, boardTexture({ head: tx("หอหลักฐาน", "Evidence Library"), icon: "📚", title: tx("ดูต้นทาง หลักฐาน และสถานะการตรวจ", "Sources, evidence and checking status"), foot: tx("📜 ต้นทาง · 📝 คำแปล · 💡 คำอธิบาย · 🕯️ ยังรอตรวจ", "📜 source · 📝 translation · 💡 explanation · 🕯️ under review"), wide: true }), 3, 2.5, 2.7);
+  wallBoard(h, "back", 0, boardTexture({ ...hallBoard(CONTENT.boards.library), wide: true }), 3, 2.5, 2.7);
   props("table", 0.8, [[-1.8, 1, 0, FY], [1.8, 1, 0, FY]], { parent: g });
   [[-1.8, 2.2], [1.8, 2.2], [-1.8, -0.2], [1.8, -0.2]].forEach(([lx, lz]) => cushion(h, lx, lz));
   h.post(-1.8, 1, 0.8); h.post(1.8, 1, 0.8);
@@ -1224,10 +1218,7 @@ function spire(h, k = 0.85) {
     const gp = new THREE.Group(); gp.add(frame); board.position.z = 0.08; gp.add(board);
     gp.position.set(0, FY + 2.95, -D / 2 + 0.3); g.add(gp);
   });
-  wallBoard(h, "left", -1, boardTexture({ icon: "📖", title: tx("อ่าน", "Read") }), 1.5, 1.9);
-  wallBoard(h, "left", 2, boardTexture({ icon: "🎧", title: tx("ฟัง", "Listen") }), 1.5, 1.9);
-  wallBoard(h, "right", -1, boardTexture({ icon: "🎬", title: tx("ดู", "Watch") }), 1.5, 1.9);
-  wallBoard(h, "right", 2, boardTexture({ icon: "🕯️", title: tx("ยังรอตรวจ", "Under review"), foot: tx("ภาพวงล้อเป็นสื่ออธิบายของวัด", "The wheel is the temple's explanatory media") }), 1.5, 1.9);
+  [["left", -1], ["left", 2], ["right", -1], ["right", 2]].forEach(([side, u], i) => { const b = CONTENT.boards.media[i]; if (b) wallBoard(h, side, u, boardTexture(hallBoard(b)), 1.5, 1.9); });
   props("bench", 1.1, [[-1.9, 0, Math.PI, FY], [1.9, 0, Math.PI, FY], [-1.9, 2.4, Math.PI, FY], [1.9, 2.4, Math.PI, FY]], { parent: g });
   [[-1.9, 0], [1.9, 0], [-1.9, 2.4], [1.9, 2.4]].forEach(([lx, lz]) => h.block(lx, lz, 1.1, 0.4));
   hangLanterns(h, [[-3, 1], [3, 1]]);
@@ -1256,7 +1247,7 @@ function spire(h, k = 0.85) {
     Object.assign(gildImage, { h, holder, near: { x: nx, z: nz }, far: { x: fx, z: fz }, faceYaw: h.g.rotation.y + Math.PI, chest: new THREE.Vector3(lx, T + 0.62, lz + 0.2) });
   }
   // the hall's own board moves to the side wall
-  wallBoard(h, "left", 0.6, boardTexture({ head: tx("ศาลาสากล", "Universal Hall"), icon: "🌍", title: "ภาษาไทย · English", foot: tx("เลือกภาษา ขนาดตัวอักษร และการเคลื่อนไหวได้ในหน้าเว็บของศาลานี้", "Choose language and motion settings on this hall's web page"), wide: true }), 2.8, 2.33, 2.6);
+  wallBoard(h, "left", 0.6, boardTexture({ ...hallBoard(CONTENT.boards.universal), wide: true }), 2.8, 2.33, 2.6);
   props("potplant", 1.6, [[-W / 2 + 1, D / 2 - 1, 2, FY], [W / 2 - 1, D / 2 - 1, 3, FY]], { parent: g });
   [[-W / 2 + 1, D / 2 - 1], [W / 2 - 1, D / 2 - 1]].forEach(([lx, lz]) => h.post(lx, lz, 0.6));
   // students and visitors sit on the floor, facing the platform
@@ -1267,7 +1258,7 @@ function spire(h, k = 0.85) {
 /* ---- Caretaker's hall: a small kuti where the temple dog sleeps ---- */
 {
   const h = salas.care, { g, FY, W, D } = h;
-  wallBoard(h, "back", 0, boardTexture({ head: tx("ผู้ดูแลวัดและหมาวัด", "Caretaker & temple dog"), icon: "🤝", title: tx("มีคำถาม หรืออยากให้ช่วย", "Questions, or need a hand"), wide: true }), 2.8, 2.3, 2.4);
+  wallBoard(h, "back", 0, boardTexture({ ...hallBoard(CONTENT.boards.care), wide: true }), 2.8, 2.3, 2.4);
   props("table", 0.8, [[-2.2, -1.2, 0, FY]], { parent: g }); h.post(-2.2, -1.2, 0.8);
   props("bench", 1.1, [[-2.2, 0.4, Math.PI, FY]], { parent: g });
   // the dog's bed: a round cushion by the wall
@@ -1425,7 +1416,7 @@ function cliffFace({ w, h, z, notch = 2.7, lipY }) {
     const l = new THREE.SpotLight(0xfff0d8, 0, 60, 0.42, 0.6, 1.2); l.position.set(sg * 12, 3, -50.5); l.target.position.set(0, 21, -67); scene.add(l, l.target); // (behind the halls, so their insides stay out of the beam)
     hallLamps.push({ light: l, day: 0, night: 140 });
   });
-  const four = [["🧍", "กาย", "Body"], ["💗", "ความรู้สึก", "Feelings"], ["🧠", "จิต", "Mind"], ["☸", "ธรรม", "Dhamma"]];
+  const four = CONTENT.garden_stones.map((g) => [g.icon, g.name.th, g.name.en]);
   four.forEach(([ic, th, en], i) => {
     const x = -9 + i * 6, z = -47;
     add(new THREE.CylinderGeometry(1.4, 1.6, 0.4, 24), MAT.rock, x, 0.2, z, scene, false);
@@ -1447,7 +1438,7 @@ JOURNEY.forEach(([th, en], i) => {
 });
 
 /* ---------------- gates (enter left, exit right) ---------------- */
-[[-7, tx("ยินดีต้อนรับ", "Welcome"), "🚪"], [7, tx("ออกจากวัดได้เสมอ", "Leave any time"), "🚪"]].forEach(([x, label]) => {
+[[-7, txo(CONTENT.signs.welcome), "🚪"], [7, txo(CONTENT.signs.leave), "🚪"]].forEach(([x, label]) => {
   add(new THREE.BoxGeometry(1.8, 0.6, 1.8), MAT.stoneDark, x, 0.3, 36);
   add(new THREE.BoxGeometry(1.1, 6.4, 1.1), MAT.lacquer, x, 3.8, 36);
   add(new THREE.BoxGeometry(1.3, 0.25, 1.3), MAT.gold, x, 1.0, 36, scene, false);
@@ -1691,7 +1682,7 @@ const YAKSHA_H = 6.2; // the guardians stand about as tall as the gateway's post
     add(new THREE.BoxGeometry(2.45, 0.12, 2.05), MAT.gold, sg * YX, 0.72, YZ, scene, false);
     props(name, YAKSHA_H, [[sg * YX, YZ, MONK_TURN, 0.78]]); infoSpot("yaksha", sg * YX, 3.2, YZ, 2.2, 2.8);
   });
-  sign(tx("วัดสัมโพธายะ", "Sambodhaya Temple"), tx("ยินดีต้อนรับ เดินช้า ๆ ได้", "Welcome. Take your time."), "☸", 0, 12.4, GZ, 6);
+  sign(txo(CONTENT.signs.gate.title), txo(CONTENT.signs.gate.sub), "☸", 0, 12.4, GZ, 6);
 }
 
 /* ---------------- the bridge over the moat ---------------- */
@@ -2194,7 +2185,7 @@ const rackMarks = {};
     rackMarks[id] = { glow, arrow, x: ring.position.x, z: ring.position.z };
   });
   colliders.push({ x: RACK.x - 0.35, z: RACK.z - 0.6, r: 0.45 }, { x: RACK.x - 0.35, z: RACK.z + 0.6, r: 0.45 });
-  sign(tx("ที่เก็บอุปกรณ์", "Tool rack"), tx("วางไม้กวาดและบัวรดน้ำคืนที่วงสีทอง", "Put the broom and can back on the gold rings"), "🧹", RACK.x - 0.4, 2.75, RACK.z, 2.4);
+  sign(txo(CONTENT.signs.tool_rack.title), txo(CONTENT.signs.tool_rack.sub), "🧹", RACK.x - 0.4, 2.75, RACK.z, 2.4);
 }
 // on picking a tool up: where it goes back
 function rackHint() { toast(`🧹 ${esc(tx("เสร็จแล้ววางคืนที่ชั้นเก็บอุปกรณ์ ตรงวงสีทอง", "When you're done, put it back on the tool rack, on its gold ring"))}`, 5); }
@@ -5047,27 +5038,9 @@ function teleport(id) {
 /* ---------------- cards: what things in the temple are, and why ---------------- */
 // Click or tap a thing (or walk up to one outdoors and press E) for a short card. Spots are marked where each thing is
 // built (infoSpot); a click finds the nearest spot to where it touched the world.
-const INFO_TEXT = {
-  bodhi: { icon: "🌳", t: ["ต้นโพธิ์", "The Bodhi tree"], d: ["พระพุทธเจ้าตรัสรู้ใต้ต้นโพธิ์ คนไทยจึงเคารพต้นโพธิ์ และผูกผ้าสีที่ลำต้นเพื่อบูชา", "The Buddha became enlightened under a Bodhi tree, so Thai people honour Bodhi trees and tie coloured cloths round them as an offering."] },
-  yaksha: { icon: "🛡️", t: ["ยักษ์ทวารบาล", "The guardian giants"], d: ["ยักษ์ยืนเฝ้าประตูวัด เป็นผู้พิทักษ์พระพุทธศาสนา ไม่ใช่ปีศาจที่น่ากลัว", "The giants stand guard at the temple gate. They protect the Buddha's teaching: they are guardians, not monsters."] },
-  naga: { icon: "🐉", t: ["พญานาค", "The naga"], d: ["นาคเป็นงูใหญ่ในตำนาน เชื่อว่าคุ้มครองพระพุทธศาสนา จึงเฝ้าราวบันไดและสะพานของวัด มีเรื่องเล่าว่าพญานาคมุจลินท์แผ่พังพานกันฝนให้พระพุทธเจ้า", "Nagas are great serpents of legend, protectors of the Buddha's teaching, so they guard temple stairs and bridges. A story tells how the naga king Mucalinda sheltered the Buddha from the rain with his hood."] },
-  bell: { icon: "🔔", t: ["ระฆัง", "The bell"], d: ["ระฆังใช้ตีบอกเวลาให้พระมาทำวัตรสวดมนต์เช้าและเย็น เสียงระฆังยังเตือนให้เรามีสติ", "The bell is struck to call the monks to morning and evening chanting. Its sound also reminds us to be mindful."] },
-  lotus: { icon: "🪷", t: ["ดอกบัว", "The lotus"], d: ["ดอกบัวงอกจากโคลน แต่บานสะอาดพ้นน้ำ เหมือนใจที่ฝึกดีแล้ว อยู่ในโลกได้โดยไม่แปดเปื้อน", "The lotus grows from the mud but opens clean above the water, like a well-trained mind that lives in the world without being stained."] },
-  bigbuddha: { icon: "🙏", t: ["พระพุทธรูปองค์ใหญ่", "The great Buddha image"], d: ["พระพุทธรูปเตือนให้เราระลึกถึงพระพุทธเจ้าและคำสอนของท่าน เราไม่ได้บูชาก้อนหิน แต่บูชาความดีที่ท่านสอน", "A Buddha image reminds us of the Buddha and his teaching. We honour not the stone, but the goodness he taught."] },
-  buddha: { icon: "🙏", t: ["พระประธาน", "The main Buddha image"], d: ["พระพุทธรูปองค์หลักของศาลา เมื่อเข้ามา เรานั่งคุกเข่าและกราบสามครั้ง เพื่อระลึกถึงพระพุทธ พระธรรม และพระสงฆ์", "The hall's main Buddha image. When we come in, we kneel and bow three times, remembering the Buddha, the Dhamma and the Sangha."] },
-  emerald: { icon: "💚", t: ["พระพุทธรูปสีเขียวมรกต", "The emerald-green Buddha image"], d: [
-    `พระพุทธรูปองค์นี้ทำตามแบบพระแก้วมรกต (พระพุทธมหามณีรัตนปฏิมากร) พระพุทธรูปที่คนไทยเคารพยิ่ง ประดิษฐานที่วัดพระศรีรัตนศาสดาราม กรุงเทพฯ องค์จริงแกะจากหินสีเขียวเนื้อเดียว ปีละ 3 ครั้ง เมื่อเปลี่ยนฤดู พระมหากษัตริย์ทรงเปลี่ยนเครื่องทรงทองคำให้ตามฤดู คือ ฤดูร้อน ฤดูฝน และฤดูหนาว ตอนนี้ทรงเครื่อง${{ hot: "ฤดูร้อน", rainy: "ฤดูฝน", cool: "ฤดูหนาว" }[EMERALD_SEASON]}`,
-    `This image is made after the Emerald Buddha (Phra Kaeo Morakot), the most revered Buddha image in Thailand, kept at Wat Phra Kaew in Bangkok. The real image is carved from a single block of green stone. Three times a year, at the change of the seasons, the King changes its golden costume: one for the hot season, one for the rainy season and one for the cool season. Now it wears the ${{ hot: "hot", rainy: "rainy", cool: "cool" }[EMERALD_SEASON]}-season costume.`] },
-  altar: { icon: "🕯️", t: ["โต๊ะหมู่บูชา", "The altar"], d: ["โต๊ะหมู่บูชาเป็นที่ตั้งพระพุทธรูป เราถวายธูป เทียน และดอกไม้ เพื่อบูชาพระพุทธ พระธรรม และพระสงฆ์", "The stepped altar holds the Buddha image. We offer incense, candles and flowers to honour the Buddha, the Dhamma and the Sangha."] },
-  phanphum: { icon: "🏵️", t: ["พานพุ่ม", "The phan phum"], d: ["พานพุ่มคือดอกไม้หรือใบไม้ที่จัดเป็นทรงพุ่มบนพาน วางบนโต๊ะบูชาเพื่อความงามและความเคารพ", "A phan phum is flowers or leaves shaped into a cone on a stand, set on the altar for beauty and respect."] },
-  kathin: { icon: "🟫", t: ["เครื่องกฐิน", "The Kathina gifts"], d: ["เครื่องกฐินมีผ้าไตรจีวร บาตร และของใช้จำเป็นของพระ ถวายปีละครั้งหลังออกพรรษา", "The Kathina gifts are a set of robes, an alms bowl and things a monk needs, offered once a year after the rains retreat."] },
-  cushion: { icon: "🔺", t: ["หมอนสามเหลี่ยม", "The triangle cushion"], d: ["หมอนสามเหลี่ยม (หมอนขวาน) ใช้พิงหลังเวลานั่งนาน ๆ เป็นหมอนแบบไทยดั้งเดิม", "The triangle cushion (mon khwan) supports the back during long sittings: a traditional Thai cushion."] },
-  holywater: { icon: "💧", t: ["ขันน้ำมนต์และไม้พรม", "The holy water and the whisk"], d: ["พระสวดมนต์ให้น้ำ แล้วใช้ไม้พรมประพรมน้ำมนต์ให้พร เพื่อความเป็นสิริมงคล", "The monks chant over the water, then sprinkle it with the whisk as a blessing for good fortune."] },
-  lanterns: { icon: "🏮", t: ["โคมไฟลอยกระทง", "The Loy Krathong lanterns"], d: ["ในคืนลอยกระทง ผู้คนแขวนโคมไฟประดับวัดและบ้านเรือน ให้แสงสว่างงดงามในคืนวันเพ็ญ", "On Loy Krathong night people hang lanterns in temples and homes, lighting up the full-moon night."] },
-  krathong: { icon: "🪷", t: ["ลอยกระทง", "Loy Krathong"], d: ["ในคืนวันเพ็ญเดือนสิบสอง ผู้คนลอยกระทงที่ทำจากใบตองและดอกไม้ จุดเทียนและธูป เพื่อขอบคุณและขอขมาแม่น้ำ บางคนลอยเพื่อบูชารอยพระพุทธบาท ก่อนลอยเรามักอธิษฐานขอสิ่งดี ๆ", "On the full-moon night of the twelfth month, people float krathongs of banana leaf and flowers, with a candle and incense, to thank the water and ask its forgiveness; some float them to honour the Buddha's footprint. Before floating one, we often make a quiet wish."] },
-  wiantian: { icon: "🕯️", t: ["เวียนเทียน", "The candle procession"], d: ["ในวันพระใหญ่ เช่น วันมาฆบูชา วิสาขบูชา และอาสาฬหบูชา ชาวพุทธถือธูป เทียน และดอกไม้ เดินเวียนขวารอบโบสถ์สามรอบ ระลึกถึงพระพุทธ พระธรรม และพระสงฆ์", "On the great Buddhist days, such as Makha, Visakha and Asalha Bucha, Buddhists walk three times clockwise around the hall carrying incense, candles and flowers, remembering the Buddha, the Dhamma and the Sangha."] },
-  bowl: { icon: "🥣", t: ["บาตร", "The alms bowl"], d: ["บาตรเป็นภาชนะของพระ ใช้รับอาหารที่ญาติโยมใส่บาตรตอนเช้า พระดูแลบาตรของตนเป็นอย่างดี", "The alms bowl is the monk's bowl for receiving food on the morning alms round. Monks take good care of their bowls."] },
-};
+const SEASON_NAME = { hot: ["ฤดูร้อน", "hot"], rainy: ["ฤดูฝน", "rainy"], cool: ["ฤดูหนาว", "cool"] }[EMERALD_SEASON];
+const INFO_TEXT = Object.fromEntries(Object.entries(CONTENT.cards).map(([id, c]) => [id, { icon: c.icon, t: [c.title.th, c.title.en],
+  d: [c.text.th.replaceAll("{season}", SEASON_NAME[0]), c.text.en.replaceAll("{season}", SEASON_NAME[1])] }])); // ({season}: the Emerald Buddha's costume now)
 const seenInfo = new Set(read("info-seen", []));
 function openInfo(id) {
   const T = INFO_TEXT[id]; if (!T) return;

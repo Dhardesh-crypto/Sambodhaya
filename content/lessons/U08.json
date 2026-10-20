@@ -1,0 +1,54 @@
+{
+  "code": "U08",
+  "title": {
+    "th": "ปรินิพพาน",
+    "en": "Parinibbāna"
+  },
+  "question": null,
+  "simple": {
+    "th": "ก่อนปรินิพพาน พระพุทธองค์เปิดโอกาสให้ภิกษุถามสิ่งที่ยังสงสัย และ DN16 เก็บพระพุทธพจน์สุดท้ายไว้. เส้นเรื่องชีวิตในแอปหยุดที่ปรินิพพาน.",
+    "en": "Before the parinibbāna, the Buddha gave the monks the chance to ask about anything they still doubted, and DN 16 keeps his final words. The life story in this app ends at the parinibbāna."
+  },
+  "sources": [
+    {
+      "key": "DN16",
+      "use": "DN16"
+    }
+  ],
+  "phrase": "vayadhammā saṅkhārā; appamādena sampādetha",
+  "translationNote": {
+    "th": "use controlled P1 translation with source/translation visibly separated.",
+    "en": "Use the controlled P1 translation, with source and translation visibly separated."
+  },
+  "boundary": {
+    "th": "funeral/relic/council material is post-endpoint scope.",
+    "en": "Funeral, relic and council material lies beyond the endpoint."
+  },
+  "status": "READY / FINAL TRANSLATION PUBLICATION REVIEW OPEN",
+  "exercises": [
+    {
+      "q": "เราต้องแยกอะไรในตอนสุดท้าย?",
+      "o": [
+        "final Buddha-word กับ narrator text",
+        "ไม่ต้องแยก"
+      ],
+      "a": 0
+    },
+    {
+      "q": "Source phrase, controlled translation และ simple explanation เป็นชั้นเดียวกันหรือไม่?",
+      "o": [
+        "ใช่",
+        "ไม่ใช่ ต้องแยกให้เห็น"
+      ],
+      "a": 1
+    },
+    {
+      "q": "Main Buddha-life Journey หลัง Parinibbāna ควร?",
+      "o": [
+        "สร้าง Stage 09",
+        "จบ Journey และให้เนื้อหาหลังจากนั้นเป็น reference/support"
+      ],
+      "a": 1
+    }
+  ]
+}

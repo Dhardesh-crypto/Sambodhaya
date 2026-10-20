@@ -1,0 +1,79 @@
+{
+  "code": "U06",
+  "title": {
+    "th": "เรียนรู้คำสอนสำคัญ",
+    "en": "Learning key teachings"
+  },
+  "question": {
+    "th": "ใครเป็นคนพูด และข้อความต้นทางอยู่ที่ไหน?",
+    "en": "Who is speaking, and where is the source text?"
+  },
+  "simple": {
+    "th": "เลือกคำถามก่อน แล้วดูว่าพระสูตรหรือพระวินัยใดตอบเรื่องนั้นจริง.",
+    "en": "Choose a question first, then see which sutta or Vinaya text really answers it."
+  },
+  "sources": [
+    {
+      "key": "M1_M7",
+      "use": "P1 M1–M7"
+    },
+    {
+      "key": "SN56_11",
+      "use": "SN56.11"
+    },
+    {
+      "key": "SN45_8",
+      "use": "SN45.8"
+    },
+    {
+      "key": "SN22_59",
+      "use": "SN22.59"
+    },
+    {
+      "key": "SN12_23",
+      "use": "SN12.23"
+    },
+    {
+      "key": "ANAPANA",
+      "use": "Ānāpānasati"
+    },
+    {
+      "key": "JHANA",
+      "use": "Jhāna evidence"
+    }
+  ],
+  "evidenceNote": {
+    "th": "Every topic opens Evidence Passport.",
+    "en": "Every topic opens an Evidence Passport."
+  },
+  "boundary": {
+    "th": "no invented year-by-year chronology; disciple speech labeled.",
+    "en": "No invented year-by-year chronology; disciples' speech is labelled."
+  },
+  "status": "READY AS SOURCE BROWSER / CORPUS EXTENSIBLE",
+  "media": true,
+  "exercises": [
+    {
+      "q": "ก่อนเรียกข้อความว่า Buddha-word ต้องตรวจอะไร?",
+      "o": [
+        "ความไพเราะ",
+        "speaker + source boundary",
+        "จำนวนคนกดชอบ"
+      ],
+      "a": 1
+    },
+    {
+      "q": "ถ้าพระสาวกเป็นผู้กล่าว?",
+      "o": [
+        "เปลี่ยนเป็น Buddha-word",
+        "แสดงชื่อ/ประเภทผู้พูดและใช้เป็น support ตาม record"
+      ],
+      "a": 1
+    },
+    {
+      "q": "เลือกหนึ่งหัวข้อ → เปิด Source Record → ระบุ source + speaker.",
+      "challenge": "any",
+      "note": "No memorization-only requirement."
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "MN26": {
+    "id": "MN 26",
+    "pali": "Ariyapariyesanā Sutta",
+    "th": "มัชฌิมนิกาย 26 · อริยปริเยสนสูตร"
+  },
+  "MN36": {
+    "id": "MN 36",
+    "pali": "Mahāsaccaka Sutta",
+    "th": "มัชฌิมนิกาย 36 · มหาสัจจกสูตร"
+  },
+  "SN56_11": {
+    "id": "SN 56.11",
+    "pali": "Dhammacakkappavattana Sutta",
+    "th": "สังยุตตนิกาย 56.11 · ธัมมจักกัปปวัตตนสูตร"
+  },
+  "DN16": {
+    "id": "DN 16",
+    "pali": "Mahāparinibbāna Sutta",
+    "th": "ทีฆนิกาย 16 · มหาปรินิพพานสูตร"
+  },
+  "SN45_8": {
+    "id": "SN 45.8",
+    "pali": "Vibhaṅga Sutta",
+    "th": "สังยุตตนิกาย 45.8 · วิภังคสูตร"
+  },
+  "SN22_59": {
+    "id": "SN 22.59",
+    "pali": "Anattalakkhaṇa Sutta",
+    "th": "สังยุตตนิกาย 22.59 · อนัตตลักขณสูตร"
+  },
+  "SN12_23": {
+    "id": "SN 12.23",
+    "pali": "Upanisa Sutta",
+    "th": "สังยุตตนิกาย 12.23 · อุปนิสสูตร"
+  },
+  "ANAPANA": {
+    "id": "Ānāpānasati",
+    "pali": "Ānāpānasati evidence",
+    "th": "หลักฐานเรื่องอานาปานสติ"
+  },
+  "JHANA": {
+    "id": "Jhāna",
+    "pali": "P1 Jhāna records",
+    "th": "หลักฐานเรื่องฌาน (P1 Jhāna records)"
+  },
+  "M1_M7": {
+    "id": "M1–M7",
+    "pali": "P1 M1–M7",
+    "th": "Source Records M1–M7 ของห้องสมุด"
+  }
+}

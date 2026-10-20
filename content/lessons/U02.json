@@ -1,0 +1,45 @@
+{
+  "code": "U02",
+  "title": {
+    "th": "อาฬาระและอุทกะ",
+    "en": "Āḷāra and Uddaka"
+  },
+  "question": {
+    "th": "เรียนเก่งแล้ว เรายังตรวจผลของสิ่งที่เรียนได้ไหม?",
+    "en": "Even after learning something well, can we still check what it leads to?"
+  },
+  "simple": {
+    "th": "พระโพธิสัตว์เรียนสิ่งที่ครูสอนจนเข้าถึงสิ่งนั้น แล้วตรวจต่อว่านี่ถึงจุดหมายที่กำลังค้นหาหรือยัง เมื่อเห็นว่ายังไม่ถึง จึงเดินทางต่อ.",
+    "en": "The Bodhisatta learned what his teachers taught until he reached it, then checked further whether this was the goal he was looking for. Seeing that it was not yet, he travelled on."
+  },
+  "sources": [
+    {
+      "key": "MN26",
+      "use": "MN26 Āḷāra / Uddaka-Rāma records"
+    }
+  ],
+  "uncertainty": {
+    "th": "Uddaka/Rāma attribution and name variants visible in Study view.",
+    "en": "The Uddaka/Rāma attribution and name variants are shown in the Study view."
+  },
+  "status": "READY WITH VARIANT NOTE",
+  "exercises": [
+    {
+      "q": "การเรียนสิ่งที่ครูสอนจนเข้าถึงสิ่งนั้น หมายความโดยอัตโนมัติหรือไม่ว่าเป็นจุดหมายสุดท้าย?",
+      "o": [
+        "ใช่เสมอ",
+        "ไม่ใช่ ต้องดูการตรวจผลใน Source"
+      ],
+      "a": 1,
+      "evidence": "MN26 bounded records"
+    },
+    {
+      "q": "ถ้าชื่อ/การอ้างถึง Uddaka–Rāma มี variant เราควร?",
+      "o": [
+        "เลือกหนึ่งแบบแล้วซ่อน variant",
+        "แสดง variant/ข้อจำกัดตามหลักฐาน"
+      ],
+      "a": 1
+    }
+  ]
+}

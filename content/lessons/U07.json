@@ -1,0 +1,40 @@
+{
+  "code": "U07",
+  "title": {
+    "th": "ช่วงสุดท้าย",
+    "en": "The final period"
+  },
+  "question": {
+    "th": "ถ้ามีคนบอกว่า ‘พระพุทธเจ้าสอนไว้’ เราจะตรวจอย่างไร?",
+    "en": "If someone says ‘the Buddha taught this’, how do we check?"
+  },
+  "simple": {
+    "th": "ช่วงสุดท้ายให้เราอ่านตามลำดับของ DN16 เอง และตรวจคำสอนด้วยพระสูตรและพระวินัย ไม่ใช่เชื่อเพียงเพราะมีคนบอกว่าได้ยินมา.",
+    "en": "For the final period, we read in DN 16's own order, and check teachings against the suttas and the Vinaya, not believing something only because someone says they heard it."
+  },
+  "sources": [
+    {
+      "key": "DN16",
+      "use": "DN16 Mahāpadesa + Dhamma-Vinaya records"
+    }
+  ],
+  "status": "READY",
+  "exercises": [
+    {
+      "q": "เมื่อตามช่วงสุดท้าย ควรใช้?",
+      "o": [
+        "ลำดับ DN16 ที่ตรวจได้",
+        "เติมเหตุการณ์จากความจำให้ครบ"
+      ],
+      "a": 0
+    },
+    {
+      "q": "คำที่ยังมีข้อถกเถียง/variant ควร?",
+      "o": [
+        "แสดงความไม่แน่นอน",
+        "ทำให้แน่นอนเพื่อให้อ่านง่าย"
+      ],
+      "a": 0
+    }
+  ]
+}

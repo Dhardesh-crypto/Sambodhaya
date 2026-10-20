@@ -1,0 +1,52 @@
+{
+  "code": "U01",
+  "title": {
+    "th": "ออกแสวงหา",
+    "en": "Going forth to seek"
+  },
+  "question": {
+    "th": "ถ้าเรายังไม่รู้คำตอบ เราตรวจสอบอย่างไรโดยไม่รีบเชื่อ?",
+    "en": "If we don't know the answer yet, how can we check without rushing to believe?"
+  },
+  "simple": {
+    "th": "พระโพธิสัตว์ออกจากชีวิตเดิมเพื่อค้นหาสิ่งที่ดีและความสงบสูงสุดด้วยตนเอง.",
+    "en": "The Bodhisatta left his old life to search, himself, for what is good and for the highest peace."
+  },
+  "life": {
+    "th": "แยกสิ่งที่เราได้ยินออกจากสิ่งที่เราตรวจสอบแล้ว.",
+    "en": "Separate what we have heard from what we have checked."
+  },
+  "sources": [
+    {
+      "key": "MN26",
+      "use": "MN26 Source Record · P1 linguistic gate"
+    }
+  ],
+  "boundary": {
+    "th": "ไม่เติมชีวประวัติภายหลังเป็นคำใน MN26.",
+    "en": "Later biography is not added as if it were in MN26."
+  },
+  "status": "CHILD COPY v1 READY / HUMAN COMPREHENSION TEST OPEN",
+  "exercises": [
+    {
+      "q": "ข้อใดเป็นวิธีที่ปลอดภัยที่สุดเมื่อเราอยากรู้ว่าเรื่องหนึ่งอยู่ใน MN26 จริงหรือไม่?",
+      "o": [
+        "เชื่อคำเล่าที่จำได้",
+        "เปิด Source Record และดูขอบเขตข้อความ",
+        "ให้ AI แต่งเหตุการณ์ต่อ"
+      ],
+      "a": 1,
+      "feedback": "หลักฐานต้นทางมาก่อนคำเล่าหรือคำอธิบาย.",
+      "evidence": "MN26 Source Record"
+    },
+    {
+      "q": "ถ้าคำอธิบายเด็กมีรายละเอียดที่ Source ไม่ได้บันทึก ควรทำอย่างไร?",
+      "o": [
+        "เรียกเป็นพระพุทธพจน์",
+        "ติดป้ายว่าเป็นคำอธิบายและไม่เติมลง Source",
+        "ซ่อนที่มา"
+      ],
+      "a": 1
+    }
+  ]
+}

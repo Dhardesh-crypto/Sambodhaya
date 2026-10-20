@@ -1,0 +1,44 @@
+{
+  "code": "U05",
+  "title": {
+    "th": "เริ่มสอน",
+    "en": "Beginning to teach"
+  },
+  "question": {
+    "th": "ก่อนสรุปคำสอน เราเปิดดูพระสูตรที่บันทึกคำสอนนั้นได้ไหม?",
+    "en": "Before summing up a teaching, can we open the sutta that records it?"
+  },
+  "simple": {
+    "th": "หลังตรัสรู้ พระพุทธองค์เสด็จไปหากลุ่มห้ารูปที่อิสิปตนะ และเริ่มสอนธรรม. SN56.11 บันทึกอริยสัจสี่และหน้าที่ที่ต่างกันของแต่ละข้อ.",
+    "en": "After awakening, the Buddha went to the group of five at Isipatana and began to teach. SN 56.11 records the four noble truths and the different task belonging to each."
+  },
+  "sources": [
+    {
+      "key": "MN26",
+      "use": "MN26 narrative"
+    },
+    {
+      "key": "SN56_11",
+      "use": "SN56.11 teaching"
+    }
+  ],
+  "boundary": {
+    "th": "MN26 narrative and SN56.11 teaching remain separate records.",
+    "en": "The MN26 narrative and the SN56.11 teaching stay separate records."
+  },
+  "status": "READY",
+  "exercises": [
+    {
+      "q": "MN26 narrative และ SN56.11 teaching ควรแสดงอย่างไร?",
+      "o": [
+        "รวมเป็น quote เดียว",
+        "แยก Source Record และเปิดหลักฐานแต่ละแหล่ง"
+      ],
+      "a": 1
+    },
+    {
+      "q": "เปิด Evidence ของ SN56.11 แล้วตรวจ speaker/source ก่อนอ่านคำอธิบาย.",
+      "challenge": "SN56_11"
+    }
+  ]
+}

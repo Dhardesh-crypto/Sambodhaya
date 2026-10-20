@@ -1,0 +1,48 @@
+{
+  "code": "U04",
+  "title": {
+    "th": "พบทางที่ต่างออกไป",
+    "en": "Finding a different path"
+  },
+  "question": {
+    "th": "เราดูผลของวิธีที่ใช้ แทนการคิดว่ายิ่งลำบากยิ่งดีได้ไหม?",
+    "en": "Can we look at what a method actually does, instead of thinking that harder is always better?"
+  },
+  "simple": {
+    "th": "พระองค์ระลึกถึงปฐมฌานและทรงเห็นว่า ‘นี่เป็นทางเพื่อความรู้แจ้ง’ จากนั้นทรงกลับมารับอาหารให้ร่างกายมีกำลัง และเรื่องในพระสูตรดำเนินต่อไปสู่ฌานและความรู้ที่เกี่ยวกับการตรัสรู้.",
+    "en": "He recalled the first jhāna and saw that ‘this is the path to awakening’. Then he took food again so his body had strength, and the account in the sutta continues to the jhānas and the knowledge connected with awakening."
+  },
+  "sources": [
+    {
+      "key": "MN36",
+      "use": "MN36"
+    },
+    {
+      "key": "JHANA",
+      "use": "P1 Jhāna records, kept independent"
+    }
+  ],
+  "boundary": {
+    "th": "Child explanation ≠ Buddha quotation. No attainment scoring.",
+    "en": "The child explanation is not a Buddha quotation. No scoring of attainment."
+  },
+  "status": "READY",
+  "exercises": [
+    {
+      "q": "การอ่านเรื่องฌานในแอปบอกได้หรือไม่ว่าผู้เรียน “ได้ฌานแล้ว”?",
+      "o": [
+        "ได้",
+        "ไม่ได้"
+      ],
+      "a": 1
+    },
+    {
+      "q": "เมื่อดูเส้นเหตุการณ์ MN36 กับ Jhāna reference ควร?",
+      "o": [
+        "รวมเป็นข้อความเดียว",
+        "รักษาแหล่งและหน้าที่ของแต่ละ record แยกกัน"
+      ],
+      "a": 1
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "code": "U03",
+  "title": {
+    "th": "ทดลองทางที่หนักเกินไป",
+    "en": "Trying a path that was too harsh"
+  },
+  "question": {
+    "th": "เมื่อวิธีหนึ่งไม่พาไปถึงเป้าหมาย เราตรวจผลแล้วเปลี่ยนวิธีได้ไหม?",
+    "en": "When one method doesn't lead to the goal, can we check the result and change method?"
+  },
+  "simple": {
+    "th": "พระโพธิสัตว์เคยทดลองวิธีที่ทำให้ร่างกายลำบากมาก แล้วทรงเห็นว่าวิธีนั้นยังไม่พาไปถึงสิ่งที่กำลังค้นหา จึงไม่ยึดวิธีนั้นต่อ.",
+    "en": "The Bodhisatta once tried methods that made his body suffer greatly, then saw that they did not lead to what he was seeking, so he did not hold on to them."
+  },
+  "sources": [
+    {
+      "key": "MN36",
+      "use": "MN36"
+    }
+  ],
+  "safety": {
+    "th": "HISTORY ONLY. No reproduction details; no fasting, breath restriction, pain-endurance exercise.",
+    "en": "History only. No details for copying it; no fasting, breath-holding or pain-endurance exercises."
+  },
+  "status": "READY / SAFETY LOCKED",
+  "exercises": [
+    {
+      "q": "จุดสำคัญที่เด็กควรเข้าใจคือ?",
+      "o": [
+        "ยิ่งทรมานกายยิ่งดี",
+        "มีการทดลองวิธีหนักและตรวจพบว่ายังไม่ถึงสิ่งที่แสวงหา"
+      ],
+      "a": 1,
+      "note": "Safety: HISTORY_ONLY"
+    },
+    {
+      "q": "เราควรทดลองเลียนแบบวิธีรุนแรงในเรื่องนี้หรือไม่?",
+      "rule": "No practice reproduction; route to history/evidence only. No procedural details."
+    }
+  ]
+}

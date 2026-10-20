@@ -1,0 +1,22 @@
+{
+  "amber": [
+    "genuine manuscript/edition variants",
+    "exact identification of sūkaramaddava",
+    "narrow/universal glosses that source evidence does not justify",
+    "token-level morphology not yet individually audited",
+    "exhaustive Middle Ministry / whole-Canon catalog"
+  ],
+  "wheel": {
+    "src": "img/sambodhaya-wheel.png",
+    "w": 1312,
+    "h": 1199,
+    "alt": {
+      "th": "ภาพวงล้อสัมโพธายะ: วงนอกคือปฏิจจสมุปบาท 12 องค์ วงกลางคือขันธ์ 5 ตรงกลางคือเป้าหมายและนิพพาน มีกล่องความเชื่อมโยงสำคัญและทางออก สามเณรน้อยต้อนรับทางซ้าย และหมาวัดชวนสำรวจทางขวา",
+      "en": "The Sambodhaya wheel: the outer ring shows the 12 links of dependent origination, the middle ring the five aggregates, and the centre the goal and Nibbāna, with boxes for the key connections and the way out. A young novice welcomes visitors on the left and the temple dog invites exploring on the right."
+    },
+    "related": [
+      "SN22_59",
+      "SN12_23"
+    ]
+  }
+}
