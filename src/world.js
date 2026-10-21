@@ -787,6 +787,7 @@ const signs = [];
 const halls = {};
 const salas = {};
 const boards = [];
+let LANG_BOARD = null; // where to stand to read the Universal Hall's poster, which changes the language
 // Every hall faces the Bodhi tree, and its path runs straight from the plaza to its front steps.
 const facing = (x, z) => Math.atan2(-x, -z);
 const hallAt = (x, z, o) => sala({ x, z, rot: facing(x, z), ...o });
@@ -1247,7 +1248,7 @@ function spire(h, k = 0.85) {
     Object.assign(gildImage, { h, holder, near: { x: nx, z: nz }, far: { x: fx, z: fz }, faceYaw: h.g.rotation.y + Math.PI, chest: new THREE.Vector3(lx, T + 0.62, lz + 0.2) });
   }
   // the hall's own board moves to the side wall
-  wallBoard(h, "left", 0.6, boardTexture({ ...hallBoard(CONTENT.boards.universal), wide: true }), 2.8, 2.33, 2.6);
+  LANG_BOARD = wallBoard(h, "left", 0.6, boardTexture({ ...hallBoard(CONTENT.boards.universal), wide: true }), 2.8, 2.33, 2.6); // (the language poster)
   props("potplant", 1.6, [[-W / 2 + 1, D / 2 - 1, 2, FY], [W / 2 - 1, D / 2 - 1, 3, FY]], { parent: g });
   [[-W / 2 + 1, D / 2 - 1], [W / 2 - 1, D / 2 - 1]].forEach(([lx, lz]) => h.post(lx, lz, 0.6));
   // students and visitors sit on the floor, facing the platform
@@ -4936,10 +4937,24 @@ function showPrompt(p) {
   if (!p) { el.hidden = true; return; }
   $(id + "-name").textContent = p.icon + " " + placeName(p);
   $(id + "-sub").textContent = p.stone != null ? (p.board ? tx("ป้ายเรื่องที่ ", "Story board ") : tx("เรื่องที่ ", "Story ")) + (p.stone + 1) : p.sub[L === "en" ? 1 : 0];
-  $(id + "-go").textContent = p.id === "bell" ? tx("ตี", "Strike") : p.id === "donate" ? tx("เปิด", "Open") : p.id === "alms" ? tx("ใส่บาตร", "Offer") : p.id === "fish" ? tx("ให้อาหาร", "Feed") : p.merit ? tx("ทำบุญ", "Offer") : p.id === "broom" ? (broom.held ? tx("วาง", "Put back") : tx("หยิบ", "Pick up")) : p.id === "can" ? (can.held ? tx("วาง", "Put back") : tx("หยิบ", "Pick up")) : p.id === "water" ? tx("รดน้ำ", "Water") : p.id === "fold" ? tx("นั่งพับ", "Sit and fold") : p.id === "info" ? tx("อ่าน", "Read") : p.id === "bridge" ? tx("เลือก", "Choose") : p.id === "monk" ? (p.acts.length > 1 ? tx("เลือก", "Choose") : tx("ไหว้", "Greet")) : p.id === "cat" ? tx("ลูบ", "Pet") : tx("เข้า", "Visit");
+  $(id + "-go").textContent = p.id === "lang" ? tx("เปลี่ยน", "Change") : p.id === "bell" ? tx("ตี", "Strike") : p.id === "donate" ? tx("เปิด", "Open") : p.id === "alms" ? tx("ใส่บาตร", "Offer") : p.id === "fish" ? tx("ให้อาหาร", "Feed") : p.merit ? tx("ทำบุญ", "Offer") : p.id === "broom" ? (broom.held ? tx("วาง", "Put back") : tx("หยิบ", "Pick up")) : p.id === "can" ? (can.held ? tx("วาง", "Put back") : tx("หยิบ", "Pick up")) : p.id === "water" ? tx("รดน้ำ", "Water") : p.id === "fold" ? tx("นั่งพับ", "Sit and fold") : p.id === "info" ? tx("อ่าน", "Read") : p.id === "bridge" ? tx("เลือก", "Choose") : p.id === "monk" ? (p.acts.length > 1 ? tx("เลือก", "Choose") : tx("ไหว้", "Greet")) : p.id === "cat" ? tx("ลูบ", "Pet") : tx("เข้า", "Visit");
   el.hidden = false;
 }
 $("prompt-go").addEventListener("click", () => { actFor(P1); if (near) openPlace(near); });
+// the Universal Hall's poster: choose Thai or English; the temple reloads in that language, and you are back where you stood
+const LANG_PLACE = { id: "lang", icon: "🌍", th: "ป้ายภาษา", en: "Language poster", sub: ["เปลี่ยนภาษา · Change language", "เปลี่ยนภาษา · Change language"] };
+function openLang() {
+  const b = (code, label) => code === L ? `<button class="chip" data-close aria-current="true">✓ ${label}</button>` : `<button class="btn" data-lang="${code}">${label}</button>`;
+  openDialog(tx("🌍 เลือกภาษา", "🌍 Choose a language"),
+    `<p>${tx("เลือกภาษาที่ใช้ในวัด 3 มิติและหน้าเว็บ แล้วคุณจะกลับมายืนที่เดิม", "Choose the language of the 3D temple and the web pages; you'll be back where you stand now.")}</p>
+     <div class="row">${b("th", "ภาษาไทย")}${b("en", "English")}</div>`);
+  $("dlg-body").querySelectorAll("[data-lang]").forEach((el) => el.addEventListener("click", () => switchLang(el.dataset.lang)));
+}
+function switchLang(code) {
+  write("settings", { ...read("settings", {}), lang: code });
+  saveSpot();
+  const u = new URL(location.href); u.searchParams.set("lang", code); u.searchParams.set("return", "1"); location.href = u.toString();
+}
 $("prompt2-go").addEventListener("click", () => { actFor(P2); if (near) openPlace(near); });
 const DONATE_PLACE = { id: "donate", icon: "🤲", th: "ตู้รับบริจาค (สำหรับผู้ใหญ่)", en: "Donation box (for adults)", sub: ["สมทบทุนพัฒนาและสร้างวัด", "Support the temple's development"] };
 function openDonate() {
@@ -5002,6 +5017,7 @@ function openPlace(p) {
   if (p.id === "monk") { openMonk(p); return; }
   if (p.id === "info") { openInfo(p.info); return; }
   if (p.id === "bridge") { openBridge(); return; }
+  if (p.id === "lang") { openLang(); return; }
   if (p.stone != null) {
     const n = p.stone + 1;
     openDialog(`👣 ${n} · ${esc(L === "en" ? JOURNEY[p.stone][1] : JOURNEY[p.stone][0])}`,
@@ -6150,6 +6166,7 @@ function kidStep(dt) {
   if (can.held && can.t < 0) { const w = potHere(); if (w && w.d < bestD) { best = { ...WATER_PLACE, key: w.i }; bestD = w.d; } }
   if (almsScene.on) for (const m of almsMonks) { const d = Math.hypot(player.x - (m.x + Math.sin(m.yaw) * ALMS_STAND), player.z - (m.z + Math.cos(m.yaw) * ALMS_STAND)); if (d < 1.5 && d < bestD) { best = { ...ALMS_PLACE, monk: m }; bestD = d; } }
   for (const s of boards) { const d = Math.hypot(player.x - s.x, player.z - s.z); if (d < 1.9 && d < bestD) { best = { ...PLACES.find((p) => p.id === "learn"), stone: s.i, board: true }; bestD = d; } }
+  if (LANG_BOARD) { const d = Math.hypot(player.x - LANG_BOARD.x, player.z - LANG_BOARD.z); if (d < 2.2 && d < bestD) { best = LANG_PLACE; bestD = d; } }
   if ((best && best.id) !== (near && near.id) || (best && best.stone) !== (near && near.stone) || (best && best.monk) !== (near && near.monk) || (best && best.key) !== (near && near.key)) { near = best; showPrompt(near); }
   // while he is doing something the prompt steps aside, and stays aside until he has walked on a little
   const busy = alms.t >= 0 || kraap.t >= 0 || shoes.t >= 0 || wai.t >= 0 || sit.on || feed.t >= 0 || merit.t >= 0 || can.t >= 0 || pet.phase === "call";
