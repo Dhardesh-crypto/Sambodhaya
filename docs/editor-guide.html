@@ -12,13 +12,13 @@
   :root { --ink: #2f241a; --muted: #6e5c4c; --line: #e2d6c2; --saffron: #c26a1b; --paper: #fffdf8; --soft: #fbf3e6; }
   * { box-sizing: border-box; }
   html { background: #fff; }
-  body { margin: 0; font-family: "Sarabun", sans-serif; color: var(--ink); font-size: 10.6pt; line-height: 1.55; }
+  body { margin: 0; font-family: "Sarabun", sans-serif; color: var(--ink); font-size: 10.3pt; line-height: 1.5; }
   h1 { font-size: 21pt; margin: 0 0 2mm; line-height: 1.2; }
   h1 small { display: block; font-size: 13pt; font-weight: 400; color: var(--muted); }
   .cover { border-bottom: 2px solid var(--saffron); padding-bottom: 5mm; margin-bottom: 6mm; }
   .lede { display: grid; grid-template-columns: 1fr 1fr; gap: 8mm; margin-top: 4mm; }
   .lede p { margin: 0; }
-  section { margin: 0 0 6mm; }
+  section { margin: 0 0 4.5mm; }
   h2 { break-after: avoid; font-size: 13pt; margin: 0 0 2.5mm; padding: 1.5mm 3mm; background: var(--soft); border-left: 4px solid var(--saffron); border-radius: 2px; }
   h2 .n { color: var(--saffron); margin-right: 2mm; }
   .two { display: grid; grid-template-columns: 1fr 1fr; gap: 8mm; }
@@ -165,17 +165,19 @@
     <div>
       <ol>
         <li>รอ 1–2 นาที แล้วโหลดหน้าใหม่ (บางครั้งเบราว์เซอร์จำหน้าเก่าไว้)</li>
-        <li>หากยังไม่ขึ้น แสดงว่าระบบตรวจเนื้อหาได้หยุดการเผยแพร่ไว้ เว็บไซต์จะยังแสดงฉบับก่อนหน้าตามปกติ จึงไม่มีอะไรเสียหาย</li>
+        <li>หากยังไม่ขึ้น อาจเป็นเพราะระบบตรวจเนื้อหาได้หยุดการเผยแพร่ไว้ หรือ GitHub ทำงานล่าช้า (ดูข้อ 5) ทั้งสองกรณีเว็บไซต์จะยังแสดงฉบับก่อนหน้าตามปกติ จึงไม่มีอะไรเสียหาย</li>
         <li>สาเหตุที่พบบ่อย: ข้อความภาษาไทยหรืออังกฤษว่างไว้ หรือใช้รหัสแหล่งที่มาที่ไม่มีอยู่</li>
         <li>เปิดรายการนั้น แก้ให้ถูก แล้วบันทึกอีกครั้ง หากไม่แน่ใจ แจ้งผู้ดูแลเว็บไซต์ว่าแก้อะไร และเวลาที่บันทึก</li>
+        <li>ดูที่ <span class="url">githubstatus.com</span> หาก GitHub แจ้งว่ามีปัญหา (เช่น การส่งข้อมูลไปยังระบบอื่นล่าช้า) การแก้ไขของคุณถูกบันทึกไว้อย่างปลอดภัยแล้ว และจะขึ้นเว็บไซต์เมื่อ GitHub กลับมาปกติ หรือผู้ดูแลเว็บไซต์เผยแพร่เองได้ทันที (Netlify → <span class="ui">Trigger deploy</span>) ไม่ต้องบันทึกซ้ำ</li>
       </ol>
     </div>
     <div class="en">
       <ol>
         <li>Wait 1–2 minutes and reload (sometimes the browser keeps the old page).</li>
-        <li>If it still doesn't show, the content check has held the change back. The website keeps showing the previous version, so nothing breaks.</li>
+        <li>If it still doesn't show, either the content check has held the change back, or GitHub is running late (see point 5). Either way the website keeps showing the previous version, so nothing breaks.</li>
         <li>Common causes: a Thai or English text left empty, or a source key that doesn't exist.</li>
         <li>Open the item, correct it and save again. If you're unsure, tell the site's caretaker what you changed and when you saved.</li>
+        <li>Look at <span class="url">githubstatus.com</span>. If GitHub reports an incident (for example delayed webhooks), your change is already saved safely: it goes live once GitHub catches up, or the site's caretaker can publish it straight away (Netlify → <span class="ui">Trigger deploy</span>). There's no need to save again.</li>
       </ol>
     </div>
   </div>
@@ -220,8 +222,8 @@
 </section>
 
 <div class="foot">
-  <div>หน้าแก้ไขเนื้อหา: <span class="url">sambodhaya.netlify.app/admin</span> · ฉบับ ตุลาคม 2569</div>
-  <div>Content admin: <span class="url">sambodhaya.netlify.app/admin</span> · October 2026 edition</div>
+  <div>หน้าแก้ไขเนื้อหา: <span class="url">sambodhaya.netlify.app/admin</span> · ฉบับ ตุลาคม 2569 (ปรับปรุง 21 ต.ค.)</div>
+  <div>Content admin: <span class="url">sambodhaya.netlify.app/admin</span> · October 2026 edition (updated 21 Oct)</div>
 </div>
 
 </body>
