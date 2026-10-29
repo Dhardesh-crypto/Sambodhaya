@@ -159,8 +159,12 @@ function fitTo(obj, h) {
   const holder = new THREE.Group(); holder.add(obj); return holder;
 }
 const propJobs = [];
-// place copies of a prop: list of [x, z, rotY, y?]; fallback() runs if the model is missing
-function props(name, h, list, { fallback, shadow = true, parent = scene, extra = false } = {}) {
+// place copies of a prop: list of [x, z, rotY, y?]; fallback() runs if the model is missing.
+// Three or more copies are drawn as one InstancedMesh per 45 m patch of ground: one draw call (and one shadow
+// draw) for the patch instead of one per copy, while patches out of view are still skipped. In light mode only
+// things 2 m or taller cast a shadow.
+const PROP_CELL = 45;
+function props(name, h, list, { fallback, shadow = HIGH || h >= 2, parent = scene, extra = false } = {}) {
   if (extra && !HIGH) return Promise.resolve(); // purely decorative: skipped in light mode
   const job = loadProp(name).then((src) => {
     if (!src) { if (fallback) fallback(); return; }
@@ -168,7 +172,17 @@ function props(name, h, list, { fallback, shadow = true, parent = scene, extra =
     const copy = src.clone();
     copy.traverse((o) => { if (o.isMesh) { o.castShadow = shadow; o.receiveShadow = true; if (o.material) o.material.envMapIntensity = 1; } });
     const base = fitTo(copy, h);
-    list.forEach(([x, z, r = 0, y = 0]) => { const c = base.clone(); c.position.set(x, y, z); c.rotation.y = r; parent.add(c); });
+    if (list.length < 3) { list.forEach(([x, z, r = 0, y = 0]) => { const c = base.clone(); c.position.set(x, y, z); c.rotation.y = r; parent.add(c); }); return; }
+    base.updateMatrixWorld(true); // each mesh's place within one copy
+    const meshes = []; base.traverse((o) => { if (o.isMesh) meshes.push(o); });
+    const cells = new Map();
+    list.forEach((p) => { const k = Math.floor(p[0] / PROP_CELL) + "," + Math.floor(p[1] / PROP_CELL); if (!cells.has(k)) cells.set(k, []); cells.get(k).push(p); });
+    const at = new THREE.Object3D(), m = new THREE.Matrix4();
+    cells.forEach((group) => meshes.forEach((mesh) => {
+      const im = new THREE.InstancedMesh(mesh.geometry, mesh.material, group.length);
+      group.forEach(([x, z, r = 0, y = 0], i) => { at.position.set(x, y, z); at.rotation.set(0, r, 0); at.updateMatrix(); im.setMatrixAt(i, m.multiplyMatrices(at.matrix, mesh.matrixWorld)); });
+      im.castShadow = shadow; im.receiveShadow = true; im.computeBoundingSphere(); parent.add(im);
+    }));
   });
   propJobs.push(job); return job;
 }
@@ -295,11 +309,13 @@ const BRIDGE = { zc: (MOAT.r1 + MOAT.r2) / 2, half: (MOAT.r2 - MOAT.r1) / 2 + 2 
   water.material.opacity = 0.58; water.renderOrder = 2;
   water.rotation.x = -Math.PI / 2; water.position.y = MOAT.water; scene.add(water);
   // a few lotus pads drifting in the moat
+  const pads0 = scene.children.length;
   for (let i = 0; i < 70; i++) {
     const a = i * 2.39996, r = MOAT.r1 + 1 + ((i * 37) % 50) / 10;
     if (Math.sin(a) > 0.97) continue; // keep the water under the bridge clear
     add(new THREE.CylinderGeometry(0.6, 0.6, 0.04, 10), MAT.pad, Math.cos(a) * r, MOAT.water + 0.03, Math.sin(a) * r, scene, false);
   }
+  mergeStatic(scene, pads0);
 }
 // paving is laid flush: its surface is only a few centimetres above the grass, where feet walk.
 // The plaza: sandstone flagstones laid in rings round the Bodhi tree, each slab its own shade, joints staggered from
@@ -425,7 +441,7 @@ const pond = (x, z, r) => {
   }
   colliders.push({ x, z, r: r + 0.6 });
 };
-pond(-14, 30, 6); pond(14, 30, 6); pond(-36, 22, 5); pond(36, 24, 4);
+{ const p0 = scene.children.length; pond(-14, 30, 6); pond(14, 30, 6); pond(-36, 22, 5); pond(36, 24, 4); mergeStatic(scene, p0); }
 
 /* ---------------- text signs (Thai-ready canvas textures) ---------------- */
 const signDraws = [];
@@ -541,6 +557,26 @@ function mergeBucket() {
       return meshes;
     },
   };
+}
+// merge a group's plain meshes, built once and never touched again, into one mesh per material (and shadow
+// setting): one draw call instead of dozens. Meshes the camera checks (camBlock), meshes with children and
+// multi-material meshes stay as they are. Only for parts no code keeps hold of afterwards. With `from`, only the
+// children added since parent.children had that length (what one block of code just built).
+function mergeStatic(parent, from = 0) {
+  const buckets = new Map();
+  for (const m of parent.children.slice(from)) {
+    if (!m.isMesh || m.isInstancedMesh || m.isSkinnedMesh || m.children.length || Array.isArray(m.material) || camBlock.includes(m)) continue;
+    const k = m.material.uuid + (m.castShadow ? "+" : "-");
+    if (!buckets.has(k)) buckets.set(k, []); buckets.get(k).push(m);
+  }
+  for (const list of buckets.values()) {
+    if (list.length < 2) continue;
+    const geos = list.map((m) => { m.updateMatrix(); let gg = m.geometry.clone().applyMatrix4(m.matrix); if (gg.index) gg = gg.toNonIndexed(); return gg; });
+    const merged = mergeGeometries(geos); geos.forEach((gg) => gg.dispose());
+    if (!merged) continue; // (different attributes: leave them)
+    const out = new THREE.Mesh(merged, list[0].material); out.castShadow = list[0].castShadow; out.receiveShadow = true; parent.add(out);
+    list.forEach((m) => parent.remove(m));
+  }
 }
 function thaiRoof(parent, sections, { shadow = true, block = true } = {}) {
   const mb = mergeBucket(), put = mb.put;
@@ -705,6 +741,7 @@ function sala({ x, z, rot = 0, W = 13, D = 10, H = 5.6, walls = true }) {
   ]);
   // carved brackets from the front columns up to the eaves
   if (walls) for (let i = 1; i < n; i++) { let lx = -W / 2 + 0.3 + i * (W - 0.6) / n; if (Math.abs(lx) < 1.3) lx = Math.sign(lx) * 1.3; eaveBracket(g, lx, FY + H - 1.5, D / 2 + 0.45, 1.1, 1.2); }
+  mergeStatic(g); // the shell is done: base, floor, columns, beams, roof and brackets become a few meshes
   // warm light inside
   const lamp = new THREE.PointLight(0xffd2a0, walls ? 14 : 6, Math.max(W, D) + 2, 2); lamp.position.set(0, FY + H - 0.3, walls ? -D / 4 : 0); g.add(lamp);
   hallLamps.push({ light: lamp, day: lamp.intensity, night: walls ? 34 : 18 });
@@ -1709,6 +1746,7 @@ const nagaScales = (() => {
 })();
 // a gently arched stone bridge with white balustrades and gold lotus-bud posts; you walk over its arch
 {
+  const bridge0 = scene.children.length;
   const ZC = BRIDGE.zc, H = BRIDGE.half, RISE = 1.1, BW = ROAD; // as wide as the road it carries
   const topY = (u) => RISE * (1 - (u / H) ** 2);
   const sh = new THREE.Shape(); const N = 24;
@@ -1751,6 +1789,7 @@ const nagaScales = (() => {
     });
   });
   nagaHeads.forEach(([hx, hz, , hy]) => infoSpot("naga", hx, hy + 0.8, hz, 1.6));
+  mergeStatic(scene, bridge0); // balusters, rails, the naga handrail and its fins: a few meshes
   props("naga", NAGA_H, nagaHeads, { fallback: () => nagaHeads.forEach(([hx, hz, , hy]) => add(new THREE.ConeGeometry(0.35, 1.6, 8), MAT.gold, hx, hy + 0.8, hz)) });
 }
 
