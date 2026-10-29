@@ -1513,10 +1513,12 @@ const BRONZE = S(0x8a6a35, { metalness: 0.75, roughness: 0.35 });
 
 /* ---------------- the donation box (for adults) on the front of the "leave any time" post ---------------- */
 // Quiet and optional: walking up to it and pressing E opens a note and a link to the support page.
-const DONATE = { x: 7, z: 36.95 };
+// Ivory with gold trim (Arnon, 29 Oct 2026: larger, and a colour that stands out against the red post); the red
+// front is faintly lit so it reads from across the road, and a floating label like the tool rack's names it.
+const DONATE = { x: 7, z: 37.04, scale: 1.3 };
 {
-  const g = new THREE.Group(); g.position.set(DONATE.x, 0, DONATE.z); scene.add(g);
-  add(new THREE.BoxGeometry(0.95, 1.15, 0.6), MAT.lacquer, 0, 1.75, 0, g);
+  const g = new THREE.Group(); g.position.set(DONATE.x, 0, DONATE.z); g.scale.setScalar(DONATE.scale); scene.add(g);
+  add(new THREE.BoxGeometry(0.95, 1.15, 0.6), S(0xf3ead6, { roughness: 0.4 }), 0, 1.75, 0, g);
   add(new THREE.BoxGeometry(1.05, 0.1, 0.7), MAT.gold, 0, 2.37, 0, g);      // lid
   add(new THREE.BoxGeometry(1.05, 0.08, 0.7), MAT.gold, 0, 1.16, 0, g, false); // base trim
   add(new THREE.BoxGeometry(0.42, 0.03, 0.06), S(0x1a1008, { roughness: 1 }), 0, 2.43, 0.05, g, false); // coin slot
@@ -1531,9 +1533,10 @@ const DONATE = { x: 7, z: 36.95 };
   };
   const tex = canvasTexture(256, 320, drawFront);
   signDraws.push(() => { drawFront(tex.image.getContext("2d")); tex.needsUpdate = true; }); // redrawn once the Thai fonts are in
-  const front = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 1.0), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.7 }));
+  const front = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 1.0), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.7, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.35 }));
   front.position.set(0, 1.75, 0.305); g.add(front);
-  colliders.push({ x: DONATE.x, z: DONATE.z, r: 0.6 });
+  colliders.push({ x: DONATE.x, z: DONATE.z, r: 0.6 * DONATE.scale });
+  sign(txo(CONTENT.signs.donation_box.title), txo(CONTENT.signs.donation_box.sub), "🪷", DONATE.x, 2.45 * DONATE.scale + 1.25, DONATE.z + 0.4, 2.4);
 }
 
 /* ---------------- the alms round (ตักบาตร) on the road outside the gate ---------------- */

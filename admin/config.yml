@@ -1058,6 +1058,56 @@
               ]
             },
             {
+              "name": "donation_box",
+              "label": "The donation box (by the right gate post)",
+              "widget": "object",
+              "collapsed": true,
+              "fields": [
+                {
+                  "name": "title",
+                  "label": "Title",
+                  "widget": "object",
+                  "required": true,
+                  "collapsed": false,
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "widget": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "widget": "string",
+                      "required": true
+                    }
+                  ]
+                },
+                {
+                  "name": "sub",
+                  "label": "Subtitle",
+                  "widget": "object",
+                  "required": true,
+                  "collapsed": false,
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "widget": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "widget": "string",
+                      "required": true
+                    }
+                  ]
+                }
+              ]
+            },
+            {
               "name": "garden_stones",
               "label": "Practice Garden: the four stones",
               "widget": "list",

@@ -27,6 +27,16 @@
       "en": "Put the broom and can back on the gold rings"
     }
   },
+  "donation_box": {
+    "title": {
+      "th": "ตู้รับบริจาค",
+      "en": "Donation box"
+    },
+    "sub": {
+      "th": "สำหรับผู้ใหญ่ ร่วมทำบุญตามศรัทธา",
+      "en": "For adults · give only if you wish"
+    }
+  },
   "garden_stones": [
     {
       "icon": "🧍",
