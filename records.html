@@ -10,8 +10,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Itim&family=Mali:wght@400;600;700&display=swap">
 <style>
-/* Read-only records for the people who check donation slips: the rows from Supabase (via netlify/functions/records.mjs),
-   only with the key in the link (#k=...). Nothing on this page can change a row. */
+/* Records for the people who check donation slips: the rows from Supabase (via netlify/functions/records.mjs), only
+   with the key in the link. The view link (#k=...) is read-only. The edit link (#e=..., a separate key) may also change
+   a donation's status and admin note (via netlify/functions/records-update.mjs); nothing else can be changed here. */
 :root {
   --ink: #3a2a1d; --paper: #fdf8ee; --cream: #fffdf8; --saffron: #e98a2b; --saffron-deep: #a5560f;
   --leaf: #4f9a5d; --leaf-soft: #e6f3e3; --gold-soft: #fbefc9; --red: #b3392f; --red-soft: #f8e1dc;
@@ -32,6 +33,12 @@ button, select { background: var(--cream); border: 1.5px solid var(--ink); borde
 input[type="search"] { background: var(--cream); border: 1.5px solid var(--ink); border-radius: 999px; padding: 3px 14px; min-width: 0; flex: 1 1 200px; }
 .tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0; }
 .badge-ro { display: inline-block; font-size: .8rem; background: var(--leaf-soft); border: 1.5px solid var(--ink); border-radius: 999px; padding: 0 10px; }
+.badge-ro.edit { background: var(--gold-soft); }
+td select { padding: 1px 10px; font-size: .85rem; }
+.note-edit { display: flex; gap: 6px; align-items: center; min-width: 260px; }
+.note-edit input { flex: 1 1 auto; min-width: 0; background: var(--cream); border: 1.5px solid var(--ink); border-radius: 10px; padding: 2px 8px; font-size: .85rem; }
+.note-edit button { padding: 1px 12px; font-size: .85rem; }
+.saved { font-size: .8rem; color: var(--leaf); white-space: nowrap; } .saved.err { color: var(--red); }
 details.guide { background: var(--cream); border: 1.5px solid var(--line-soft); border-radius: 14px; padding: 10px 16px; margin-top: 16px; }
 details.guide summary { cursor: pointer; font-family: var(--display); font-size: 1.1rem; }
 details.guide ol { margin: 8px 0 4px; padding-left: 22px; } details.guide li { margin: 4px 0; }
@@ -61,7 +68,7 @@ a { color: var(--saffron-deep); }
   <div class="top">
     <div>
       <h1 data-th="บันทึกการสมทบทุนและความคิดเห็น" data-en="Donation and feedback records"></h1>
-      <p class="quiet"><span class="badge-ro" data-th="อ่านอย่างเดียว" data-en="Read-only"></span> <span id="asof"></span></p>
+      <p class="quiet"><span class="badge-ro" id="mode-ro" data-th="อ่านอย่างเดียว" data-en="Read-only"></span><span class="badge-ro edit" id="mode-edit" data-th="แก้ไขได้: สถานะและบันทึกผู้ดูแล" data-en="Can edit: status and admin note" hidden></span> <span id="asof"></span></p>
     </div>
     <div class="tools">
       <button id="lang" type="button">English</button>
@@ -76,10 +83,12 @@ a { color: var(--saffron-deep); }
       <summary data-th="วิธีตรวจสลิป" data-en="How to check a slip"></summary>
       <ol>
         <li data-th="เปิดสลิป แล้วเทียบจำนวนเงินและวันที่กับรายการเงินเข้าของพร้อมเพย์ 088-953-5999 (นาย วัฒพงษ์ น้อยเวียง)" data-en="Open the slip and compare the amount and date with the money received on PromptPay 088-953-5999 (นาย วัฒพงษ์ น้อยเวียง)."></li>
-        <li data-th="แจ้งผลแก่ผู้ดูแลเว็บไซต์ พร้อมรหัสรายการ: ตรงกัน (Verified) หรือมีปัญหา (Problem) ผู้ดูแลจะเปลี่ยนสถานะให้ หน้านี้แก้ไขไม่ได้" data-en="Tell the site's caretaker the result, with the submission ID: it matches (Verified) or there is a problem (Problem). They change the status; this page cannot."></li>
+        <li class="ro-only" data-th="แจ้งผลแก่ผู้ดูแลเว็บไซต์ พร้อมรหัสรายการ: ตรงกัน (Verified) หรือมีปัญหา (Problem) ผู้ดูแลจะเปลี่ยนสถานะให้ ลิงก์นี้แก้ไขไม่ได้" data-en="Tell the site's caretaker the result, with the submission ID: it matches (Verified) or there is a problem (Problem). They change the status; this link cannot."></li>
+        <li class="edit-only" hidden data-th="ตั้งสถานะ: ตรงกัน = ตรวจแล้ว (Verified) ไม่ตรงหรือไม่พบเงินเข้า = มีปัญหา (Problem) เขียนบันทึกสั้น ๆ ถ้าต้องการ แล้วกด “บันทึก” ในแถวนั้น" data-en="Set the status: it matches = Verified; doesn't match or no money arrived = Problem. Add a short note if useful, then press Save on that row."></li>
         <li data-th="การขอบคุณ: “ส่วนตัว” ขอบคุณทางอีเมลถ้ามีให้ ไม่แสดงชื่อ · “แสดงชื่อ” ใส่ชื่อในรายชื่อผู้สนับสนุน ห้ามแสดงจำนวนเงิน · “(anonymous)” ไม่ต้องติดต่อ" data-en="Thanks: “private” means thank them by email if they gave one, never show the name · “public” means add the name to the supporters list, never the amount · “(anonymous)” means no contact."></li>
         <li data-th="ข้อมูลและสลิปเก็บไว้ 90 วันตามที่สัญญาไว้ แถวจะถูกลบเองในวัน “ลบหลัง” ลบรายการใน Netlify ด้วยภายในวันนั้น" data-en="Data and slips are kept 90 days, as promised. Each row is deleted by itself on its “delete after” date; delete the submission in Netlify by then too."></li>
         <li data-th="อย่าส่งต่อลิงก์นี้หรือข้อมูลผู้บริจาค ลิงก์นี้มีกุญแจอยู่ในตัว" data-en="Don't pass this link or donors' details on: the link carries its own key."></li>
+        <li class="edit-only" hidden data-th="ลิงก์นี้เป็นลิงก์แก้ไข ใช้เฉพาะผู้ตรวจสลิป ผู้อื่นใช้ลิงก์ดูอย่างเดียว" data-en="This is the edit link: only for the people who check slips. Everyone else gets the view-only link."></li>
       </ol>
     </details>
 
@@ -105,7 +114,7 @@ a { color: var(--saffron-deep); }
 
 <script>
 (() => {
-  let key = "";
+  let key = "", editing = false;
   let lang = "th", data = null;
   try { lang = localStorage.getItem("records-lang") || "th"; } catch (e) {}
   const T = (th, en) => (lang === "en" ? en : th);
@@ -138,7 +147,8 @@ a { color: var(--saffron-deep); }
 
   const DON = [
     { th: "ส่งเมื่อ (เวลาไทย)", en: "Submitted (Thai time)", cls: "when", cell: (r) => bkk(r.submitted) },
-    { th: "สถานะ", en: "Status", cell: (r) => { const s = STATUS[r.status] || ["", r.status]; return el("span", "status " + s[0], T(s[1], r.status)); } },
+    { th: "สถานะ", en: "Status", cell: (r) => (editing ? statusPicker(r) : statusBadge(r.status)) },
+    { th: "บันทึกผู้ดูแล", en: "Admin note", cls: "long", cell: (r) => (editing ? noteEditor(r) : [r.admin_note, r.checked_at ? `(${T("ตรวจ", "checked")} ${bkk(r.checked_at)})` : ""].filter(Boolean).join(" ")) },
     { th: "ชื่อ", en: "Name", cls: "nowrap", cell: (r) => r.name },
     { th: "จำนวน", en: "Amount", cls: "num", cell: (r) => baht(r.amount_thb) },
     { th: "สลิป", en: "Slip", cls: "nowrap", cell: (r) => safeLink(r.slip, T("เปิดสลิป", "Open slip")) },
@@ -163,9 +173,38 @@ a { color: var(--saffron-deep); }
     { th: "รหัสรายการ", en: "Submission ID", cls: "id", cell: (r) => r.submission_id },
   ];
 
+  const statusBadge = (st) => { const s = STATUS[st] || ["", st]; return el("span", "status " + s[0], T(s[1], st)); };
+  // edit link only: the status and the admin note of one donation, saved together with its Save button
+  const statusPicker = (r) => {
+    const sel = el("select"); sel.setAttribute("aria-label", T("สถานะ", "Status")); sel.dataset.sub = r.submission_id;
+    Object.entries(STATUS).forEach(([v, [, th]]) => { const o = el("option", null, T(th, v)); o.value = v; o.selected = v === r.status; sel.append(o); });
+    return sel;
+  };
+  const noteEditor = (r) => {
+    const box = el("div", "note-edit"), inp = el("input"), btn = el("button", null, T("บันทึก", "Save")), out = el("span", "saved");
+    inp.type = "text"; inp.maxLength = 500; inp.value = r.admin_note || ""; inp.setAttribute("aria-label", T("บันทึกผู้ดูแล", "Admin note"));
+    btn.type = "button";
+    if (r.checked_at) out.textContent = T("ตรวจ ", "checked ") + bkk(r.checked_at);
+    btn.onclick = async () => {
+      const sel = btn.closest("tr").querySelector("select");
+      btn.disabled = true; out.className = "saved"; out.textContent = T("กำลังบันทึก…", "Saving…");
+      try {
+        const res = await fetch("/.netlify/functions/records-update", { method: "POST", cache: "no-store", headers: { "Content-Type": "application/json", "x-edit-key": key },
+          body: JSON.stringify({ submission_id: r.submission_id, status: sel.value, admin_note: inp.value }) });
+        if (res.status === 401) throw new Error(T("กุญแจแก้ไขใช้ไม่ได้แล้ว", "The edit key no longer works"));
+        if (!res.ok) throw new Error(T("บันทึกไม่ได้", "Could not save"));
+        Object.assign(r, await res.json()); // the row as the database now has it
+        inp.value = r.admin_note || ""; out.textContent = "✓ " + T("บันทึกแล้ว ", "Saved ") + bkk(r.checked_at);
+        tiles();
+      } catch (e) { out.className = "saved err"; out.textContent = e.message; }
+      btn.disabled = false;
+    };
+    box.append(inp, btn, out); return box;
+  };
+
   function shownDonations() {
     const st = $("status").value, q = $("q").value.trim().toLowerCase();
-    return data.donations.filter((r) => (!st || r.status === st) && (!q || [r.name, r.email, r.note, r.submission_id, r.method].some((v) => (v || "").toLowerCase().includes(q))));
+    return data.donations.filter((r) => (!st || r.status === st) && (!q || [r.name, r.email, r.note, r.admin_note, r.submission_id, r.method].some((v) => (v || "").toLowerCase().includes(q))));
   }
 
   function tiles() {
@@ -182,6 +221,8 @@ a { color: var(--saffron-deep); }
   function render() {
     words();
     if (!data) return;
+    $("mode-ro").hidden = editing; $("mode-edit").hidden = !editing;
+    document.querySelectorAll(".ro-only").forEach((e) => (e.hidden = editing)); document.querySelectorAll(".edit-only").forEach((e) => (e.hidden = !editing));
     $("asof").textContent = T("ข้อมูลเมื่อ ", "As of ") + bkk(data.as_of);
     tiles();
     table($("don"), DON, shownDonations(), T("ยังไม่มีรายการ", "No donations yet"));
@@ -189,19 +230,20 @@ a { color: var(--saffron-deep); }
   }
 
   async function load() {
-    key = new URLSearchParams(location.hash.slice(1)).get("k") || "";
+    const h = new URLSearchParams(location.hash.slice(1));
+    key = h.get("e") || h.get("k") || ""; // the edit link (#e=) or the view link (#k=)
     if (!key) return message("หน้านี้เปิดได้ด้วยลิงก์ที่มีกุญแจเท่านั้น ขอลิงก์จากผู้ดูแลเว็บไซต์", "This page opens only with the link that carries its key. Ask the site's caretaker for it.");
     try {
       const r = await fetch("/.netlify/functions/records", { headers: { "x-view-key": key }, cache: "no-store" });
       if (r.status === 401) return message("กุญแจในลิงก์นี้ใช้ไม่ได้แล้ว ขอลิงก์ใหม่จากผู้ดูแลเว็บไซต์", "The key in this link no longer works. Ask the site's caretaker for a new link.");
       if (!r.ok) throw new Error(r.status);
-      data = await r.json();
+      data = await r.json(); editing = data.can_edit === true;
       $("msg").hidden = true; $("content").hidden = false; render();
     } catch (e) { message("โหลดข้อมูลไม่ได้ ลองกด “โหลดใหม่” อีกครั้งภายหลัง", "The records could not be loaded. Try Refresh again later."); }
   }
 
   function csv() {
-    const cols = ["submitted", "status", "name", "amount_thb", "method", "thanks", "email", "note", "language", "adult_consent", "slip", "delete_after", "submission_id"];
+    const cols = ["submitted", "status", "admin_note", "checked_at", "name", "amount_thb", "method", "thanks", "email", "note", "language", "adult_consent", "slip", "delete_after", "submission_id"];
     const q = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
     const text = "﻿" + [cols.join(","), ...shownDonations().map((r) => cols.map((c) => q(r[c])).join(","))].join("\r\n");
     const a = el("a"); a.href = URL.createObjectURL(new Blob([text], { type: "text/csv;charset=utf-8" })); a.download = `sambodhaya-donations-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
