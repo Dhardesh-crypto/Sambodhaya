@@ -1551,15 +1551,17 @@ const BRONZE = S(0x8a6a35, { metalness: 0.75, roughness: 0.35 });
 /* ---------------- the donation box (for adults) on the front of the "leave any time" post ---------------- */
 // Quiet and optional: walking up to it and pressing E opens a note and a link to the support page.
 // Ivory with gold trim (Arnon, 29 Oct 2026: larger, and a colour that stands out against the red post); the red
-// front is faintly lit so it reads from across the road, and a floating label like the tool rack's names it.
-const DONATE = { x: 7, z: 37.04, scale: 1.3 };
+// front is lit so it reads from across the road, and a floating label like the tool rack's names it.
+// Extra-large (Arnon, 30 Oct 2026: a focal point you spot from a distance): twice the first size, lowered by `lift`
+// onto a gold plinth in front of the post so the coin slot stays within reach.
+const DONATE = { x: 7, z: 37.2, scale: 2, lift: -1.8 };
 {
-  const g = new THREE.Group(); g.position.set(DONATE.x, 0, DONATE.z); g.scale.setScalar(DONATE.scale); scene.add(g);
+  const g = new THREE.Group(); g.position.set(DONATE.x, DONATE.lift, DONATE.z); g.scale.setScalar(DONATE.scale); scene.add(g);
   add(new THREE.BoxGeometry(0.95, 1.15, 0.6), S(0xf3ead6, { roughness: 0.4 }), 0, 1.75, 0, g);
   add(new THREE.BoxGeometry(1.05, 0.1, 0.7), MAT.gold, 0, 2.37, 0, g);      // lid
   add(new THREE.BoxGeometry(1.05, 0.08, 0.7), MAT.gold, 0, 1.16, 0, g, false); // base trim
   add(new THREE.BoxGeometry(0.42, 0.03, 0.06), S(0x1a1008, { roughness: 1 }), 0, 2.43, 0.05, g, false); // coin slot
-  add(new THREE.BoxGeometry(0.12, 0.5, 0.12), MAT.gold, 0, 0.92, -0.1, g, false); // bracket to the post
+  add(new THREE.BoxGeometry(0.8, 0.28, 0.5), MAT.gold, 0, 1.04, 0, g);       // the plinth it stands on (down to the ground)
   const drawFront = (c, w = 256, h = 320) => {
     c.clearRect(0, 0, w, h); c.fillStyle = "#8e1f17"; c.fillRect(0, 0, w, h);
     c.strokeStyle = "#e8b84a"; c.lineWidth = 10; c.strokeRect(10, 10, w - 20, h - 20);
@@ -1570,10 +1572,10 @@ const DONATE = { x: 7, z: 37.04, scale: 1.3 };
   };
   const tex = canvasTexture(256, 320, drawFront);
   signDraws.push(() => { drawFront(tex.image.getContext("2d")); tex.needsUpdate = true; }); // redrawn once the Thai fonts are in
-  const front = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 1.0), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.7, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.35 }));
+  const front = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 1.0), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.7, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.5 }));
   front.position.set(0, 1.75, 0.305); g.add(front);
   colliders.push({ x: DONATE.x, z: DONATE.z, r: 0.6 * DONATE.scale });
-  sign(txo(CONTENT.signs.donation_box.title), txo(CONTENT.signs.donation_box.sub), "🪷", DONATE.x, 2.45 * DONATE.scale + 1.25, DONATE.z + 0.4, 2.4);
+  sign(txo(CONTENT.signs.donation_box.title), txo(CONTENT.signs.donation_box.sub), "🪷", DONATE.x, 2.45 * DONATE.scale + DONATE.lift + 1.95, DONATE.z + 0.4, 4.4); // as big as the gate's signs
 }
 
 /* ---------------- the alms round (ตักบาตร) on the road outside the gate ---------------- */
@@ -6192,7 +6194,7 @@ function kidStep(dt) {
   for (const p of PLACES) { const d = Math.hypot(player.x - p.pos[0], player.z - p.pos[1]); if (d < p.r && d < bestD) { best = p; bestD = d; } }
   for (const s of journeyStones) { const d = Math.hypot(player.x - s.x, player.z - s.z); if (d < 2.6 && d < bestD) { best = { ...PLACES.find((p) => p.id === "journey"), stone: s.i }; bestD = d; } }
   if (Math.hypot(player.x - BELL[0], player.z - BELL[1]) < 4.4 && 3 < bestD) { best = BELL_PLACE; bestD = 3; } // reachable from the road
-  { const d = Math.hypot(player.x - DONATE.x, player.z - (DONATE.z + 0.6)); if (d < 2.4 && d < bestD) { best = DONATE_PLACE; bestD = d; } } // only when standing at the box
+  { const d = Math.hypot(player.x - DONATE.x, player.z - (DONATE.z + 0.6 * DONATE.scale)); if (d < 2.6 && d < bestD) { best = DONATE_PLACE; bestD = d; } } // only when standing at the box
   { const m = monkHere(); if (m && m.d < bestD) { best = monkPlace(m.h, m.s); bestD = m.d; } }
   { const c = infoNear(); if (c && c.d + 1 < bestD) { const T = INFO_TEXT[c.id]; best = { id: "info", icon: "ℹ️", th: T.t[0], en: T.t[1], sub: ["เรื่องน่ารู้", "Good to know"], info: c.id, key: c.id }; bestD = c.d + 1; } } // (anything else here comes first)
   if (onBridge(player.x, player.z) && feed.t < 0 && kraap.t < 0 && 2.5 < bestD) { best = fest.now === "loykrathong" ? { id: "bridge", icon: "🪷", th: "ลอยกระทง", en: "Loy Krathong", sub: ["ลอยกระทง · ให้อาหารปลา", "Float a krathong · feed the fish"] } : FISH_PLACE; bestD = 2.5; }
