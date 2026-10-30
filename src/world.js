@@ -1555,6 +1555,15 @@ const BRONZE = S(0x8a6a35, { metalness: 0.75, roughness: 0.35 });
 // Extra-large (Arnon, 30 Oct 2026: a focal point you spot from a distance): twice the first size, lowered by `lift`
 // onto a gold plinth in front of the post so the coin slot stays within reach.
 const DONATE = { x: 7, z: 37.2, scale: 2, lift: -1.8 };
+// small animations of the box and its path, run every frame by frame(); one that returns true is done and dropped
+const glowAnims = [];
+// a soft round glow (drawn with additive blending: a real light would cost too much on phones)
+let glowTex = null;
+const glowTexture = () => glowTex || (glowTex = canvasTexture(128, 128, (c) => {
+  const gr = c.createRadialGradient(64, 64, 0, 64, 64, 64);
+  gr.addColorStop(0, "rgba(255,236,190,1)"); gr.addColorStop(0.35, "rgba(255,196,106,.55)"); gr.addColorStop(1, "rgba(255,170,60,0)");
+  c.fillStyle = gr; c.fillRect(0, 0, 128, 128);
+}));
 {
   const g = new THREE.Group(); g.position.set(DONATE.x, DONATE.lift, DONATE.z); g.scale.setScalar(DONATE.scale); scene.add(g);
   add(new THREE.BoxGeometry(0.95, 1.15, 0.6), S(0xf3ead6, { roughness: 0.4 }), 0, 1.75, 0, g);
@@ -1576,6 +1585,46 @@ const DONATE = { x: 7, z: 37.2, scale: 2, lift: -1.8 };
   front.position.set(0, 1.75, 0.305); g.add(front);
   colliders.push({ x: DONATE.x, z: DONATE.z, r: 0.6 * DONATE.scale });
   sign(txo(CONTENT.signs.donation_box.title), txo(CONTENT.signs.donation_box.sub), "🪷", DONATE.x, 2.45 * DONATE.scale + DONATE.lift + 1.95, DONATE.z + 0.4, 4.4); // as big as the gate's signs
+  // a soft warm glow round the box, gently breathing (steady with calm motion); normal blending, as an additive
+  // glow all but vanishes against the bright daytime scene
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: 0xffc46a, transparent: true, opacity: 0.7, depthWrite: false, toneMapped: false }));
+  halo.scale.set(6.4, 6.4, 1); halo.position.set(DONATE.x, 1.75 * DONATE.scale + DONATE.lift, DONATE.z - 0.35); scene.add(halo);
+  // a lotus turning slowly on the lid, behind the coin slot
+  const spin = new THREE.Group(); spin.position.set(0, 2.42, -0.17); g.add(spin);
+  loadProp("lotus").then((src) => { if (src) spin.add(fitTo(src.clone(), 0.4)); });
+  glowAnims.push((dt, t) => {
+    spin.rotation.y += dt * (settings.calmMotion ? 0.12 : 0.35);
+    halo.material.opacity = settings.calmMotion ? 0.7 : 0.7 + Math.sin(t * 1.3) * 0.15;
+  });
+}
+// Once, when the page has loaded: a trail of warm lights along the ground from where you arrive, down the road
+// (clear of the alms row) to the front of the donation box; it lights up toward the box, stays a few seconds and
+// fades away. Only on arriving at the gate, not when coming back to some other spot. With calm motion it just
+// fades in and out, all at once.
+function showDonationPath() {
+  if (Math.hypot(player.x, player.z - 93) > 8) return;
+  const route = [[-1.2, 89], [-1.2, 42.5], [2.4, 40.4], [DONATE.x - 1.3, 38.9]], dots = [];
+  for (let k = 1; k < route.length; k++) {
+    const [x0, z0] = route[k - 1], [x1, z1] = route[k], L = Math.hypot(x1 - x0, z1 - z0);
+    for (let u = k === 1 ? 0 : 1.1; u <= L; u += 1.1) { const x = x0 + (x1 - x0) * u / L, z = z0 + (z1 - z0) * u / L; dots.push([x, groundAt(x, z) + 0.08, z]); }
+  }
+  const geo = new THREE.CircleGeometry(0.5, 20).rotateX(-Math.PI / 2);
+  // bright enough to read on pale paving in full daylight: not dimmed by the tone mapping
+  const mat = new THREE.MeshBasicMaterial({ map: glowTexture(), color: 0xffc04d, transparent: true, opacity: 0, depthWrite: false, toneMapped: false });
+  const im = new THREE.InstancedMesh(geo, mat, dots.length); im.frustumCulled = false; im.renderOrder = 3; scene.add(im);
+  const calm = settings.calmMotion, SWEEP = calm ? 0 : 3.2, HOLD = 5, FADE = 2, o = new THREE.Object3D();
+  let t = 0;
+  glowAnims.push((dt) => {
+    t += dt;
+    dots.forEach(([x, y, z], i) => {
+      const k = SWEEP ? Math.min(1, Math.max(0, (t - (i / dots.length) * SWEEP) / 0.35)) : 1; // each dot lights up in turn
+      o.position.set(x, y, z); o.scale.setScalar(k * (calm ? 1 : 1 + 0.15 * Math.sin(t * 4 - i * 0.45))); o.updateMatrix(); im.setMatrixAt(i, o.matrix);
+    });
+    im.instanceMatrix.needsUpdate = true;
+    const end = SWEEP + HOLD;
+    mat.opacity = t > end ? Math.max(0, 1 - (t - end) / FADE) : calm ? Math.min(1, t) : 1;
+    if (t > end + FADE) { scene.remove(im); im.dispose(); geo.dispose(); mat.dispose(); return true; }
+  });
 }
 
 /* ---------------- the alms round (ตักบาตร) on the road outside the gate ---------------- */
@@ -6037,6 +6086,7 @@ function frame(dt) {
 
   // running water (slower with calm motion on)
   { const wdt = dt * (settings.calmMotion ? 0.35 : 1); waterClock += wdt; waterAnims.forEach((f) => f(wdt, waterClock)); }
+  { const t = performance.now() / 1000; for (let i = glowAnims.length - 1; i >= 0; i--) if (glowAnims[i](dt, t)) glowAnims.splice(i, 1); } // the donation box's glow, lotus and path
   // candle flames sway a little (not in calm motion)
   if (!settings.calmMotion) { const t = performance.now() / 1000; flames.forEach((f, i) => { f.scale.y = 1.8 + Math.sin(t * 7 + i * 1.7) * 0.18; }); }
   if (dog.model) dog.model.position.y = Math.abs(Math.sin(dogAnim.phase.value)) * 0.035 * dogAnim.walk.value; // a light bounce in step
@@ -6231,5 +6281,6 @@ if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, two: () => ({ P1,
 Promise.race([Promise.all(propJobs), new Promise((r) => setTimeout(r, 7000))]).then(() => {
   $("loading").hidden = true;
   canvas.focus();
+  setTimeout(showDonationPath, 1200); // once the opening view has settled
 });
 requestAnimationFrame(tick);
