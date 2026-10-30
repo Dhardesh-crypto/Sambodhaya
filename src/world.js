@@ -1557,6 +1557,8 @@ const BRONZE = S(0x8a6a35, { metalness: 0.75, roughness: 0.35 });
 const DONATE = { x: 7, z: 37.2, scale: 2, lift: -1.8 };
 // small animations of the box and its path, run every frame by frame(); one that returns true is done and dropped
 const glowAnims = [];
+// the box lights up for a few seconds when the guiding path reaches it: showDonationPath sets t to len
+const boxFlare = { t: 0, len: 3.5 };
 // a soft round glow (drawn with additive blending: a real light would cost too much on phones)
 let glowTex = null;
 const glowTexture = () => glowTex || (glowTex = canvasTexture(128, 128, (c) => {
@@ -1594,7 +1596,11 @@ const glowTexture = () => glowTex || (glowTex = canvasTexture(128, 128, (c) => {
   loadProp("lotus").then((src) => { if (src) spin.add(fitTo(src.clone(), 0.4)); });
   glowAnims.push((dt, t) => {
     spin.rotation.y += dt * (settings.calmMotion ? 0.12 : 0.35);
-    halo.material.opacity = settings.calmMotion ? 0.7 : 0.7 + Math.sin(t * 1.3) * 0.15;
+    if (boxFlare.t > 0) boxFlare.t = Math.max(0, boxFlare.t - dt);
+    const f = boxFlare.t > 0 ? Math.sin(Math.PI * (1 - boxFlare.t / boxFlare.len)) : 0; // rises and falls once
+    halo.material.opacity = Math.min(1, (settings.calmMotion ? 0.7 : 0.7 + Math.sin(t * 1.3) * 0.15) + f * 0.3);
+    halo.scale.setScalar(6.4 * (1 + f * 0.35));
+    front.material.emissiveIntensity = 0.5 + f * 1.1;
   });
 }
 // Once, when the page has loaded: a trail of warm lights along the ground from where you arrive, down the road
@@ -1613,9 +1619,10 @@ function showDonationPath() {
   const mat = new THREE.MeshBasicMaterial({ map: glowTexture(), color: 0xffc04d, transparent: true, opacity: 0, depthWrite: false, toneMapped: false });
   const im = new THREE.InstancedMesh(geo, mat, dots.length); im.frustumCulled = false; im.renderOrder = 3; scene.add(im);
   const calm = settings.calmMotion, SWEEP = calm ? 0 : 3.2, HOLD = 5, FADE = 2, o = new THREE.Object3D();
-  let t = 0;
+  let t = 0, reached = false;
   glowAnims.push((dt) => {
     t += dt;
+    if (!reached && t >= SWEEP + 0.35) { reached = true; boxFlare.t = boxFlare.len; } // the last light is on: the box answers
     dots.forEach(([x, y, z], i) => {
       const k = SWEEP ? Math.min(1, Math.max(0, (t - (i / dots.length) * SWEEP) / 0.35)) : 1; // each dot lights up in turn
       o.position.set(x, y, z); o.scale.setScalar(k * (calm ? 1 : 1 + 0.15 * Math.sin(t * 4 - i * 0.45))); o.updateMatrix(); im.setMatrixAt(i, o.matrix);
