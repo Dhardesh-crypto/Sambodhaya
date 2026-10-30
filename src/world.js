@@ -463,6 +463,9 @@ const signMats = [];
 function sign(title, sub, icon, x, y, z, w = 6) {
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: signTexture(title, sub, icon), depthWrite: false }));
   signMats.push(s.material); // dimmed at night
+  // drawn after everything see-through (water, waterfall spray, glows use draw orders up to 5): a label doesn't write
+  // depth, so anything drawn after it would show through it however far behind; solid things still hide it
+  s.renderOrder = 10;
   s.scale.set(w, w * 220 / 512, 1); s.position.set(x, y, z); scene.add(s); return s;
 }
 
