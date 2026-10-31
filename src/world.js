@@ -329,8 +329,9 @@ const WALL_SHUTTER = new THREE.MeshStandardMaterial({ map: shutterTex, roughness
 const MOAT = { r1: 79, r2: 86, bed: -1.5, water: -0.45 };
 const BRIDGE = { zc: (MOAT.r1 + MOAT.r2) / 2, half: (MOAT.r2 - MOAT.r1) / 2 + 2 }; // lands 2 m onto each bank
 {
-  // inner island; its texture coordinates are scaled to match the outer land
-  const island = new THREE.CylinderGeometry(MOAT.r1, MOAT.r1, 2, 128);
+  // inner island; its texture coordinates are scaled to match the outer land. Its side stands 5 cm inside the moat's
+  // inner bank: at the same radius the two fought over which is in front (a blocky grass-and-rock flicker on the bank)
+  const island = new THREE.CylinderGeometry(MOAT.r1 - 0.05, MOAT.r1 - 0.05, 2, 128);
   const uv = island.attributes.uv, k = MOAT.r1 / 120;
   for (let i = 0; i < uv.count; i++) uv.setXY(i, 0.5 + (uv.getX(i) - 0.5) * k, 0.5 + (uv.getY(i) - 0.5) * k);
   add(island, MAT.grass, 0, -1, 0, scene, false);
