@@ -1316,22 +1316,68 @@ function spire(h, k = 0.85) {
 }
 
 /* ---------------- running water: a waterfall that flows, foams and splashes ---------------- */
-// Streaks scroll down a curved sheet of water (two layers at different speeds for depth); where it
-// lands, foam turns, rings spread across the pool, droplets splash up and a soft mist hangs.
-// Calm motion slows all of it down rather than stopping it.
+// A curved sheet of water drawn by a small shader inside the standard lit material (so the sun, night, fog and
+// tone mapping treat it like everything else): streaks that stretch and speed up as the water falls, white water
+// low down and at the thin edges, a glassy roll over the lip and a fine moving sparkle. Where it lands, foam turns,
+// rings spread across the pool, droplets splash up and mist billows out and fades. Calm motion slows all of it
+// down rather than stopping it.
 const waterAnims = [];
 function canvasTexture(w, h, draw) {
   const c = document.createElement("canvas"); c.width = w; c.height = h; draw(c.getContext("2d"), w, h);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; return t;
 }
-const streakTex = () => canvasTexture(128, 512, (g, w, h) => {
-  g.fillStyle = "rgba(190,230,240,0.35)"; g.fillRect(0, 0, w, h);
-  for (let i = 0; i < 260; i++) {
-    const x = Math.random() * w, y = Math.random() * h, len = 30 + Math.random() * 160, a = 0.15 + Math.random() * 0.6, wd = 1 + Math.random() * 3;
-    const gr = g.createLinearGradient(0, y, 0, y + len); gr.addColorStop(0, "rgba(255,255,255,0)"); gr.addColorStop(0.5, `rgba(255,255,255,${a})`); gr.addColorStop(1, "rgba(255,255,255,0)");
-    g.fillStyle = gr; g.fillRect(x, y, wd, len); if (y + len > h) g.fillRect(x, y - h, wd, len); // wrap so it tiles
-  }
-});
+// the falling water's look, from its uv (x across, y = 1 at the lip, 0 at the pool) and the water clock
+const FALL_GLSL = `
+float wHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float wNoise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(wHash(i), wHash(i + vec2(1.0, 0.0)), f.x), mix(wHash(i + vec2(0.0, 1.0)), wHash(i + vec2(1.0, 1.0)), f.x), f.y); }
+float fallWhite = 0.0;
+vec4 fallWater(vec2 uv, float t) {
+  float fall = 1.0 - uv.y;                       // 0 at the lip, 1 at the pool
+  float side = min(uv.x, 1.0 - uv.x);            // 0 at either edge
+  float v = sqrt(fall) * 4.0 - t * 1.1;          // water speeds up as it falls, so the streaks stretch toward the bottom
+  float s1 = wNoise(vec2(uv.x * 26.0, v * 1.6));
+  float s2 = wNoise(vec2(uv.x * 61.0 + 7.0, v * 3.3 - t * 0.6));
+  float s3 = wNoise(vec2(uv.x * 140.0 + 3.0, v * 7.0 - t * 1.5));
+  float streak = smoothstep(0.42, 0.95, s1 * 0.5 + s2 * 0.35 + s3 * 0.15);
+  float aerated = smoothstep(0.15, 1.0, fall) * 0.55 + (1.0 - smoothstep(0.0, 0.14, side)) * 0.45; // white water low down and at the thin edges
+  float lip = (1.0 - smoothstep(0.0, 0.07, fall)) * 0.5;                                          // the glassy roll over the lip
+  float sparkle = pow(wNoise(vec2(uv.x * 220.0, v * 14.0 - t * 2.0)), 14.0) * 1.5;
+  fallWhite = clamp(streak * 0.85 + aerated * 0.6 + sparkle, 0.0, 1.0);
+  vec3 col = mix(vec3(0.16, 0.42, 0.48), vec3(0.93, 0.98, 1.0), fallWhite) + lip * vec3(0.25, 0.3, 0.3);
+  float a = (0.5 + 0.5 * fallWhite) * smoothstep(0.0, 0.035, side) * (1.0 - smoothstep(0.97, 1.0, fall) * 0.4);
+  return vec4(col, a);
+}`;
+// mist: puffs rising from the landing, drifting out, growing and fading; all worked out on the GPU (one draw call)
+const MIST_VERT = `
+attribute float aSeed; attribute float aSide;
+uniform float uTime; uniform vec3 uOrigin; uniform float uWidth; uniform float uPx;
+varying float vAlpha; varying float vSeed;
+#include <fog_pars_vertex>
+void main() {
+  float life = fract(uTime * 0.11 + aSeed);
+  vec3 p = uOrigin + vec3(aSide * uWidth * 0.5 * (1.0 + life * 0.7) + sin(uTime * 0.7 + aSeed * 20.0) * 0.3,
+                          0.15 + life * 2.4 + sin(uTime * 0.9 + aSeed * 9.0) * 0.15,
+                          0.2 + life * 2.4);
+  vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
+  gl_Position = projectionMatrix * mvPosition;
+  gl_PointSize = (1.2 + life * 2.4) * uPx / -mvPosition.z;
+  vAlpha = smoothstep(0.0, 0.18, life) * (1.0 - smoothstep(0.4, 1.0, life)); vSeed = aSeed;
+  #include <fog_vertex>
+}`;
+const MIST_FRAG = `
+uniform float uOpacity; uniform vec3 uColor;
+varying float vAlpha; varying float vSeed;
+#include <fog_pars_fragment>
+void main() {
+  vec2 q = gl_PointCoord - 0.5; float d = length(q) * 2.0;
+  float puff = (1.0 - smoothstep(0.2, 1.0, d)) * (0.75 + 0.25 * sin(q.x * 9.0 + vSeed * 30.0) * sin(q.y * 7.0 + vSeed * 17.0));
+  gl_FragColor = vec4(uColor, puff * vAlpha * uOpacity);
+  if (gl_FragColor.a < 0.004) discard;
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+  #include <fog_fragment>
+}`;
 const foamTex = () => canvasTexture(256, 256, (g, w, h) => {
   for (let i = 0; i < 380; i++) {
     const a = Math.random() * Math.PI * 2, r = Math.pow(Math.random(), 0.7) * w * 0.48, x = w / 2 + Math.cos(a) * r, y = h / 2 + Math.sin(a) * r;
@@ -1344,17 +1390,22 @@ const softTex = canvasTexture(64, 64, (g, w) => { const gr = g.createRadialGradi
 function waterfall(x, zTop, yTop, yPool, width) {
   const drop = yTop - yPool, landZ = zTop + 0.85;
   // the falling sheet: leaves the lip, curves outward a little, then drops straight
-  const sheet = (offset, tex, opacity, color) => {
-    const geo = new THREE.PlaneGeometry(width, drop, 6, 24), pos = geo.attributes.position;
-    for (let i = 0; i < pos.count; i++) { const t = (pos.getY(i) + drop / 2) / drop; pos.setZ(i, 0.85 * Math.pow(1 - t, 0.6) + offset); pos.setX(i, pos.getX(i) * (1 - (1 - t) * 0.06)); }
-    geo.computeVertexNormals();
-    const mat = new THREE.MeshStandardMaterial({ color, map: tex || null, transparent: true, opacity, roughness: 0.12, metalness: 0, emissive: 0x2c5560, emissiveIntensity: 0.35, depthWrite: false, side: THREE.DoubleSide });
-    const m = new THREE.Mesh(geo, mat); m.position.set(x, yPool + drop / 2, zTop); m.renderOrder = 2; scene.add(m); return m;
+  const geo = new THREE.PlaneGeometry(width, drop, 12, 32), pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) { const t = (pos.getY(i) + drop / 2) / drop; pos.setZ(i, 0.85 * Math.pow(1 - t, 0.6)); pos.setX(i, pos.getX(i) * (1 - (1 - t) * 0.06)); }
+  geo.computeVertexNormals();
+  const uTime = { value: 0 };
+  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, roughness: 0.15, metalness: 0, emissive: 0x2c5560, emissiveIntensity: 0.35, depthWrite: false, side: THREE.DoubleSide });
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uTime = uTime;
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying vec2 vFallUv;").replace("#include <uv_vertex>", "#include <uv_vertex>\nvFallUv = uv;");
+    sh.fragmentShader = sh.fragmentShader
+      .replace("#include <common>", "#include <common>\nvarying vec2 vFallUv;\nuniform float uTime;\n" + FALL_GLSL)
+      .replace("#include <map_fragment>", "#include <map_fragment>\n{ vec4 w = fallWater(vFallUv, uTime); diffuseColor.rgb *= w.rgb; diffuseColor.a *= w.a; }")
+      .replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(0.16, 0.19, 0.2) * fallWhite;"); // white water reads bright even in shade
   };
-  sheet(-0.04, null, 0.55, 0x4f9fb0);                            // the body of the water
-  const a = streakTex(); a.repeat.set(2, 1.2); sheet(0, a, 0.9, 0xe6f7fb);
-  waterAnims.push((dt) => { a.offset.y += dt * 1.6; });
-  if (HIGH) { const b = streakTex(); b.repeat.set(3, 2); sheet(0.05, b, 0.6, 0xffffff); waterAnims.push((dt) => { b.offset.y += dt * 2.3; }); }
+  mat.customProgramCacheKey = () => "waterfall-sheet";
+  const sheetMesh = new THREE.Mesh(geo, mat); sheetMesh.position.set(x, yPool + drop / 2, zTop); sheetMesh.renderOrder = 2; scene.add(sheetMesh);
+  waterAnims.push((dt, t) => { uTime.value = t; });
   // foam where it lands: two layers turning opposite ways, gently breathing
   [[1, 0.9, 0.35], [-1, 0.7, 0.5]].forEach(([dir, op, spd], k) => {
     const f = new THREE.Mesh(new THREE.CircleGeometry(width * 0.62, 32), new THREE.MeshBasicMaterial({ map: foamTex(), transparent: true, opacity: op, depthWrite: false }));
@@ -1382,12 +1433,21 @@ function waterfall(x, zTop, yTop, yPool, width) {
     }
     dg.attributes.position.needsUpdate = true;
   });
-  // a soft mist at the foot of the fall
-  for (let i = 0; i < 4; i++) {
-    const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: softTex, color: 0xffffff, transparent: true, opacity: 0.18, depthWrite: false }));
-    m.scale.set(3, 2, 1); m.position.set(x + (i - 1.5) * 1.3, yPool + 0.9, landZ + 0.6); m.renderOrder = 5; scene.add(m);
-    waterAnims.push((dt, t) => { m.position.y = yPool + 0.9 + Math.sin(t * 0.6 + i) * 0.25; m.material.opacity = 0.14 + Math.sin(t * 0.8 + i * 2) * 0.05; });
-  }
+  // mist billowing out from the foot of the fall, dimmer at night
+  const M = HIGH ? 36 : 14, mg = new THREE.BufferGeometry(), seeds = new Float32Array(M), sides = new Float32Array(M);
+  for (let i = 0; i < M; i++) { seeds[i] = i / M; sides[i] = Math.random() * 2 - 1; }
+  mg.setAttribute("position", new THREE.BufferAttribute(new Float32Array(M * 3), 3)); // (the vertex shader places them)
+  mg.setAttribute("aSeed", new THREE.BufferAttribute(seeds, 1)); mg.setAttribute("aSide", new THREE.BufferAttribute(sides, 1));
+  const mistMat = new THREE.ShaderMaterial({
+    uniforms: { ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog), uTime: { value: 0 }, uOrigin: { value: new THREE.Vector3(x, yPool, landZ) }, uWidth: { value: width },
+      uPx: { value: 400 }, uOpacity: { value: 0.5 }, uColor: { value: new THREE.Color(1, 1, 1) } },
+    vertexShader: MIST_VERT, fragmentShader: MIST_FRAG, transparent: true, depthWrite: false, fog: true,
+  });
+  const mist = new THREE.Points(mg, mistMat); mist.frustumCulled = false; mist.renderOrder = 5; scene.add(mist);
+  waterAnims.push((dt, t) => {
+    mistMat.uniforms.uTime.value = t; mistMat.uniforms.uPx.value = renderer.domElement.height * 0.5;
+    const light = 0.22 + 0.78 * night.d; mistMat.uniforms.uColor.value.setRGB(light, light, light * 1.02);
+  });
 }
 
 const BIG_BUDDHA_H = 21, BIG_BUDDHA_TURN = -Math.PI / 2; // the great white Buddha above the waterfall: its height; turns it to face the temple
