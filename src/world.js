@@ -126,6 +126,42 @@ const MAT = {
   leaf: M(0x5f9e4a), leafLight: M(0x7db85a), trunk: M(0x7a5536), water: new THREE.MeshStandardMaterial({ color: 0x2f7f8a, roughness: 0.06, metalness: 0.15, transparent: true, opacity: 0.88 }),
   lotus: M(0xf28fb0), pad: M(0x4d8f45), glow: M(0xffd27a, { emissive: 0xffb84a, emissiveIntensity: 0.9 }), mountain: M(0x9fb0b8), mountainFar: M(0xbcc8cc),
 };
+// Still water (the moat, the ponds, the waterfall's pool): the flat surface is given moving ripples, a few small
+// waves summed, so the sky's reflection and the sun's glints shimmer and drift; it is clearer looking straight down
+// (the fish show) and turns reflective toward the horizon; faint darker patches break up the colour. Cheap: no
+// reflection render, just the lit material's own reflections on the rippled normal. waterTime is the water clock
+// (slowed by calm motion), set every frame.
+const waterTime = { value: 0 };
+const STILL_WATER_GLSL = `
+uniform float uWaterTime; varying vec3 vWaterPos; varying float vWaterUp;
+float swHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float swNoise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(swHash(i), swHash(i + vec2(1.0, 0.0)), f.x), mix(swHash(i + vec2(0.0, 1.0)), swHash(i + vec2(1.0, 1.0)), f.x), f.y); }
+#define SW_WAVE(dx, dz, k, w, a) { vec2 d = normalize(vec2(dx, dz)); g += d * (a * k * cos(dot(d, p) * k + t * w)); }
+vec2 waterGrad(vec2 p, float t) { vec2 g = vec2(0.0);   // the slope of a few small waves, each (direction, wavenumber, speed, height)
+  SW_WAVE(1.0, 0.3, 2.6, 1.7, 0.012) SW_WAVE(-0.4, 1.0, 3.7, 2.1, 0.009) SW_WAVE(0.7, -0.8, 5.9, 2.9, 0.005)
+  SW_WAVE(-1.0, -0.2, 8.3, 3.6, 0.003) SW_WAVE(0.2, 1.0, 12.1, 4.4, 0.0018) SW_WAVE(-0.6, -0.9, 17.3, 5.3, 0.001)
+  return g * (0.7 + 0.6 * swNoise(p * 0.12 + t * 0.03)); }  // calmer and livelier stretches drift across
+`;
+function stillWater(mat) {
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uWaterTime = waterTime;
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying vec3 vWaterPos; varying float vWaterUp;")
+      .replace("#include <project_vertex>", "#include <project_vertex>\nvWaterPos = (modelMatrix * vec4(transformed, 1.0)).xyz; vWaterUp = normalize((modelMatrix * vec4(objectNormal, 0.0)).xyz).y;");
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\n" + STILL_WATER_GLSL)
+      .replace("#include <map_fragment>", "#include <map_fragment>\ndiffuseColor.rgb *= 0.86 + 0.24 * swNoise(vWaterPos.xz * 0.18);")
+      .replace("#include <normal_fragment_maps>", `#include <normal_fragment_maps>
+      { float up = clamp(vWaterUp, 0.0, 1.0);   // only the top face ripples
+        vec2 gr = waterGrad(vWaterPos.xz, uWaterTime) * 1.6;
+        vec3 nV = normalize((viewMatrix * vec4(normalize(vec3(-gr.x, 1.0, -gr.y)), 0.0)).xyz);
+        normal = normalize(mix(normal, nV, up));
+        float fres = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.0);
+        diffuseColor.a = mix(diffuseColor.a, 0.97, fres * 0.7 * up); }`);
+  };
+  mat.customProgramCacheKey = () => "still-water";
+  return mat;
+}
+stillWater(MAT.water);
 const add = (geo, mat, x, y, z, parent = scene, cast = true) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = cast; m.receiveShadow = true; parent.add(m); return m; };
 const colliders = []; // circles {x, z, r}
 const blockers = [];  // rotated boxes {x, z, c, s, hx, hz}
@@ -305,7 +341,7 @@ const BRIDGE = { zc: (MOAT.r1 + MOAT.r2) / 2, half: (MOAT.r2 - MOAT.r1) / 2 + 2 
   [MOAT.r1, MOAT.r2].forEach((r) => { const b = add(new THREE.CylinderGeometry(r, r, bankH, 128, 1, true), P("mossy_rock", 40, 0.6), 0, MOAT.bed / 2, 0, scene, false); b.material.side = THREE.DoubleSide; });
   const bed = new THREE.Mesh(new THREE.RingGeometry(MOAT.r1, MOAT.r2, 128, 1), S(0x3d4a35, { roughness: 1 }));
   bed.rotation.x = -Math.PI / 2; bed.position.y = MOAT.bed; scene.add(bed);
-  const water = new THREE.Mesh(new THREE.RingGeometry(MOAT.r1, MOAT.r2, 128, 1), MAT.water.clone()); // clearer than the ponds: the fish show beneath it
+  const water = new THREE.Mesh(new THREE.RingGeometry(MOAT.r1, MOAT.r2, 128, 1), stillWater(MAT.water.clone())); // clearer than the ponds: the fish show beneath it
   water.material.opacity = 0.58; water.renderOrder = 2;
   water.rotation.x = -Math.PI / 2; water.position.y = MOAT.water; scene.add(water);
   // a few lotus pads drifting in the moat
@@ -6191,7 +6227,7 @@ function frame(dt) {
   camera.lookAt(head);
 
   // running water (slower with calm motion on)
-  { const wdt = dt * (settings.calmMotion ? 0.35 : 1); waterClock += wdt; waterAnims.forEach((f) => f(wdt, waterClock)); }
+  { const wdt = dt * (settings.calmMotion ? 0.35 : 1); waterClock += wdt; waterTime.value = waterClock; waterAnims.forEach((f) => f(wdt, waterClock)); }
   { const t = performance.now() / 1000; for (let i = glowAnims.length - 1; i >= 0; i--) if (glowAnims[i](dt, t)) glowAnims.splice(i, 1); } // the donation box's glow, lotus and path
   // candle flames sway a little (not in calm motion)
   if (!settings.calmMotion) { const t = performance.now() / 1000; flames.forEach((f, i) => { f.scale.y = 1.8 + Math.sin(t * 7 + i * 1.7) * 0.18; }); }
