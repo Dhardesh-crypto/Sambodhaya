@@ -199,10 +199,15 @@ const propJobs = [];
 // Three or more copies are drawn as one InstancedMesh per 45 m patch of ground: one draw call (and one shadow
 // draw) for the patch instead of one per copy, while patches out of view are still skipped. In light mode only
 // things 2 m or taller cast a shadow.
-const PROP_CELL = 45;
+// Leafy models in FAR_MODELS also have a far version (assets/models/<name>-far.glb, about a fifth of the triangles,
+// made by .dev/tools/lod.mjs with the same nodes as the original): a patch more than LOD_FAR metres from the camera
+// shows that one instead (frame() checks the patches in lodCells).
+const PROP_CELL = 45, LOD_FAR = 30, lodCells = [];
+const FAR_MODELS = new Set(["ixora", "goldenshower", "raintree", "frangipani", "bougainvillea", "bonsai", "rockery", "rocks", "palm"]);
 function props(name, h, list, { fallback, shadow = HIGH || h >= 2, parent = scene, extra = false } = {}) {
   if (extra && !HIGH) return Promise.resolve(); // purely decorative: skipped in light mode
-  const job = loadProp(name).then((src) => {
+  const withFar = FAR_MODELS.has(name) && list.length >= 3;
+  const job = Promise.all([loadProp(name), withFar ? loadProp(name + "-far") : null]).then(([src, farSrc]) => {
     if (!src) { if (fallback) fallback(); return; }
     // work on a copy: the same model may be placed again elsewhere at another size
     const copy = src.clone();
@@ -211,14 +216,29 @@ function props(name, h, list, { fallback, shadow = HIGH || h >= 2, parent = scen
     if (list.length < 3) { list.forEach(([x, z, r = 0, y = 0]) => { const c = base.clone(); c.position.set(x, y, z); c.rotation.y = r; parent.add(c); }); return; }
     base.updateMatrixWorld(true); // each mesh's place within one copy
     const meshes = []; base.traverse((o) => { if (o.isMesh) meshes.push(o); });
+    // the far version, placed exactly like the near one: same root scale and position, its own inner nodes
+    const farMeshes = [];
+    if (farSrc) {
+      const f = farSrc.clone(); f.scale.copy(copy.scale); f.position.copy(copy.position);
+      f.traverse((o) => { if (o.isMesh) { o.castShadow = shadow; o.receiveShadow = true; if (o.material) o.material.envMapIntensity = 1; farMeshes.push(o); } });
+      const fb = new THREE.Group(); fb.add(f); fb.updateMatrixWorld(true);
+    }
     const cells = new Map();
     list.forEach((p) => { const k = Math.floor(p[0] / PROP_CELL) + "," + Math.floor(p[1] / PROP_CELL); if (!cells.has(k)) cells.set(k, []); cells.get(k).push(p); });
     const at = new THREE.Object3D(), m = new THREE.Matrix4();
-    cells.forEach((group) => meshes.forEach((mesh) => {
+    const instanced = (mesh, group) => {
       const im = new THREE.InstancedMesh(mesh.geometry, mesh.material, group.length);
       group.forEach(([x, z, r = 0, y = 0], i) => { at.position.set(x, y, z); at.rotation.set(0, r, 0); at.updateMatrix(); im.setMatrixAt(i, m.multiplyMatrices(at.matrix, mesh.matrixWorld)); });
-      im.castShadow = shadow; im.receiveShadow = true; im.computeBoundingSphere(); parent.add(im);
-    }));
+      im.castShadow = shadow; im.receiveShadow = true; im.computeBoundingSphere(); parent.add(im); return im;
+    };
+    cells.forEach((group) => {
+      const near = meshes.map((mesh) => instanced(mesh, group));
+      if (!farMeshes.length) return;
+      const far = farMeshes.map((mesh) => instanced(mesh, group)); far.forEach((im) => (im.visible = false));
+      const cx = group.reduce((a, p) => a + p[0], 0) / group.length, cz = group.reduce((a, p) => a + p[1], 0) / group.length;
+      const r = Math.max(...group.map((p) => Math.hypot(p[0] - cx, p[1] - cz))) + h; // the patch, as a circle on the ground
+      lodCells.push({ x: cx, z: cz, r, near, far, isFar: false });
+    });
   });
   propJobs.push(job); return job;
 }
@@ -6229,6 +6249,10 @@ function frame(dt) {
 
   // running water (slower with calm motion on)
   { const wdt = dt * (settings.calmMotion ? 0.35 : 1); waterClock += wdt; waterTime.value = waterClock; waterAnims.forEach((f) => f(wdt, waterClock)); }
+  for (const c of lodCells) { // leafy patches far from the camera show their far version
+    const isFar = Math.hypot(camera.position.x - c.x, camera.position.z - c.z) - c.r > LOD_FAR;
+    if (isFar !== c.isFar) { c.isFar = isFar; c.near.forEach((m) => (m.visible = !isFar)); c.far.forEach((m) => (m.visible = isFar)); }
+  }
   { const t = performance.now() / 1000; for (let i = glowAnims.length - 1; i >= 0; i--) if (glowAnims[i](dt, t)) glowAnims.splice(i, 1); } // the donation box's glow, lotus and path
   // candle flames sway a little (not in calm motion)
   if (!settings.calmMotion) { const t = performance.now() / 1000; flames.forEach((f, i) => { f.scale.y = 1.8 + Math.sin(t * 7 + i * 1.7) * 0.18; }); }
