@@ -1108,6 +1108,63 @@
               ]
             },
             {
+              "name": "community",
+              "label": "LINE OpenChat (gate page footer, support page, left gate post)",
+              "widget": "object",
+              "collapsed": true,
+              "fields": [
+                {
+                  "name": "title",
+                  "label": "Button / sign title",
+                  "widget": "object",
+                  "required": true,
+                  "collapsed": false,
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "widget": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "widget": "string",
+                      "required": true
+                    }
+                  ]
+                },
+                {
+                  "name": "sub",
+                  "label": "Subtitle",
+                  "widget": "object",
+                  "required": true,
+                  "collapsed": false,
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "widget": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "widget": "string",
+                      "required": true
+                    }
+                  ]
+                },
+                {
+                  "name": "url",
+                  "label": "LINE OpenChat link",
+                  "widget": "string",
+                  "required": true,
+                  "hint": "The invitation link from LINE, starting https://line.me/ (the part from ? on can be left off)"
+                }
+              ]
+            },
+            {
               "name": "garden_stones",
               "label": "Practice Garden: the four stones",
               "widget": "list",

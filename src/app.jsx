@@ -852,6 +852,24 @@ function Copy({ text }) {
   const [ok, setOk] = useState(false);
   return <button type="button" className="chip" onClick={() => { navigator.clipboard?.writeText(text).then(() => { setOk(true); setTimeout(() => setOk(false), 1500); }).catch(() => {}); }}>{ok ? "✓ " + t(UI("คัดลอกแล้ว", "Copied")) : "📋 " + t(UI("คัดลอก", "Copy"))}</button>;
 }
+// The LINE OpenChat community (for adults): opens LINE in a new tab. Its wording and link are in content/world/signs.json
+// ("community", editable in /admin) and the left gate post of the 3D temple uses the same.
+function CommunityLink({ button = false }) {
+  const { t } = useApp();
+  return <a className={button ? "btn line-btn" : "adult-link"} href={COMMUNITY.url} target="_blank" rel="noopener noreferrer">💬 {t(COMMUNITY.title)}{button ? "" : ` · ${t(COMMUNITY.sub)}`}</a>;
+}
+function CommunityBox() {
+  const { t } = useApp();
+  return (
+    <div className="community-box">
+      <h2>💬 {t(UI("ชุมชนออนไลน์ของวัด", "The temple's online community"))}</h2>
+      <p>{t(UI("พูดคุยกับผู้ใหญ่คนอื่น ๆ ที่สนใจวัดสัมโพธายะ รับข่าวงานบุญและความคืบหน้าการสร้างวัด ใน LINE OpenChat (เปิดในแอป LINE)", "Talk with other adults who care about Sambodhaya, and hear about merit-making days and the building work, in LINE OpenChat (opens in the LINE app)."))}</p>
+      <div className="row"><CommunityLink button /></div>
+      <p className="quiet">{t(COMMUNITY.sub)}</p>
+    </div>
+  );
+}
+
 function Support() {
   const { t, lang, go } = useApp();
   const S = SUPPORT;
@@ -884,6 +902,7 @@ function Support() {
         <p>{t(UI("สถานะ: รอตรวจสอบ ผู้ดูแลจะตรวจยอดกับบัญชีก่อน แล้วจึงขอบคุณตามที่คุณเลือกไว้", "Status: awaiting check. The caretakers verify the amount against the account first, then thank you the way you chose."))}</p>
         <div className="row"><button className="btn" onClick={() => go("gate")}>{t(UI("กลับประตูวัด", "Back to the temple gate"))}</button></div>
       </div>
+      <CommunityBox />
     </section>
   );
   return (
@@ -961,6 +980,7 @@ function Support() {
         <div className="row"><button type="submit" className="btn big" disabled={!valid}>{state === "sending" ? t(UI("กำลังส่ง…", "Sending…")) : t(UI("ส่งการแจ้งโอน", "Send transfer notice"))}</button></div>
         <p className="quiet">* {t(UI("จำเป็นต้องกรอก", "required"))}</p>
       </form>}
+      <CommunityBox />
     </section>
   );
 }
@@ -1021,7 +1041,7 @@ function App() {
         {V === "feedback" && <FeedbackPage />}
       </main>
       {V !== "feedback" && <FeedbackWidget />}
-      {V === "gate" ? <footer className="foot"><Wayfinding /><a className="adult-link" href="#support">🤲 {t(UI("สมทบทุนพัฒนาและสร้างวัด (สำหรับผู้ใหญ่)", "Support the temple's development (for adults)"))}</a></footer> : <footer className="foot"><p className="rights">{t(UI("ที่นี่คุณ ถามได้ • ไม่เชื่อได้ • ตรวจได้ • ข้ามได้ • พักได้ • ออกได้", "Here you may ask • disagree • check • skip • rest • leave"))}</p><a className="adult-link" href="#support">🤲 {t(UI("สมทบทุนพัฒนาและสร้างวัด (สำหรับผู้ใหญ่)", "Support the temple's development (for adults)"))}</a></footer>}
+      {V === "gate" ? <footer className="foot"><Wayfinding /><a className="adult-link" href="#support">🤲 {t(UI("สมทบทุนพัฒนาและสร้างวัด (สำหรับผู้ใหญ่)", "Support the temple's development (for adults)"))}</a><CommunityLink /></footer> : <footer className="foot"><p className="rights">{t(UI("ที่นี่คุณ ถามได้ • ไม่เชื่อได้ • ตรวจได้ • ข้ามได้ • พักได้ • ออกได้", "Here you may ask • disagree • check • skip • rest • leave"))}</p><a className="adult-link" href="#support">🤲 {t(UI("สมทบทุนพัฒนาและสร้างวัด (สำหรับผู้ใหญ่)", "Support the temple's development (for adults)"))}</a><CommunityLink /></footer>}
     </Ctx.Provider>
   );
 }

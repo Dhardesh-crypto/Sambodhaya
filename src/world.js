@@ -1606,6 +1606,34 @@ const glowTexture = () => glowTex || (glowTex = canvasTexture(128, 128, (c) => {
     front.material.emissiveIntensity = 0.5 + f * 1.1;
   });
 }
+/* ---------------- the community board (for adults) on the front of the "welcome" post, opposite the donation box ---------------- */
+// LINE OpenChat, SAMBODHAYA Community: a LINE-green board on the same gold plinth as the box. Walking up and pressing E
+// opens a note and a button that opens LINE in a new tab. Its wording and link: content/world/signs.json "community".
+const COMMUNITY = { x: -7, z: 37.2, scale: 2, lift: -1.8, url: CONTENT.signs.community.url };
+{
+  const g = new THREE.Group(); g.position.set(COMMUNITY.x, COMMUNITY.lift, COMMUNITY.z); g.scale.setScalar(COMMUNITY.scale); scene.add(g);
+  add(new THREE.BoxGeometry(0.95, 1.15, 0.3), S(0xf3ead6, { roughness: 0.4 }), 0, 1.75, 0, g);   // the board, in the box's ivory
+  add(new THREE.BoxGeometry(1.05, 0.1, 0.4), MAT.gold, 0, 2.37, 0, g);                            // top rail
+  add(new THREE.BoxGeometry(1.05, 0.08, 0.4), MAT.gold, 0, 1.16, 0, g, false);                    // base trim
+  add(new THREE.BoxGeometry(0.8, 0.28, 0.5), MAT.gold, 0, 1.04, 0, g);                            // the plinth
+  const drawFront = (c, w = 256, h = 320) => {
+    c.clearRect(0, 0, w, h); c.fillStyle = "#06c755"; c.fillRect(0, 0, w, h);
+    c.strokeStyle = "#e8b84a"; c.lineWidth = 10; c.strokeRect(10, 10, w - 20, h - 20);
+    // a white speech bubble with "LINE" in it
+    c.fillStyle = "#ffffff"; c.beginPath(); c.ellipse(w / 2, 92, 74, 52, 0, 0, Math.PI * 2); c.fill();
+    c.beginPath(); c.moveTo(w / 2 + 18, 136); c.lineTo(w / 2 + 40, 160); c.lineTo(w / 2 + 44, 128); c.fill();
+    c.textAlign = "center"; c.textBaseline = "middle"; c.fillStyle = "#06c755"; c.font = "bold 40px sans-serif"; c.fillText("LINE", w / 2, 94);
+    c.fillStyle = "#ffffff"; c.font = "30px Itim, sans-serif"; c.fillText("OpenChat", w / 2, 196);
+    c.font = "21px Mali, sans-serif"; c.fillText("SAMBODHAYA Community", w / 2, 234);
+    c.font = "24px Mali, sans-serif"; c.fillStyle = "#fff4d6"; c.fillText(tx("สำหรับผู้ใหญ่", "For adults"), w / 2, 274);
+  };
+  const tex = canvasTexture(256, 320, drawFront);
+  signDraws.push(() => { drawFront(tex.image.getContext("2d")); tex.needsUpdate = true; }); // redrawn once the Thai fonts are in
+  const front = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 1.0), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.7, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.4 }));
+  front.position.set(0, 1.75, 0.155); g.add(front);
+  colliders.push({ x: COMMUNITY.x, z: COMMUNITY.z, r: 0.45 * COMMUNITY.scale });
+  sign(txo(CONTENT.signs.community.title), txo(CONTENT.signs.community.sub), "💬", COMMUNITY.x, 2.45 * COMMUNITY.scale + COMMUNITY.lift + 1.95, COMMUNITY.z + 0.4, 4.4);
+}
 // Once, when the page has loaded: a trail of warm lights along the ground from where you arrive, down the road
 // (clear of the alms row) to the front of the donation box; it lights up toward the box, stays a few seconds and
 // fades away. Only on arriving at the gate, not when coming back to some other spot. With calm motion it just
@@ -5040,7 +5068,7 @@ function showPrompt(p) {
   if (!p) { el.hidden = true; return; }
   $(id + "-name").textContent = p.icon + " " + placeName(p);
   $(id + "-sub").textContent = p.stone != null ? (p.board ? tx("ป้ายเรื่องที่ ", "Story board ") : tx("เรื่องที่ ", "Story ")) + (p.stone + 1) : p.sub[L === "en" ? 1 : 0];
-  $(id + "-go").textContent = p.id === "lang" ? tx("เปลี่ยน", "Change") : p.id === "bell" ? tx("ตี", "Strike") : p.id === "donate" ? tx("เปิด", "Open") : p.id === "alms" ? tx("ใส่บาตร", "Offer") : p.id === "fish" ? tx("ให้อาหาร", "Feed") : p.merit ? tx("ทำบุญ", "Offer") : p.id === "broom" ? (broom.held ? tx("วาง", "Put back") : tx("หยิบ", "Pick up")) : p.id === "can" ? (can.held ? tx("วาง", "Put back") : tx("หยิบ", "Pick up")) : p.id === "water" ? tx("รดน้ำ", "Water") : p.id === "fold" ? tx("นั่งพับ", "Sit and fold") : p.id === "info" ? tx("อ่าน", "Read") : p.id === "bridge" ? tx("เลือก", "Choose") : p.id === "monk" ? (p.acts.length > 1 ? tx("เลือก", "Choose") : tx("ไหว้", "Greet")) : p.id === "cat" ? tx("ลูบ", "Pet") : tx("เข้า", "Visit");
+  $(id + "-go").textContent = p.id === "lang" ? tx("เปลี่ยน", "Change") : p.id === "bell" ? tx("ตี", "Strike") : p.id === "donate" || p.id === "community" ? tx("เปิด", "Open") : p.id === "alms" ? tx("ใส่บาตร", "Offer") : p.id === "fish" ? tx("ให้อาหาร", "Feed") : p.merit ? tx("ทำบุญ", "Offer") : p.id === "broom" ? (broom.held ? tx("วาง", "Put back") : tx("หยิบ", "Pick up")) : p.id === "can" ? (can.held ? tx("วาง", "Put back") : tx("หยิบ", "Pick up")) : p.id === "water" ? tx("รดน้ำ", "Water") : p.id === "fold" ? tx("นั่งพับ", "Sit and fold") : p.id === "info" ? tx("อ่าน", "Read") : p.id === "bridge" ? tx("เลือก", "Choose") : p.id === "monk" ? (p.acts.length > 1 ? tx("เลือก", "Choose") : tx("ไหว้", "Greet")) : p.id === "cat" ? tx("ลูบ", "Pet") : tx("เข้า", "Visit");
   el.hidden = false;
 }
 $("prompt-go").addEventListener("click", () => { actFor(P1); if (near) openPlace(near); });
@@ -5059,6 +5087,13 @@ function switchLang(code) {
   const u = new URL(location.href); u.searchParams.set("lang", code); u.searchParams.set("return", "1"); location.href = u.toString();
 }
 $("prompt2-go").addEventListener("click", () => { actFor(P2); if (near) openPlace(near); });
+const COMMUNITY_PLACE = { id: "community", icon: "💬", th: CONTENT.signs.community.title.th, en: CONTENT.signs.community.title.en, sub: [CONTENT.signs.community.sub.th, CONTENT.signs.community.sub.en] };
+function openCommunity() {
+  openDialog(tx("💬 ชุมชนออนไลน์ของวัด", "💬 The temple's online community"),
+    `<p>${tx("สำหรับผู้ใหญ่: พูดคุยกับผู้ใหญ่คนอื่น ๆ ที่สนใจวัดสัมโพธายะ รับข่าวงานบุญและความคืบหน้าการสร้างวัด ใน LINE OpenChat", "For adults: talk with other adults who care about Sambodhaya, and hear about merit-making days and the building work, in LINE OpenChat.")}</p>
+     <p class="note">${tx("เปิดในแอป LINE (หน้าต่างใหม่) ถ้าคุณยังไม่ถึงวัยผู้ใหญ่ ไม่ต้องเข้าร่วม เดินชมวัดต่อได้เลย", "It opens in the LINE app (a new window). If you aren't an adult yet, there's no need to join: just keep exploring the temple.")}</p>
+     <div class="row"><a class="btn" href="${esc(COMMUNITY.url)}" target="_blank" rel="noopener noreferrer">${tx("เข้าร่วม LINE OpenChat →", "Join LINE OpenChat →")}</a><button class="chip" data-close>${tx("เดินต่อ", "Keep walking")}</button></div>`);
+}
 const DONATE_PLACE = { id: "donate", icon: "🤲", th: "ตู้รับบริจาค (สำหรับผู้ใหญ่)", en: "Donation box (for adults)", sub: ["สมทบทุนพัฒนาและสร้างวัด", "Support the temple's development"] };
 function openDonate() {
   openDialog(tx("🤲 ตู้รับบริจาค", "🤲 Donation box"),
@@ -5109,6 +5144,7 @@ function restoreSpot() {
 function openPlace(p) {
   if (p.id === "bell") { ringBell(); return; }
   if (p.id === "donate") { openDonate(); return; }
+  if (p.id === "community") { openCommunity(); return; }
   if (p.id === "alms") { startAlms(p.monk); return; }
   if (p.id === "fish") { startFeed(); return; }
   if (p.merit) { startMerit(meritHere()); return; }
@@ -6255,6 +6291,7 @@ function kidStep(dt) {
   for (const s of journeyStones) { const d = Math.hypot(player.x - s.x, player.z - s.z); if (d < 2.6 && d < bestD) { best = { ...PLACES.find((p) => p.id === "journey"), stone: s.i }; bestD = d; } }
   if (Math.hypot(player.x - BELL[0], player.z - BELL[1]) < 4.4 && 3 < bestD) { best = BELL_PLACE; bestD = 3; } // reachable from the road
   { const d = Math.hypot(player.x - DONATE.x, player.z - (DONATE.z + 0.6 * DONATE.scale)); if (d < 2.6 && d < bestD) { best = DONATE_PLACE; bestD = d; } } // only when standing at the box
+  { const d = Math.hypot(player.x - COMMUNITY.x, player.z - (COMMUNITY.z + 0.6 * COMMUNITY.scale)); if (d < 2.6 && d < bestD) { best = COMMUNITY_PLACE; bestD = d; } } // and at the community board
   { const m = monkHere(); if (m && m.d < bestD) { best = monkPlace(m.h, m.s); bestD = m.d; } }
   { const c = infoNear(); if (c && c.d + 1 < bestD) { const T = INFO_TEXT[c.id]; best = { id: "info", icon: "ℹ️", th: T.t[0], en: T.t[1], sub: ["เรื่องน่ารู้", "Good to know"], info: c.id, key: c.id }; bestD = c.d + 1; } } // (anything else here comes first)
   if (onBridge(player.x, player.z) && feed.t < 0 && kraap.t < 0 && 2.5 < bestD) { best = fest.now === "loykrathong" ? { id: "bridge", icon: "🪷", th: "ลอยกระทง", en: "Loy Krathong", sub: ["ลอยกระทง · ให้อาหารปลา", "Float a krathong · feed the fish"] } : FISH_PLACE; bestD = 2.5; }

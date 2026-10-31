@@ -85,6 +85,8 @@ sign_fields = [
     th_en("leave", "Right gate post"),
     board("tool_rack", "The tool rack", [th_en("title", "Title"), th_en("sub", "Subtitle")]),
     board("donation_box", "The donation box (by the right gate post)", [th_en("title", "Title"), th_en("sub", "Subtitle")]),
+    board("community", "LINE OpenChat (gate page footer, support page, left gate post)", [th_en("title", "Button / sign title"), th_en("sub", "Subtitle"),
+          text("url", "LINE OpenChat link", hint="The invitation link from LINE, starting https://line.me/ (the part from ? on can be left off)")]),
     {"name": "garden_stones", "label": "Practice Garden: the four stones", "widget": "list", "allow_add": False,
      "summary": "{{fields.icon}} {{fields.name.en}}", "fields": [icon, th_en("name", "Name")]},
 ]

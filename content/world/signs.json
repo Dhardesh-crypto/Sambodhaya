@@ -37,6 +37,17 @@
       "en": "For adults · give only if you wish"
     }
   },
+  "community": {
+    "title": {
+      "th": "เข้าร่วม LINE OpenChat",
+      "en": "Join our LINE OpenChat"
+    },
+    "sub": {
+      "th": "SAMBODHAYA Community · สำหรับผู้ใหญ่",
+      "en": "SAMBODHAYA Community · for adults"
+    },
+    "url": "https://line.me/ti/g2/LC3TIhYG5wDmepUyKJnb4yVzVZaLLnwwsp8XnA"
+  },
   "garden_stones": [
     {
       "icon": "🧍",

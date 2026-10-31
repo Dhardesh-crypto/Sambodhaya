@@ -73,6 +73,8 @@ for u in lessons:
             sys.exit(f"content error in lessons/{u['code']}.json: unknown source key {s.get('key')!r}")
 for name in ("places", "signs", "boards", "cards"):
     need_texts(f"world/{name}.json", world[name])
+if not str(signs.get("community", {}).get("url", "")).startswith("https://line.me/"):
+    sys.exit("content error in world/signs.json: the LINE OpenChat link (community.url) must start with https://line.me/")
 need_texts("world/stories.json", pictures)
 if len(pictures) != len(lessons):
     sys.exit(f"content error: {len(lessons)} lessons but {len(pictures)} story paintings in world/stories.json")
@@ -84,7 +86,8 @@ site["journey"] = [{"code": u["code"], "title": u["title"], "picture": pictures[
 
 # the 2D site
 data = "".join(f"const {name} = {json.dumps(value, ensure_ascii=False)};\n" for name, value in
-               (("SOURCES", sources), ("UNITS", lessons), ("AMBER", library["amber"]), ("WHEEL_IMAGE", library["wheel"])))
+               (("SOURCES", sources), ("UNITS", lessons), ("AMBER", library["amber"]), ("WHEEL_IMAGE", library["wheel"]),
+                ("COMMUNITY", signs["community"])))
 combined = data + (src / "content.js").read_text(encoding="utf-8") + "\n" + (src / "app.jsx").read_text(encoding="utf-8")
 js = subprocess.run(["npx", "--yes", "esbuild", "--loader=jsx", "--minify", "--target=es2019"],
                     input=combined, check=True, capture_output=True, text=True).stdout
