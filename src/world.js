@@ -164,7 +164,7 @@ const MAT = {
   roof: P("clay_roof_tiles_02", 0.4, 0.4, { color: 0xffb08a }), roofEdge: goldLeaf(0xd9a640, { roughness: 0.36 }), wall: P("beige_wall_001", 2, 1, { color: 0xfff4e2 }), gold: goldLeaf(),
   lacquer: lacquer(0x8e1f17), roofGreen: S(0x2f6b4a, { roughness: 0.5 }),
   leaf: M(0x5f9e4a), leafLight: M(0x7db85a), trunk: M(0x7a5536), water: new THREE.MeshStandardMaterial({ color: 0x2f7f8a, roughness: 0.06, metalness: 0.15, transparent: true, opacity: 0.88 }),
-  lotus: M(0xf28fb0), pad: M(0x4d8f45), glow: M(0xffd27a, { emissive: 0xffb84a, emissiveIntensity: 0.9 }), mountain: M(0x9fb0b8), mountainFar: M(0xbcc8cc),
+  glow: M(0xffd27a, { emissive: 0xffb84a, emissiveIntensity: 0.9 }), mountain: M(0x9fb0b8), mountainFar: M(0xbcc8cc),
 };
 // Still water (the moat, the ponds, the waterfall's pool): the flat surface is given moving ripples, a few small
 // waves summed, so the sky's reflection and the sun's glints shimmer and drift; it is clearer looking straight down
@@ -405,14 +405,7 @@ const BRIDGE = { zc: (MOAT.r1 + MOAT.r2) / 2, half: (MOAT.r2 - MOAT.r1) / 2 + 2 
   const water = new THREE.Mesh(new THREE.RingGeometry(MOAT.r1, MOAT.r2, 128, 1), stillWater(MAT.water.clone())); // clearer than the ponds: the fish show beneath it
   water.material.opacity = 0.58; water.renderOrder = 2;
   water.rotation.x = -Math.PI / 2; water.position.y = MOAT.water; scene.add(water);
-  // a few lotus pads drifting in the moat
-  const pads0 = scene.children.length;
-  for (let i = 0; i < 70; i++) {
-    const a = i * 2.39996, r = MOAT.r1 + 1 + ((i * 37) % 50) / 10;
-    if (Math.sin(a) > 0.97) continue; // keep the water under the bridge clear
-    add(new THREE.CylinderGeometry(0.6, 0.6, 0.04, 10), MAT.pad, Math.cos(a) * r, MOAT.water + 0.03, Math.sin(a) * r, scene, false);
-  }
-  mergeStatic(scene, pads0);
+  // (its floating lotus leaves and water lilies: see "lotus ponds")
 }
 // paving is laid flush: its surface is only a few centimetres above the grass, where feet walk.
 // The plaza: sandstone flagstones laid in rings round the Bodhi tree, each slab its own shade, joints staggered from
@@ -524,21 +517,22 @@ const lantern = (x, z) => {
 lanternSpots.forEach(([x, z]) => colliders.push({ x, z, r: 0.7 }));
 props("lamppost", 4.2, lanternSpots.map(([x, z]) => [x, z, Math.atan2(-x, -z)]), { fallback: () => lanternSpots.forEach(([x, z]) => lantern(x, z)) });
 
-/* ---------------- ponds with lotus ---------------- */
-const ponds = [];
+/* ---------------- ponds (their lotus and koi: see "lotus ponds" further on) ---------------- */
+// Each pond: a stone rim standing a hand's width above the water, a dark bed and clear water, so the koi show
+// (its water is hidden while its reflection draws)
+const ponds = [], pondWaters = [], POND_WATER = 0.556, POND_RIM = 0.64;
+const pondWaterMat = stillWater(MAT.water.clone()); pondWaterMat.opacity = 0.62;
+const pondInner = MAT.rock.clone(); pondInner.side = THREE.DoubleSide;
 const pond = (x, z, r) => {
   ponds.push({ x, z, r });
-  add(new THREE.CylinderGeometry(r + 0.7, r + 0.9, 0.55, 40), MAT.rock, x, 0.22, z, scene, false);
-  add(new THREE.CylinderGeometry(r, r, 0.3, 40), MAT.water, x, 0.4, z, scene, false);
-  for (let i = 0; i < 9; i++) {
-    const a = i * 2.4, d = r * (0.3 + ((i * 7) % 6) / 10);
-    const px = x + Math.cos(a) * d, pz = z + Math.sin(a) * d;
-    add(new THREE.CylinderGeometry(0.7, 0.7, 0.06, 10), MAT.pad, px, 0.58, pz, scene, false);
-    if (i % 2 === 0) { const f = add(new THREE.ConeGeometry(0.35, 0.6, 6), MAT.lotus, px, 0.9, pz); f.rotation.x = Math.PI; }
-  }
+  add(new THREE.CylinderGeometry(r + 0.7, r + 0.9, POND_RIM + 0.08, 40, 1, true), MAT.rock, x, (POND_RIM - 0.08) / 2, z, scene, false); // the outer face
+  add(new THREE.RingGeometry(r, r + 0.7, 40, 1), MAT.rock, x, POND_RIM, z, scene, false).rotation.x = -Math.PI / 2;                 // the top
+  add(new THREE.CylinderGeometry(r, r, POND_RIM - 0.48, 40, 1, true), pondInner, x, (POND_RIM + 0.48) / 2, z, scene, false);        // down to the bed
+  add(new THREE.CircleGeometry(r, 40), S(0x24382b, { roughness: 1 }), x, 0.5, z, scene, false).rotation.x = -Math.PI / 2;
   colliders.push({ x, z, r: r + 0.6 });
 };
 { const p0 = scene.children.length; pond(-14, 30, 6); pond(14, 30, 6); pond(-36, 22, 5); pond(36, 24, 4); mergeStatic(scene, p0); }
+ponds.forEach(({ x, z, r }) => { const w = add(new THREE.CylinderGeometry(r, r, 0.3, 40), pondWaterMat, x, 0.4, z, scene, false); w.renderOrder = 2; pondWaters.push(w); });
 
 /* ---------------- text signs (Thai-ready canvas textures) ---------------- */
 const signDraws = [];
@@ -1692,7 +1686,7 @@ const REFLECT_SHADER = {
       vec3 V = normalize(cameraPosition - vWaterPos);
       float fres = 0.2 + 0.8 * pow(1.0 - clamp(V.y, 0.0, 1.0), 2.5);           // water looking down, mirror toward the horizon
       vec3 body = uWaterCol * uLight * (0.86 + 0.24 * swNoise(vWaterPos.xz * 0.18));
-      gl_FragColor = vec4(mix(body, refl * 0.92, fres), 1.0);
+      gl_FragColor = vec4(mix(body, refl * 0.92, fres), mix(0.45, 1.0, fres));   // clear enough looking down to see the koi
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
       #include <fog_fragment>
@@ -1703,7 +1697,7 @@ if (HIGH) {
   const dpr = Math.min(devicePixelRatio || 1, 2), tw = Math.round(Math.min(960, innerWidth * dpr * 0.5)), th = Math.round(Math.min(640, innerHeight * dpr * 0.5));
   [...ponds.map((p) => ({ x: p.x, z: p.z, r: p.r, y: 0.556 })), { x: 0, z: -55.5, r: 5, y: 0.406 }].forEach((w) => {
     const m = new Reflector(new THREE.CircleGeometry(w.r, 48), { textureWidth: tw, textureHeight: th, clipBias: 0.003, multisample: 0, shader: REFLECT_SHADER });
-    m.material.fog = true; m.material.uniforms.uWaterCol.value.copy(MAT.water.color);
+    m.material.fog = true; m.material.transparent = true; m.material.uniforms.uWaterCol.value.copy(MAT.water.color);
     m.rotation.x = -Math.PI / 2; m.position.set(w.x, w.y, w.z); m.visible = false; m.renderOrder = 1; scene.add(m);
     // while one mirror draws the scene, the others stay out of it (no mirrors within mirrors)
     const draw = m.onBeforeRender; let n = 0;
@@ -1717,11 +1711,11 @@ if (HIGH) {
   waterAnims.push(() => {
     const now = performance.now(), ms = now - last; last = now;
     if (reflectors.some((m) => m.visible) && ms < 500) { slowFor = ms > REFLECT_SLOW ? slowFor + ms : Math.max(0, slowFor - ms); if (slowFor > 3000) off = true; } // (a pause, e.g. a hidden tab, doesn't count)
-    if (off) { reflectors.forEach((m) => (m.visible = false)); return; }
+    if (off) { reflectors.forEach((m) => (m.visible = false)); pondWaters.forEach((w) => (w.visible = true)); return; }
     camera.getWorldPosition(camPos);
     const near = reflectors.map((m) => [m, Math.hypot(camPos.x - m.position.x, camPos.z - m.position.z)]).filter(([, d]) => d < REFLECT_NEAR).sort((a, b) => a[1] - b[1]).slice(0, REFLECT_MAX).map(([m]) => m);
     const light = 0.3 + 0.7 * night.d;
-    reflectors.forEach((m) => { m.visible = near.includes(m); m.material.uniforms.uLight.value = light; });
+    reflectors.forEach((m, i) => { m.visible = near.includes(m); m.material.uniforms.uLight.value = light; if (pondWaters[i]) pondWaters[i].visible = !m.visible; });
   });
 }
 
@@ -2369,6 +2363,148 @@ const FISH_PLACE = { id: "fish", icon: "🐟", th: "ให้อาหารป�
   }));
 }
 const FISH_TURN = Math.PI / 2; // with the models' own facing, this points their heads where they swim (checked from the side)
+/* ---------------- lotus ponds: lotus, water lilies and koi ---------------- */
+// After Golden Temple (MIT), in Thai kind: in each pond the sacred lotus (บัวหลวง), pink and a few white, stands
+// above the water on its stalks, open flowers with layered petals round a golden seed head, buds, and the big
+// round leaves held up like bowls with beads of water rolling in them; more leaves float flat with dew on them.
+// Water lilies (บัวสาย) open on the water itself, pink, white and violet, on notched pads. Koi drift beneath.
+// Everything is a few batches (instancing); the stalks and what they hold sway together in the wind.
+{
+  const rnd = (() => { let s = 7; return () => ((s = (s * 16807) % 2147483647) / 2147483647); })();
+  const colorize = (g, f) => { const p = g.attributes.position, c = new Float32Array(p.count * 3), k = new THREE.Color();
+    for (let i = 0; i < p.count; i++) { f(k, p.getX(i), p.getY(i), p.getZ(i)); c.set([k.r, k.g, k.b], i * 3); }
+    g.setAttribute("color", new THREE.BufferAttribute(c, 3)); return g; };
+  // a petal standing up +y, its inner face toward +z: pointed, cupped across, its tip curling in (bend > 0) or out
+  const petal = (len, wid, cup, bend, base, tip) => {
+    const g = new THREE.PlaneGeometry(1, 1, 4, 7), p = g.attributes.position, A = new THREE.Color(base), B = new THREE.Color(tip);
+    for (let i = 0; i < p.count; i++) {
+      const u = p.getX(i), v = p.getY(i) + 0.5, w = wid * Math.pow(Math.sin(Math.PI * (0.08 + v * 0.92)), 0.75) * (1 - 0.25 * v);
+      p.setXYZ(i, u * w, v * len, cup * (2 * u) * (2 * u) * w + bend * v * v * len);
+    }
+    g.computeVertexNormals();
+    return colorize(g, (k, x, y) => k.copy(A).lerp(B, Math.pow(y / len, 1.6)));
+  };
+  // a flower: rings of [count, tilt from upright, length, width, cup, bend], a seed head and stamens
+  const flower = (rings, base, tip, head) => {
+    const parts = [], m = new THREE.Matrix4(), r = new THREE.Matrix4();
+    rings.forEach(([n, tilt, len, wid, cup, bend], k) => { for (let i = 0; i < n; i++) {
+      const g = petal(len, wid, cup, bend, base, tip);
+      g.applyMatrix4(m.makeRotationX(-tilt)); g.applyMatrix4(m.makeTranslation(0, 0, -0.02)); g.applyMatrix4(r.makeRotationY((i + k * 0.5) / n * Math.PI * 2)); parts.push(g);
+    } });
+    if (head) {
+      const pod = colorize(new THREE.CylinderGeometry(head, head * 0.75, head * 0.8, 12), (k, x, y) => k.setHex(y > 0 ? 0xd8d45a : 0xb8c050)); pod.translate(0, head * 0.6, 0);
+      const st = colorize(new THREE.CylinderGeometry(head * 1.5, head * 1.1, head * 0.7, 16, 1, true), (k) => k.setHex(0xf0b830)); st.translate(0, head * 0.45, 0);
+      parts.push(pod, st);
+    }
+    return mergeGeometries(parts.map((g) => { g.deleteAttribute("uv"); return g.index ? g.toNonIndexed() : g; }));
+  };
+  const pinkLotus = flower([[4, 0.35, 0.16, 0.12, 0.35, 0.25], [7, 0.75, 0.2, 0.15, 0.32, 0.12], [8, 1.1, 0.21, 0.16, 0.28, -0.05]], 0xfbe6ec, 0xe2588a, 0.045);
+  const whiteLotus = flower([[4, 0.35, 0.16, 0.12, 0.35, 0.25], [7, 0.75, 0.2, 0.15, 0.32, 0.12], [8, 1.1, 0.21, 0.16, 0.28, -0.05]], 0xfffbf0, 0xf6eee6, 0.045);
+  const lily = (tip) => flower([[6, 0.5, 0.1, 0.05, 0.25, 0.1], [8, 0.95, 0.13, 0.06, 0.2, 0.0], [8, 1.35, 0.14, 0.065, 0.15, -0.05]], 0xfff6e0, tip, 0.022);
+  const lilies = [lily(0xe777b0), lily(0xfcfaf6), lily(0x9a8ce8)];
+  // a bud: a pointed teardrop, green below and pink at the tip
+  const bud = colorize(new THREE.LatheGeometry(Array.from({ length: 9 }, (_, i) => { const v = i / 8; return new THREE.Vector2(0.09 * Math.pow(Math.sin(Math.PI * Math.min(v * 1.1, 1)), 0.85) * (1 - 0.35 * v) + 0.001, v * 0.3); }), 10),
+    (k, x, y) => k.setHex(0x8bab55).lerp(new THREE.Color(0xe0628f), Math.min(1, Math.max(0, y / 0.3 - 0.15) * 1.3)));
+  // a leaf: round, from the stalk outward; held up it is a shallow bowl, floating it is flat; a lily pad has a notch
+  const leafTex = (() => {
+    const c = document.createElement("canvas"); c.width = c.height = 256; const g = c.getContext("2d");
+    const rg = g.createRadialGradient(128, 128, 4, 128, 128, 128); rg.addColorStop(0, "#a3c777"); rg.addColorStop(0.12, "#78a856"); rg.addColorStop(0.6, "#64984a"); rg.addColorStop(1, "#4d8341");
+    g.fillStyle = rg; g.fillRect(0, 0, 256, 256);
+    g.strokeStyle = "rgba(190,215,150,0.22)"; g.lineWidth = 1.1;
+    for (let i = 0; i < 19; i++) { const a = (i + rnd() * 0.4) / 19 * Math.PI * 2, b = a + (rnd() - 0.5) * 0.12; g.beginPath(); g.moveTo(128, 128); g.quadraticCurveTo(128 + Math.cos(b) * 64, 128 + Math.sin(b) * 64, 128 + Math.cos(a) * 128, 128 + Math.sin(a) * 128); g.stroke(); }
+    for (let i = 0; i < 400; i++) { g.fillStyle = `rgba(${rnd() < 0.5 ? "40,70,30" : "170,200,130"},0.08)`; g.beginPath(); g.arc(rnd() * 256, rnd() * 256, 2 + rnd() * 6, 0, 7); g.fill(); }
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
+  })();
+  const leaf = (depth, notch, wave) => {
+    const g = new THREE.LatheGeometry(Array.from({ length: 7 }, (_, i) => new THREE.Vector2(i / 6 + 0.001, depth * Math.pow(i / 6, 1.7))), 28, notch, Math.PI * 2 - notch * 2);
+    const p = g.attributes.position, uv = g.attributes.uv;
+    for (let i = 0; i < p.count; i++) { const x = p.getX(i), z = p.getZ(i), r = Math.hypot(x, z); p.setY(i, p.getY(i) + wave * Math.sin(Math.atan2(z, x) * 7) * r * r); uv.setXY(i, x * 0.5 + 0.5, z * 0.5 + 0.5); }
+    g.computeVertexNormals(); return g;
+  };
+  const standLeaf = leaf(0.42, 0, 0.08), floatLeaf = leaf(0.05, 0, 0.012), lilyPad = leaf(0.01, 0.09, 0);
+  const stalk = new THREE.CylinderGeometry(0.014, 0.02, 1, 5, 1, true); stalk.translate(0, 0.5, 0);
+  // the wind: what stands sways by its height above the water, stalk and flower alike
+  const sway = (mat, key) => { mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uWaterTime = waterTime;
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nuniform float uWaterTime;")
+      .replace("#include <begin_vertex>", `#include <begin_vertex>
+      { vec3 ip = instanceMatrix[3].xyz; float hh = max((instanceMatrix * vec4(transformed, 1.0)).y - ${POND_WATER.toFixed(3)}, 0.0);
+        float w = (sin(uWaterTime * 1.3 + ip.x * 0.7 + ip.z * 0.5) * 0.6 + sin(uWaterTime * 2.3 + ip.x * 1.3 - ip.z * 0.9) * 0.3) * (0.6 + 0.4 * sin(uWaterTime * 0.35 + ip.x * 0.05));
+        vec2 off = vec2(w, w * 0.6) * hh * hh * 0.07 / length(instanceMatrix[0].xyz);
+        transformed.xz += off; }`); };
+    mat.customProgramCacheKey = () => "lotus-" + key; return mat; };
+  const petalMat = sway(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, side: THREE.DoubleSide }), "petal");
+  const leafMat = sway(new THREE.MeshStandardMaterial({ map: leafTex, roughness: 0.62, side: THREE.DoubleSide }), "leaf");
+  const flatLeafMat = new THREE.MeshStandardMaterial({ map: leafTex, roughness: 0.4, side: THREE.DoubleSide });
+  const stalkMat = sway(new THREE.MeshStandardMaterial({ color: 0x6f8f45, roughness: 0.7 }), "stalk");
+  const budMat = sway(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5 }), "bud");
+  const dewMat = sway(new THREE.MeshStandardMaterial({ color: 0xe6f4f2, roughness: 0.02, metalness: 0.1, transparent: true, opacity: 0.6, envMapIntensity: 2.2 }), "dew");
+  const dewGeo = new THREE.SphereGeometry(1, 8, 6);
+  const lists = new Map(), put = (geo, mat, x, y, z, sc, ry = rnd() * 6.28, sy = sc, col = null, tilt = 0) => {
+    const key = geo.uuid + mat.uuid; if (!lists.has(key)) lists.set(key, { geo, mat, items: [] }); lists.get(key).items.push([x, y, z, sc, ry, sy, col, tilt]); };
+  const W = POND_WATER;
+  const standing = (x, z, h, ry, what) => { // a stalk, and what it holds at the top
+    put(stalk, stalkMat, x, W, z, 1.4, ry, h);
+    if (what === "leaf") { // held up, tipped a little to one side; the water gathers in the middle and beads on it
+      const sc = 0.5 + rnd() * 0.25, tilt = 0.15 + rnd() * 0.3, y0 = W + h - 0.02; put(standLeaf, leafMat, x, y0, z, sc, ry, sc, null, tilt);
+      const m = new THREE.Matrix4().compose(new THREE.Vector3(x, y0, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(tilt, ry, 0, "YXZ")), new THREE.Vector3(sc, sc, sc)), v = new THREE.Vector3();
+      const bead = (r, a, size) => { v.set(Math.cos(a) * r, 0.42 * Math.pow(r, 1.7) + 0.08 * Math.sin(a * 7) * r * r + size * 0.5 / sc, Math.sin(a) * r).applyMatrix4(m); put(dewGeo, dewMat, v.x, v.y, v.z, size, 0, size * 0.6); };
+      bead(0.12, 0, 0.032); for (let i = 0; i < 3; i++) bead(0.3 + rnd() * 0.45, rnd() * 6.28, 0.012 + rnd() * 0.01); }
+    else if (what === "bud") put(bud, budMat, x, W + h - 0.01, z, 1.4 + rnd() * 0.5, ry);
+    else put(rnd() < 0.8 ? pinkLotus : whiteLotus, petalMat, x, W + h - 0.01, z, 1.5 + rnd() * 0.5, ry);
+  };
+  const floating = (x, z, y, sc, kind) => {
+    put(kind === "lily" ? lilyPad : floatLeaf, flatLeafMat, x, y + 0.012, z, sc, rnd() * 6.28, sc, kind === "lily" ? 0x8fa86a : 0xffffff);
+    const drops = kind === "lily" ? 1 : 2 + Math.floor(rnd() * 3);
+    for (let i = 0; i < drops; i++) { const a = rnd() * 6.28, d = sc * (0.2 + rnd() * 0.6); put(dewGeo, dewMat, x + Math.cos(a) * d, y + 0.022 + 0.05 * sc * Math.pow(d / sc, 1.7), z + Math.sin(a) * d, 0.01 + rnd() * 0.012, 0, 0.007); }
+  };
+  ponds.forEach(({ x, z, r }) => {
+    const spots = [], free = (px, pz, gap) => Math.hypot(px - x, pz - z) < r - 0.5 && spots.every(([qx, qz, qg]) => Math.hypot(px - qx, pz - qz) > gap + qg);
+    const place = (gap, tries = 40) => { for (let t = 0; t < tries; t++) { const a = rnd() * 6.28, d = Math.sqrt(rnd()) * (r - 0.6), px = x + Math.cos(a) * d, pz = z + Math.sin(a) * d; if (free(px, pz, gap)) { spots.push([px, pz, gap]); return [px, pz]; } } return null; };
+    const n = r / 6; // the smaller ponds have fewer
+    for (let i = 0; i < Math.round(7 * n); i++) { const s = place(0.6); if (s) standing(...s, 0.6 + rnd() * 0.7, rnd() * 6.28, "leaf"); }
+    for (let i = 0; i < Math.round(6 * n); i++) { const s = place(0.4); if (s) standing(...s, 0.8 + rnd() * 0.6, rnd() * 6.28, "flower"); }
+    for (let i = 0; i < Math.round(5 * n); i++) { const s = place(0.2); if (s) standing(...s, 0.6 + rnd() * 0.7, rnd() * 6.28, "bud"); }
+    for (let i = 0; i < Math.round(14 * n); i++) { const sc = 0.45 + rnd() * 0.3, s = place(sc); if (s) floating(...s, W, sc, "lotus"); }
+    for (let i = 0; i < Math.round(7 * n); i++) { const sc = 0.3 + rnd() * 0.1, s = place(sc); if (!s) continue;
+      floating(...s, W, sc, "lily"); if (i % 3 !== 2) { const off = sc * 0.5, a = rnd() * 6.28; put(lilies[i % 3], petalMat, s[0] + Math.cos(a) * off, W + 0.02, s[1] + Math.sin(a) * off, 1.4 + rnd() * 0.4); } }
+  });
+  // the moat: lotus leaves floating along it, with now and then a water lily
+  for (let i = 0; i < 70; i++) {
+    const a = i * 2.39996, rr = MOAT.r1 + 1 + ((i * 37) % 50) / 10;
+    if (Math.sin(a) > 0.97) continue; // keep the water under the bridge clear
+    const x = Math.cos(a) * rr, z = Math.sin(a) * rr, sc = 0.5 + rnd() * 0.3;
+    floating(x, z, MOAT.water + 0.005, sc, "lotus");
+    if (i % 4 === 0) { const b = a + 0.03; floating(Math.cos(b) * (rr + 0.9), Math.sin(b) * (rr + 0.9), MOAT.water + 0.005, 0.34, "lily"); put(lilies[i % 3], petalMat, Math.cos(b) * (rr + 0.9), MOAT.water + 0.025, Math.sin(b) * (rr + 0.9), 1.5); }
+  }
+  const o = new THREE.Object3D(), c = new THREE.Color();
+  for (const { geo, mat, items } of lists.values()) {
+    const m = new THREE.InstancedMesh(geo, mat, items.length);
+    o.rotation.order = "YXZ";
+    items.forEach(([x, y, z, sc, ry, sy, col, tilt], i) => { o.position.set(x, y, z); o.rotation.set(tilt, ry, 0); o.scale.set(sc, sy, sc); o.updateMatrix(); m.setMatrixAt(i, o.matrix); if (col != null) m.setColorAt(i, c.setHex(col)); });
+    if (items.some((it) => it[6] != null)) items.forEach((it, i) => it[6] == null && m.setColorAt(i, c.setHex(0xffffff)));
+    m.computeBoundingSphere(); m.receiveShadow = true; m.castShadow = false; scene.add(m);
+  }
+  // koi in the ponds: a few each, drifting round under the leaves, now slow, now a little quicker
+  const koi = [];
+  ponds.forEach((p, k) => { for (let i = 0; i < (HIGH ? 5 : 3) * p.r / 6; i++) koi.push({ p, kind: i % 3 === 2 ? "fish-gold" : "fish-koi", a: rnd() * 6.28, rr: p.r * (0.3 + rnd() * 0.5), dir: rnd() < 0.5 ? 1 : -1, ph: rnd() * 10, o: new THREE.Group() }); });
+  koi.forEach((f) => scene.add(f.o));
+  ["fish-koi", "fish-gold"].forEach((kind) => loadProp(kind).then((src) => {
+    if (!src) return;
+    const box = new THREE.Box3().setFromObject(src), size = box.getSize(new THREE.Vector3()), len = 0.55;
+    const base = src.clone(); base.scale.setScalar(len / Math.max(size.x, size.z)); base.scale.y *= 0.45; // (flattened: the ponds are shallow)
+    base.rotation.y = size.x >= size.z ? FISH_TURN : FISH_TURN - Math.PI / 2;
+    const holder = new THREE.Group(); holder.add(base); const ctr = new THREE.Box3().setFromObject(holder).getCenter(new THREE.Vector3()); base.position.sub(ctr);
+    koi.filter((f) => f.kind === kind).forEach((f) => { const m = holder.clone(); m.traverse((q) => { if (q.isMesh) q.castShadow = false; }); f.o.add(m); });
+  }));
+  waterAnims.push((dt, t) => { for (const f of koi) {
+    const sp = (0.12 + 0.08 * Math.sin(t * 0.3 + f.ph)) / f.rr * 1.4; f.a += sp * dt * f.dir;
+    const rr = f.rr * (1 + 0.15 * Math.sin(t * 0.21 + f.ph * 3)), wob = Math.sin(t * 2.4 + f.ph) * 0.12;
+    f.o.position.set(f.p.x + Math.cos(f.a) * rr, 0.522, f.p.z + Math.sin(f.a) * rr);
+    f.o.rotation.y = Math.atan2(-Math.sin(f.a) * f.dir, Math.cos(f.a) * f.dir) + wob;
+  } });
+}
+
 const pelletGeo = new THREE.SphereGeometry(0.045, 6, 4), pelletMat = S(0x8a5a2b, { roughness: 1 });
 const rippleGeo = new THREE.RingGeometry(0.85, 1, 32), rippleMat = new THREE.MeshBasicMaterial({ color: 0xe8f6ff, transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide });
 function addRipple(x, z, size = 0.6, y = MOAT.water + 0.02) { const m = new THREE.Mesh(rippleGeo, rippleMat.clone()); m.rotation.x = -Math.PI / 2; m.position.set(x, y, z); m.userData = { t: 0, size }; scene.add(m); ripples.push(m); }
