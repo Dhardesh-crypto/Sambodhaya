@@ -8,10 +8,10 @@
 export function createSound({ high = true } = {}) {
   let ctx = null, master = null, outdoor = null, outdoorFilter = null, on = false;
   const sources = [];          // looping, placed sounds (waterfall)
-  let windGain = null, leafGain = null, gust = 0.5, gustTarget = 0.5;
+  let windGain = null, leafGain = null, gust = 0.5;
   let nextBird = 0, nextChime = 0, nextKoel = 0;
   let listener = { x: 0, y: 2, z: 0 };
-  let chimeSpots = [], treeSpots = [], indoorNow = false;
+  let chimeSpots = [], treeSpots = [], indoorNow = false, chimeHook = null;
   // the time of day: 1 is full day, 0 full night (birds by day; crickets, frogs and the gecko by night)
   let daylight = 1, nightGain = null, nextFrog = 0, nextGecko = 0;
   let pondSpots = [], geckoSpots = [], moatR = 0, moatGain = null, moatPan = null;
@@ -202,10 +202,12 @@ export function createSound({ high = true } = {}) {
 
   return {
     get on() { return on; },
-    places({ waterfalls = [], chimes = [], trees = [], ponds = [], geckos = [], moat = 0 }) {
-      chimeSpots = chimes; treeSpots = trees; pondSpots = ponds; geckoSpots = geckos; moatR = moat;
+    places({ waterfalls = [], chimes = [], trees = [], ponds = [], geckos = [], moat = 0, onChime = null }) {
+      chimeSpots = chimes; chimeHook = onChime; treeSpots = trees; pondSpots = ponds; geckoSpots = geckos; moatR = moat;
       waterfalls.forEach(([x, y, z]) => sources.push(["fall", x, y, z]));
     },
+    // how strong the breeze is now (0 still … 1 a gust); the world wanders it, so the bells seen and heard agree
+    setGust(g) { gust = g; },
     // how much daylight there is (1 day, 0 night); it may change gradually at dawn and dusk
     setDaylight(d) { daylight = Math.max(0, Math.min(1, d)); },
     // the gong at dawn and dusk: only when the visitor has the ambience on
@@ -331,15 +333,13 @@ export function createSound({ high = true } = {}) {
       indoorNow = indoor;
       outdoorFilter.frequency.setTargetAtTime(indoor ? 700 : 18000, t, 0.4);
       outdoor.gain.setTargetAtTime(indoor ? 0.45 : 1, t, 0.4);
-      // gusts wander slowly; wind, leaves and the roof bells follow them
-      if (Math.random() < dt * 0.15) gustTarget = 0.2 + Math.random() * 0.8;
-      gust += (gustTarget - gust) * Math.min(1, dt * 0.3);
+      // the gusts (set by the world, see setGust): wind, leaves and the roof bells follow them
       windGain.gain.setTargetAtTime(0.05 + gust * 0.08, t, 0.5);
       leafGain.gain.setTargetAtTime(0.006 + gust * gust * 0.045, t, 0.5);
       const now = performance.now() / 1000;
       const near = (list, r) => list.filter(([x, , z]) => Math.hypot(x - cam.x, z - cam.z) < r);
       if (now > nextChime && gust > 0.45) {
-        const c = near(chimeSpots, 35); if (c.length) { const [x, y, z] = c[Math.floor(Math.random() * c.length)]; chime(x, y, z, 0.6 + gust * 0.6); }
+        const c = near(chimeSpots, 35); if (c.length) { const spot = c[Math.floor(Math.random() * c.length)], [x, y, z] = spot; chime(x, y, z, 0.6 + gust * 0.6); chimeHook?.(spot); }
         nextChime = now + 0.6 + Math.random() * (3.5 - gust * 2.5);
       }
       const dark = 1 - daylight;

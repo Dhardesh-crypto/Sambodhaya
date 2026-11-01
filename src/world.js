@@ -155,7 +155,7 @@ const lacquer = (color, extra = {}) => surface(new THREE.MeshPhysicalMaterial({ 
     diffuseColor.rgb *= 0.9 + 0.16 * lfNoiseV; }`,
   rough: `roughnessFactor = clamp(roughnessFactor * (0.8 + 0.4 * lfNoiseV), 0.05, 1.0);`,
 });
-const BRONZE_MAT = surface(new THREE.MeshStandardMaterial({ color: 0x8a6a3a, metalness: 0.9, roughness: 0.42 }), "bronze", {
+const BRONZE_MAT = surface(new THREE.MeshStandardMaterial({ color: 0x8a6a3a, metalness: 0.9, roughness: 0.42, side: THREE.DoubleSide }), "bronze", {
   color: `{ lfNoiseV = lfNoise(leafPlane() * 7.0); diffuseColor.rgb *= mix(vec3(1.0), vec3(0.62, 0.78, 0.7), smoothstep(0.62, 0.9, lfNoiseV) * 0.6); }`, // a little green patina
   rough: `roughnessFactor = clamp(roughnessFactor + (lfNoiseV - 0.5) * 0.3, 0.1, 1.0);`,
 });
@@ -3713,14 +3713,55 @@ function applyTime() {
 }
 
 /* ---------------- sound: off until the visitor turns it on (charter: no autoplay) ---------------- */
+const eaveBells = []; // the wind bells under the hall roofs (made with the sound's bell spots, below)
 const sound = createSound({ high: HIGH });
 {
   const chimes = [];
   Object.values(salas).forEach((h) => [[-1, 1], [1, 1], [-1, -1], [1, -1]].forEach(([sx, sz]) => {
-    const [x, z] = h.toWorld(sx * (h.W / 2 + 1.5), sz * (h.D / 2 + 1.5)); chimes.push([x, h.FY + h.H, z]);
+    const [x, z] = h.toWorld(sx * (h.W / 2 + 1.5), sz * (h.D / 2 + 1.5)); chimes.push([x, h.FY + h.H, z, chimes.length]);
   }));
   const trees = [...edgeTrees.map(([x, z]) => [x, 4, z]), [0, 10, 0], ...bushes.map(([x, z]) => [x, 1, z]), [-13, 4, -50], [13, 4, -50]];
-  sound.places({ waterfalls: [[0, 4.4, -58.3]], chimes, trees, ponds: ponds.map(({ x, z }) => [x, 0.4, z]), geckos: chimes, moat: (MOAT.r1 + MOAT.r2) / 2 });
+  sound.places({ waterfalls: [[0, 4.4, -58.3]], chimes, trees, ponds: ponds.map(({ x, z }) => [x, 0.4, z]), geckos: chimes, moat: (MOAT.r1 + MOAT.r2) / 2,
+    onChime: ([, , , i]) => { if (eaveBells[i]) eaveBells[i].kick = 0.16; } });
+  // Wind bells (กระดิ่งชายคา) under the corners of the hall roofs, where their sound comes from (after Golden Temple,
+  // MIT): a bronze bell on a ring, its clapper hanging down through it to a gilded Bodhi leaf that catches the wind.
+  // The breeze wanders in gusts (the same gusts the wind, the leaves and the bells' sound follow): the bells sway more
+  // in a gust, the leaves flutter and turn, and a bell that is heard ringing gives a little jolt. Two batches in all.
+  {
+    const PIVOT = -0.4, SC = 1.6; // where the leaf hangs from the clapper; the size at this scale
+    const ring = new THREE.TorusGeometry(0.03, 0.008, 6, 12); ring.translate(0, -0.03, 0);
+    const bell = new THREE.LatheGeometry([[0, -0.055], [0.035, -0.058], [0.055, -0.08], [0.064, -0.13], [0.075, -0.2], [0.09, -0.245], [0.094, -0.255]].map(([r, y]) => new THREE.Vector2(r, y)), 18);
+    const rod = new THREE.CylinderGeometry(0.005, 0.005, -PIVOT - 0.06, 5); rod.translate(0, (PIVOT + 0.06) / 2 - 0.06, 0);
+    const ball = new THREE.SphereGeometry(0.022, 8, 6); ball.translate(0, -0.23, 0);
+    const bodyGeo = mergeGeometries([ring, bell, rod, ball]);
+    const leaf = new THREE.Shape(); // a Bodhi leaf, hanging point down: heart-shaped with a long drip tip
+    leaf.moveTo(0, -0.02); leaf.bezierCurveTo(0.06, 0.0, 0.12, -0.05, 0.1, -0.13); leaf.bezierCurveTo(0.085, -0.19, 0.03, -0.22, 0, -0.32);
+    leaf.bezierCurveTo(-0.03, -0.22, -0.085, -0.19, -0.1, -0.13); leaf.bezierCurveTo(-0.12, -0.05, -0.06, 0.0, 0, -0.02);
+    const leafHook = new THREE.TorusGeometry(0.012, 0.004, 5, 10); leafHook.translate(0, -0.008, 0);
+    const leafGeo = mergeGeometries([new THREE.ShapeGeometry(leaf, 10), leafHook]);
+    const leafMat = goldLeaf(0xc9973a, { side: THREE.DoubleSide, roughness: 0.5 });
+    const spots = chimes.map(([x, y, z]) => ({ x, y: y - 0.6, z })); // (the underside of the eave's corner)
+    const bodies = new THREE.InstancedMesh(bodyGeo, BRONZE_MAT, spots.length), leaves = new THREE.InstancedMesh(leafGeo, leafMat, spots.length);
+    [bodies, leaves].forEach((m) => { m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.frustumCulled = false; m.castShadow = false; scene.add(m); });
+    spots.forEach((b, i) => Object.assign(b, { ph: i * 1.93, ph2: i * 0.71, w: 4.6 + (i % 5) * 0.25, kick: 0 }));
+    eaveBells.push(...spots);
+    let gust = 0.5, target = 0.5, time = 0;
+    const M = new THREE.Matrix4(), L = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), v = new THREE.Vector3(), one = new THREE.Vector3(SC, SC, SC), unit = new THREE.Vector3(1, 1, 1);
+    waterAnims.push((dt) => {
+      time += dt;
+      if (Math.random() < dt * 0.15) target = 0.2 + Math.random() * 0.8; // gusts wander slowly
+      gust += (target - gust) * Math.min(1, dt * 0.3); sound.setGust(gust);
+      spots.forEach((b, i) => {
+        b.kick *= Math.exp(-dt * 1.5);
+        const amp = 0.04 + 0.2 * gust * gust + b.kick, t = time * b.w * 0.25;
+        const ax = amp * (Math.sin(t + b.ph) * 0.7 + Math.sin(t * 1.73 + b.ph2) * 0.3), az = amp * 0.7 * Math.sin(t * 0.83 + b.ph2 * 2.0);
+        M.compose(v.set(b.x, b.y, b.z), q.setFromEuler(e.set(ax, 0, az)), one); bodies.setMatrixAt(i, M);
+        const lx = ax * 0.9 + amp * 0.6 * Math.sin(t * 1.4 + b.ph), lz = az * 0.9, ly = (0.5 + gust) * Math.sin(time * 0.7 + b.ph * 3.0);
+        L.compose(v.set(0, PIVOT, 0), q.setFromEuler(e.set(lx, ly, lz)), unit); leaves.setMatrixAt(i, M.multiply(L));
+      });
+      bodies.instanceMatrix.needsUpdate = leaves.instanceMatrix.needsUpdate = true;
+    });
+  }
   sound.setDaylight(night.d);
 }
 const onPath = (x, z) => {
