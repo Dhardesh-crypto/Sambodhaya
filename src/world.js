@@ -172,6 +172,7 @@ const MAT = {
 // reflection render, just the lit material's own reflections on the rippled normal. waterTime is the water clock
 // (slowed by calm motion), set every frame.
 const waterTime = { value: 0 };
+let envBase = 0.75, envShade = 1; // the sky's light on everything (set by the time of day), and how much of it reaches inside (see applyTime)
 const STILL_WATER_GLSL = `
 uniform float uWaterTime; varying vec3 vWaterPos; varying float vWaterUp;
 float swHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -3695,7 +3696,7 @@ function applyTime() {
   if (skyDome) skyDome.visible = d > 0.001 && !skyHdr;
   scene.background = d > 0.001 ? skyHdr : null;
   scene.backgroundIntensity = 0.9 * (0.45 + 0.55 * d);
-  scene.environmentIntensity = mix(0.75, 0.08) * (1 - gold * 0.25);
+  envBase = mix(0.75, 0.08) * (1 - gold * 0.25); scene.environmentIntensity = envBase * envShade;
   hemi.color.copy(tone(0xfff2d6, 0x8fa6d8, 0xffb070, 0.8)); hemi.groundColor.copy(tone(0x6f8f4a, 0x1c2433, 0x7a5a3a, 0.5)); hemi.intensity = mix(skyHdr ? 0.45 : 0.9, 0.32);
   sun.color.copy(tone(0xffd4a0, 0xa9bcff, 0xff7a30, 0.95)); sun.intensity = mix(2.3, 0.45) + gold * 0.5;
   scene.fog.color.copy(tone(0xf3d2a4, 0x0c1428, 0xe8915a, 0.85)); scene.fog.near = mix(90, 60); scene.fog.far = mix(290, 230);
@@ -3710,6 +3711,17 @@ function applyTime() {
   lampLightTimer = 0;
   sound.setDaylight(d);
   nightButton();
+}
+// The sky's light (the environment map) passes through roofs. Most halls don't mind, but the Universal Hall faces the
+// brightest part of the sky and looked washed out inside: while the boy is in it, the sky's light eases down to about
+// a third, as eyes settle indoors, and back up as he leaves.
+{
+  const [ux, uz] = salas.access.toWorld(0, 0), uni = floors.find((f) => f.hall && Math.hypot(f.x - ux, f.z - uz) < 0.01);
+  waterAnims.push((dt) => {
+    const want = uni && inFloor(uni, player.x, player.z) != null ? 0.35 : 1;
+    if (Math.abs(want - envShade) < 1e-3) return;
+    envShade += (want - envShade) * Math.min(1, dt * 2.5); scene.environmentIntensity = envBase * envShade;
+  });
 }
 
 /* ---------------- sound: off until the visitor turns it on (charter: no autoplay) ---------------- */
