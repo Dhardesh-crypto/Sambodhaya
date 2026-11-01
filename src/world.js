@@ -2180,6 +2180,124 @@ const gardenSpots = []; // (for ?debug checks)
   taken.forEach((t) => { gardenSpots.push(t); });
 }
 
+/* ---------------- ground cover: grass, marigolds, bamboo groves, and trees beyond the moat ---------------- */
+// The low layer of the planting, drawn in batches (instancing, an idea from Athenaion, MIT): thousands of grass
+// tufts on the lawns that sway in the wind, clumps of marigolds (ดาวเรือง, the flower of temple garlands) in beds
+// along the halls and round the plaza, bamboo groves in the corners inside the wall, and rain trees and sugar palms
+// on the land beyond the moat. Each kind is cut into cells of the grounds, so only the cells near the camera and in
+// view are drawn. Nothing grows on a path, a hall, its steps, a pond, a stone or anything standing. "Light" quality
+// gets fewer, simpler tufts and no flowers.
+{
+  let seed = 23; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;   // the same planting every time
+  const segDist = (x, z, p) => { const dx = p.x2 - p.x1, dz = p.z2 - p.z1, L2 = dx * dx + dz * dz || 1; const u = Math.max(0, Math.min(1, ((x - p.x1) * dx + (z - p.z1) * dz) / L2)); return Math.hypot(x - p.x1 - u * dx, z - p.z1 - u * dz); };
+  const lawn = (x, z, r) => {                                                             // a free patch of lawn inside the wall
+    const d = Math.hypot(x, z);
+    if (d < 16.6 + r || d > 74.8 - r) return false;
+    if (Math.hypot(x, z + 55.5) < 6.2 + r || (Math.abs(x) < 12 && z < -57.5)) return false; // the waterfall's pool and cliff
+    for (const p of paths) if (segDist(x, z, p) < p.w / 2 + 0.25 + r) return false;
+    for (const f of floors) { const lx = (x - f.x) * f.c - (z - f.z) * f.s, lz = (x - f.x) * f.s + (z - f.z) * f.c; if (Math.abs(lx) < f.hx + 0.4 + r && Math.abs(lz) < f.hz + 0.4 + r) return false; }
+    for (const b of blockers) { const lx = (x - b.x) * b.c - (z - b.z) * b.s, lz = (x - b.x) * b.s + (z - b.z) * b.c; if (Math.abs(lx) < b.hx + 0.2 + r && Math.abs(lz) < b.hz + 0.2 + r) return false; }
+    for (const q of ponds) if (Math.hypot(x - q.x, z - q.z) < q.r + 1.0 + r) return false;
+    for (const st of journeyStones) if (Math.hypot(x - st.x, z - st.z) < 1.8 + r) return false;
+    for (const c of colliders) if (Math.hypot(x - c.x, z - c.z) < c.r * 0.85 + r) return false;
+    return true;
+  };
+  // ---- cells: one instanced mesh per kind per cell, drawn only near the camera
+  const CELL = 18, cells = new Map();
+  const cellOf = (x, z) => `${Math.floor(x / CELL)},${Math.floor(z / CELL)}`;
+  const addTo = (bucket, x, z, y, s, rot, col) => { const k = cellOf(x, z); if (!bucket.has(k)) bucket.set(k, []); bucket.get(k).push([x, z, y, s, rot, col]); };
+  const sway = (mat, amount) => {                                                         // the wind, from the water clock (calm motion slows it)
+    mat.onBeforeCompile = (sh) => {
+      sh.uniforms.uWaterTime = waterTime;
+      sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nuniform float uWaterTime;")
+        .replace("#include <begin_vertex>", `#include <begin_vertex>
+        { vec3 ip = vec3(instanceMatrix[3][0], 0.0, instanceMatrix[3][2]);
+          float gust = 0.6 + 0.4 * sin(uWaterTime * 0.35 + ip.x * 0.05 + ip.z * 0.04);
+          float w = (sin(uWaterTime * 1.8 + ip.x * 0.37 + ip.z * 0.29) * 0.6 + sin(uWaterTime * 3.1 + ip.x * 0.83 - ip.z * 0.51) * 0.3) * gust;
+          float h = max(position.y, 0.0);
+          transformed.x += w * h * h * ${amount.toFixed(2)}; transformed.z += w * h * h * ${(amount * 0.5).toFixed(2)}; }`);
+    };
+    mat.customProgramCacheKey = () => "sway" + amount;
+  };
+  const build = (bucket, geo, mat, near) => {
+    const o = new THREE.Object3D(), c = new THREE.Color();
+    for (const list of bucket.values()) {
+      const m = new THREE.InstancedMesh(geo, mat, list.length);
+      list.forEach(([x, z, y, sc, rot, col], i) => { o.position.set(x, y, z); o.rotation.set(0, rot, 0); o.scale.setScalar(sc); o.updateMatrix(); m.setMatrixAt(i, o.matrix); m.setColorAt(i, c.setHex(col)); });
+      m.computeBoundingSphere(); m.receiveShadow = true; m.castShadow = false; scene.add(m);
+      const cx = list.reduce((a, v) => a + v[0], 0) / list.length, cz = list.reduce((a, v) => a + v[1], 0) / list.length;
+      cells.set(m, { x: cx, z: cz, near });
+    }
+  };
+  // ---- grass: a tuft of bent blades, light at the tips
+  const tuft = (() => {
+    const P = [], C = [], I = [], blades = HIGH ? 11 : 6;
+    for (let b = 0; b < blades; b++) {
+      const a = b / blades * Math.PI * 2 + rnd(), lean = 0.1 + rnd() * 0.2, h = 0.14 + rnd() * 0.16, w = 0.028, sp = 0.04 + rnd() * 0.12, ox = Math.cos(a) * sp, oz = Math.sin(a) * sp;
+      const base = P.length / 3;
+      for (let k = 0; k <= 2; k++) {
+        const t = k / 2, bend = lean * t * t, ww = w * (1 - t * 0.85), px = ox + Math.cos(a) * bend, pz = oz + Math.sin(a) * bend;
+        P.push(px - Math.sin(a) * ww, h * t, pz + Math.cos(a) * ww, px + Math.sin(a) * ww, h * t, pz - Math.cos(a) * ww);
+        const g = 0.5 + 0.38 * t; C.push(g, g, g, g, g, g);
+      }
+      for (let k = 0; k < 2; k++) { const q = base + k * 2; I.push(q, q + 1, q + 2, q + 1, q + 3, q + 2); }
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(P, 3)); g.setAttribute("color", new THREE.Float32BufferAttribute(C, 3)); g.setIndex(I);
+    g.setAttribute("normal", new THREE.Float32BufferAttribute(new Array(P.length).fill(0).map((_, i) => (i % 3 === 1 ? 1 : 0)), 3)); // lit like the lawn itself
+    return g;
+  })();
+  const grassMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, side: THREE.DoubleSide }); sway(grassMat, 1.4);
+  const grass = new Map(), GRASS = ["0x6fa848", "0x7fb552", "0x5f9a40", "0x8dbd5c", "0x749f45"].map(Number);
+  const nGrass = HIGH ? 22000 : 5000;
+  for (let tries = 0, n = 0; n < nGrass && tries < nGrass * 6; tries++) {
+    const a = rnd() * Math.PI * 2, d = 16.6 + Math.sqrt(rnd()) * 58, x = Math.cos(a) * d, z = Math.sin(a) * d;
+    const patchy = 0.5 + 0.5 * Math.sin(x * 0.21 + Math.sin(z * 0.13) * 2) * Math.sin(z * 0.17 + x * 0.05);   // thicker and thinner patches
+    if (rnd() > 0.35 + 0.65 * patchy || !lawn(x, z, 0.15)) continue;
+    addTo(grass, x, z, 0, 0.8 + rnd() * 0.7, rnd() * 6.28, GRASS[Math.floor(rnd() * GRASS.length)]); n++;
+  }
+  build(grass, tuft, grassMat, HIGH ? 32 : 22);   // (grass far off barely shows: drawn within about this distance plus a cell)
+  if (HIGH) {
+    // ---- marigolds: a low clump of leaves under round orange or yellow flower heads
+    const clump = (hr, hg, hb) => {
+      const parts = [], leaf = new THREE.IcosahedronGeometry(0.16, 0), head = new THREE.IcosahedronGeometry(0.075, 1);
+      const paint = (g, r, gg, b) => { const n = g.attributes.position.count; g.setAttribute("color", new THREE.Float32BufferAttribute(new Array(n).fill(0).flatMap(() => [r, gg, b]), 3)); return g; };
+      for (let k = 0; k < 9; k++) { const a = k * 0.7, r = 0.05 + (k % 3) * 0.06; parts.push(paint(leaf.clone().scale(0.45, 0.9, 0.45).translate(Math.cos(a) * r, 0.11 + (k % 2) * 0.03, Math.sin(a) * r).toNonIndexed(), 0.13, 0.32, 0.09)); } // feathery dark-green leaves
+      for (let k = 0; k < 6; k++) { const a = k * 1.05 + 0.3, r = 0.08 + (k % 2) * 0.09; parts.push(paint(head.clone().scale(1, 0.8, 1).translate(Math.cos(a) * r, 0.24 + (k % 3) * 0.03, Math.sin(a) * r).toNonIndexed(), hr, hg, hb)); }
+      const g = mergeGeometries(parts); g.computeVertexNormals(); return g;
+    };
+    const flowerMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }); sway(flowerMat, 0.6);
+    // two kinds of clump, orange and golden yellow (the instance colour only varies their shade a little)
+    const orange = new Map(), yellow = new Map(), SHADE = [0xffffff, 0xf2f2f2, 0xe6e6e6];
+    const bed = (x, z) => { if (lawn(x, z, 0.25)) addTo(rnd() < 0.6 ? orange : yellow, x, z, 0, 0.85 + rnd() * 0.4, rnd() * 6.28, SHADE[Math.floor(rnd() * SHADE.length)]); };
+    Object.values(salas).forEach((h) => [-1, 1].forEach((sg) => { for (let lz = -h.D / 2; lz <= h.D / 2; lz += 0.55) for (let row = 0; row < 2; row++) { const [x, z] = h.toWorld(sg * (h.W / 2 + 1.5 + row * 0.55), lz + (rnd() - 0.5) * 0.2); bed(x, z); } }));
+    for (let i = 0; i < 260; i++) { const a = i / 260 * Math.PI * 2, d = 17.2 + (i % 2) * 0.5; bed(Math.cos(a) * d, Math.sin(a) * d); }    // round the plaza
+    build(orange, clump(0.94, 0.42, 0.05), flowerMat, 40);
+    build(yellow, clump(0.96, 0.7, 0.08), flowerMat, 40);
+    // ---- bamboo groves in the corners inside the wall
+    const groves = [];
+    for (let tries = 0; tries < 400 && groves.length < 14; tries++) {
+      const a = rnd() * Math.PI * 2, d = 66 + rnd() * 6, x = Math.cos(a) * d, z = Math.sin(a) * d;
+      if (z > 40 && Math.abs(x) < 26) continue;                                           // keep the entrance view open
+      if (!lawn(x, z, 1.6) || groves.some(([gx, gz]) => Math.hypot(gx - x, gz - z) < 9) || edgeTrees.some(([ex, ez]) => Math.hypot(ex - x, ez - z) < 5)) continue;
+      groves.push([x, z, rnd() * 6.28]); colliders.push({ x, z, r: 1.1 });
+    }
+    props("bamboo", 7.5, groves, { extra: true });
+  }
+  // ---- rain trees and sugar palms on the land beyond the moat (only their far versions are ever near enough to load)
+  const beyond = [];
+  for (let tries = 0; tries < 900 && beyond.length < (HIGH ? 46 : 18); tries++) {
+    const a = rnd() * Math.PI * 2, d = 92 + rnd() * 24, x = Math.cos(a) * d, z = Math.sin(a) * d;
+    if (z > 70 && Math.abs(x) < 16) continue;                                             // the way in, beyond the bridge
+    if (beyond.some(([bx, bz]) => Math.hypot(bx - x, bz - z) < 9)) continue;
+    beyond.push([x, z, rnd() * 6.28]);
+  }
+  props("raintree", 12, beyond.filter((_, i) => i % 3 !== 2));
+  props("palm", 13, beyond.filter((_, i) => i % 3 === 2));
+  // ---- each frame: the cells near the camera are drawn
+  const camPos = new THREE.Vector3();
+  waterAnims.push(() => { camera.getWorldPosition(camPos); for (const [m, c] of cells) m.visible = Math.hypot(camPos.x - c.x, camPos.z - c.z) < c.near + CELL; });
+}
+
 /* ---------------- fish in the moat, fed from the bridge ---------------- */
 // Koi and golden carp swim the moat, each patrolling its own stretch (more of them live near the bridge).
 // Standing on the bridge and pressing E, the boy goes to the rail and tosses three handfuls of fish food:
