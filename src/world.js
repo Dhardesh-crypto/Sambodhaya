@@ -10,6 +10,7 @@ import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
+import { Reflector } from "three/addons/objects/Reflector.js";
 import { VRMLoaderPlugin, VRMUtils } from "@pixiv/three-vrm";
 import { createSound } from "./sound.js";
 
@@ -1615,6 +1616,74 @@ function cliffFace({ w, h, z, notch = 2.7, lipY }) {
     colliders.push({ x, z, r: 1.5 });
   });
   [[-13, -50], [-15, -55], [13, -50], [15, -55], [-11, -57], [11, -57]].forEach(([x, z]) => colliders.push({ x, z, r: 1.2 }));
+}
+
+/* ---------------- reflections in the ponds and the waterfall's pool ---------------- */
+// On capable devices ("high" quality) the ponds and the pool mirror the halls, the trees, the Buddha and the sky
+// (a planar reflection, an idea from Athenaion, MIT): the scene drawn again from below the water into a small
+// texture, bent by the same ripples the water already has, mostly the water's own colour looking straight down and
+// more and more mirror toward the horizon. It costs a second drawing of the scene, so: only the nearest pond in
+// view (within REFLECT_NEAR) reflects, the rest keep the plain rippled water beneath; its picture is redrawn every
+// REFLECT_EVERY frames (the ripples still move every frame, and the picture stays true to where things were); and
+// if frames grow slow while it reflects (over REFLECT_SLOW ms for a few seconds), reflections stop for the visit.
+// Never in "light" quality.
+const REFLECT_NEAR = 32, REFLECT_MAX = 1, REFLECT_EVERY = 2, REFLECT_SLOW = 34;
+const REFLECT_SHADER = {
+  name: "PondReflection",
+  uniforms: { color: { value: null }, tDiffuse: { value: null }, textureMatrix: { value: null }, uWaterTime: waterTime,
+    uWaterCol: { value: new THREE.Color() }, uLight: { value: 1 }, ...THREE.UniformsLib.fog },
+  vertexShader: `
+    uniform mat4 textureMatrix; varying vec4 vUv; varying vec3 vWaterPos; varying float vWaterUp;
+    #include <common>
+    #include <fog_pars_vertex>
+    void main() {
+      vUv = textureMatrix * vec4(position, 1.0);
+      vec4 wp = modelMatrix * vec4(position, 1.0); vWaterPos = wp.xyz; vWaterUp = 1.0;
+      vec4 mvPosition = viewMatrix * wp; gl_Position = projectionMatrix * mvPosition;
+      #include <fog_vertex>
+    }`,
+  fragmentShader: `
+    uniform sampler2D tDiffuse; uniform vec3 uWaterCol; uniform float uLight; varying vec4 vUv;
+    ${STILL_WATER_GLSL}
+    #include <fog_pars_fragment>
+    void main() {
+      vec2 g = waterGrad(vWaterPos.xz, uWaterTime);
+      vec4 uv = vUv; uv.xy += g * uv.w * 0.55;                                  // the ripples bend the mirror, gently
+      vec3 refl = texture2DProj(tDiffuse, uv).rgb;
+      vec3 V = normalize(cameraPosition - vWaterPos);
+      float fres = 0.2 + 0.8 * pow(1.0 - clamp(V.y, 0.0, 1.0), 2.5);           // water looking down, mirror toward the horizon
+      vec3 body = uWaterCol * uLight * (0.86 + 0.24 * swNoise(vWaterPos.xz * 0.18));
+      gl_FragColor = vec4(mix(body, refl * 0.92, fres), 1.0);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+      #include <fog_fragment>
+    }`,
+};
+const reflectors = [];
+if (HIGH) {
+  const dpr = Math.min(devicePixelRatio || 1, 2), tw = Math.round(Math.min(960, innerWidth * dpr * 0.5)), th = Math.round(Math.min(640, innerHeight * dpr * 0.5));
+  [...ponds.map((p) => ({ x: p.x, z: p.z, r: p.r, y: 0.556 })), { x: 0, z: -55.5, r: 5, y: 0.406 }].forEach((w) => {
+    const m = new Reflector(new THREE.CircleGeometry(w.r, 48), { textureWidth: tw, textureHeight: th, clipBias: 0.003, multisample: 0, shader: REFLECT_SHADER });
+    m.material.fog = true; m.material.uniforms.uWaterCol.value.copy(MAT.water.color);
+    m.rotation.x = -Math.PI / 2; m.position.set(w.x, w.y, w.z); m.visible = false; m.renderOrder = 1; scene.add(m);
+    // while one mirror draws the scene, the others stay out of it (no mirrors within mirrors)
+    const draw = m.onBeforeRender; let n = 0;
+    m.onBeforeRender = (...a) => {
+      if (n++ % REFLECT_EVERY) return;
+      const hidden = reflectors.filter((o) => o !== m && o.visible); hidden.forEach((o) => (o.visible = false)); draw(...a); hidden.forEach((o) => (o.visible = true));
+    };
+    reflectors.push(m);
+  });
+  const camPos = new THREE.Vector3(); let last = performance.now(), slowFor = 0, off = false;
+  waterAnims.push(() => {
+    const now = performance.now(), ms = now - last; last = now;
+    if (reflectors.some((m) => m.visible) && ms < 500) { slowFor = ms > REFLECT_SLOW ? slowFor + ms : Math.max(0, slowFor - ms); if (slowFor > 3000) off = true; } // (a pause, e.g. a hidden tab, doesn't count)
+    if (off) { reflectors.forEach((m) => (m.visible = false)); return; }
+    camera.getWorldPosition(camPos);
+    const near = reflectors.map((m) => [m, Math.hypot(camPos.x - m.position.x, camPos.z - m.position.z)]).filter(([, d]) => d < REFLECT_NEAR).sort((a, b) => a[1] - b[1]).slice(0, REFLECT_MAX).map(([m]) => m);
+    const light = 0.3 + 0.7 * night.d;
+    reflectors.forEach((m) => { m.visible = near.includes(m); m.material.uniforms.uLight.value = light; });
+  });
 }
 
 /* ---------------- my journey: eight stepping stones ---------------- */
@@ -6477,7 +6546,7 @@ document.fonts.load("64px Itim").then(() => document.fonts.load("36px Mali")).ca
 });
 camYaw = 0; camera.position.set(0, 8, 105);
 restoreSpot(); // back from a page of the site: stand where you were
-if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, renderer, two: () => ({ P1, P2, twoP, owner, kid }), meal, setMealTime: (v) => { mealForce = v; }, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, almsScene, almsShow, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, gardenSpots, paths, floors, ponds, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startKathin, kathinSpots, feed, startFeed, fishes, food, onBridge, merit, startMerit, meritHere, broom, fallenLeaves, can, waterPots, startWater, fold, startFold, foldPetal, altars, gildImage, bodhiBands, lane, novice, birds, cat, rain, petals, catShow, catPlan, pet, startPetDog, startPetCat, petStroke, look: (eye, at) => { camera.position.set(...eye); camera.lookAt(...at); if (composer) composer.render(); else renderer.render(scene, camera); }, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
+if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, renderer, reflectors, two: () => ({ P1, P2, twoP, owner, kid }), meal, setMealTime: (v) => { mealForce = v; }, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, almsScene, almsShow, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, gardenSpots, paths, floors, ponds, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startKathin, kathinSpots, feed, startFeed, fishes, food, onBridge, merit, startMerit, meritHere, broom, fallenLeaves, can, waterPots, startWater, fold, startFold, foldPetal, altars, gildImage, bodhiBands, lane, novice, birds, cat, rain, petals, catShow, catPlan, pet, startPetDog, startPetCat, petStroke, look: (eye, at) => { camera.position.set(...eye); camera.lookAt(...at); if (composer) composer.render(); else renderer.render(scene, camera); }, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
 Promise.race([Promise.all(propJobs), new Promise((r) => setTimeout(r, 7000))]).then(() => {
   $("loading").hidden = true;
   canvas.focus();
