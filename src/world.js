@@ -1651,6 +1651,79 @@ function cliffFace({ w, h, z, notch = 2.7, lipY }) {
   [[-13, -50], [-15, -55], [13, -50], [15, -55], [-11, -57], [11, -57]].forEach(([x, z]) => colliders.push({ x, z, r: 1.2 }));
 }
 
+/* ---------------- the air in the two shrine halls: incense smoke, a shaft of sunlight, dust ---------------- */
+// After Golden Temple (MIT). While incense burns at a shrine's low table, three thin threads of smoke rise from the
+// sticks, wavering and curling as they climb and thinning into the air. By day (high quality only) a soft shaft of
+// sunlight slants in through the door of the Learning Hall and the Universal Hall, and specks of dust drift in it,
+// glinting where the light catches them. All on the water clock, so calm motion slows them.
+{
+  const smokeMat = new THREE.ShaderMaterial({
+    uniforms: { uTime: waterTime, uOpacity: { value: 0 } }, transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: `uniform float uTime, uOpacity; varying vec2 vUv;
+      float wisp(float x, float y, float ph, float x0) {   // one thread: it sways more, curls and spreads as it rises
+        float c = x0 * (1.0 - y) + (0.16 * sin(y * 7.0 - uTime * 1.4 + ph) + 0.06 * sin(y * 17.0 - uTime * 2.6 + ph * 2.0)) * y;
+        float w = 0.01 + 0.09 * y * y;
+        return exp(-pow((x - c) / w, 2.0)) * (0.3 + 0.5 * (0.016 / (w + 0.006)));
+      }
+      void main() {
+        float x = vUv.x - 0.5, y = vUv.y;
+        float a = wisp(x, y, 0.0, -0.05) + wisp(x, y, 2.1, 0.0) + wisp(x, y, 4.3, 0.05);
+        a *= smoothstep(0.0, 0.03, y) * pow(1.0 - y, 1.4) * uOpacity;
+        gl_FragColor = vec4(vec3(0.86, 0.85, 0.82), min(a, 0.6));
+      }` });
+  const smokeGeo = new THREE.PlaneGeometry(0.5, 1.2); smokeGeo.translate(0, 0.6, 0);
+  const tip = new THREE.Vector3(), camPos = new THREE.Vector3();
+  const threads = altars.map((a) => { const m = new THREE.Mesh(smokeGeo, smokeMat.clone()); m.material.uniforms.uTime = waterTime; m.visible = false; m.renderOrder = 3; scene.add(m); return { a, m, o: 0 }; });
+  waterAnims.push((dt) => {
+    camera.getWorldPosition(camPos);
+    for (const s of threads) {
+      const burning = s.a.sticks.length > 0 && s.a.lit > 0;
+      s.o += ((burning ? 1 : 0) - s.o) * Math.min(1, dt * 1.5);
+      s.m.visible = s.o > 0.01;
+      if (!s.m.visible) continue;
+      const e = s.a.sticks[s.a.sticks.length - 1]?.children.find((c) => c.userData.ember);
+      if (e) { e.getWorldPosition(tip); s.m.position.copy(tip); }
+      s.m.rotation.y = Math.atan2(camPos.x - s.m.position.x, camPos.z - s.m.position.z);
+      s.m.material.uniforms.uOpacity.value = s.o * Math.min(1, s.a.sticks.length / 2 + 0.4);
+    }
+  });
+  if (HIGH) [salas.learn, salas.access].forEach((h, k) => {
+    const { g, FY, D, H } = h;
+    // the shaft: from the top of the doorway, down across the floor toward the shrine
+    const from = new THREE.Vector3(k ? -0.5 : 0.5, FY + H * 0.62, D / 2 + 0.3), to = new THREE.Vector3(k ? 0.4 : -0.4, FY, D / 2 - 4.6);
+    const len = from.distanceTo(to), dir = to.clone().sub(from).normalize();
+    const beamMat = new THREE.ShaderMaterial({
+      uniforms: { uTime: waterTime, uDay: { value: 1 } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+      vertexShader: `varying vec2 vUv; varying float vFace; void main() { vUv = uv; vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vFace = abs(dot(normalize(normalMatrix * normal), normalize(-mv.xyz))); gl_Position = projectionMatrix * mv; }`,
+      fragmentShader: `uniform float uTime, uDay; varying vec2 vUv; varying float vFace;
+        void main() { float along = smoothstep(0.0, 0.12, 1.0 - vUv.y) * smoothstep(0.0, 0.35, vUv.y);
+          float shimmer = 0.85 + 0.15 * sin(vUv.x * 40.0 + uTime * 0.4) * sin(vUv.y * 9.0 - uTime * 0.25);
+          gl_FragColor = vec4(vec3(1.0, 0.86, 0.62) * pow(vFace, 1.5) * along * shimmer * 0.2 * uDay, 1.0); }` });
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.85, len, 18, 1, true), beamMat);
+    beam.position.copy(from).add(to).multiplyScalar(0.5); beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().negate());
+    beam.renderOrder = 4; g.add(beam);
+    // the dust: specks scattered through the shaft and a little round it, drifting
+    const N = 160, pos = new Float32Array(N * 3), seed = new Float32Array(N);
+    for (let i = 0; i < N; i++) { const u = Math.random(), r = Math.sqrt(Math.random()) * 1.0, a = Math.random() * 6.28;
+      const p = from.clone().lerp(to, u); pos.set([p.x + Math.cos(a) * r, p.y + (Math.random() - 0.5) * 0.6, p.z + Math.sin(a) * r], i * 3); seed[i] = Math.random() * 100; }
+    const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.BufferAttribute(pos, 3)); geo.setAttribute("seed", new THREE.BufferAttribute(seed, 1));
+    const dustMat = new THREE.ShaderMaterial({
+      uniforms: { uTime: waterTime, uDay: { value: 1 }, uFrom: { value: from }, uDir: { value: dir }, uLen: { value: len }, uScale: { value: innerHeight * Math.min(devicePixelRatio || 1, 2) / 2 } },
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+      vertexShader: `attribute float seed; uniform float uTime, uLen, uScale; uniform vec3 uFrom, uDir; varying float vLit;
+        void main() { vec3 p = position + vec3(sin(uTime * 0.13 + seed) * 0.25, sin(uTime * 0.09 + seed * 1.7) * 0.2, cos(uTime * 0.11 + seed * 0.6) * 0.25);
+          float t = clamp(dot(p - uFrom, uDir), 0.0, uLen); float d = distance(p, uFrom + uDir * t); float rad = mix(0.55, 0.85, t / uLen);
+          vLit = (1.0 - smoothstep(rad * 0.6, rad, d)) * (0.55 + 0.45 * sin(uTime * 1.7 + seed * 5.0));   // glints only in the light
+          vec4 mv = modelViewMatrix * vec4(p, 1.0); gl_PointSize = max(uScale * 0.014 / -mv.z, 1.5); gl_Position = projectionMatrix * mv; }`,
+      fragmentShader: `uniform float uDay; varying float vLit;
+        void main() { float r = length(gl_PointCoord - 0.5); if (r > 0.5) discard; gl_FragColor = vec4(vec3(1.0, 0.92, 0.75) * (1.0 - r * 2.0) * vLit * uDay * 1.6, 1.0); }` });
+    const dust = new THREE.Points(geo, dustMat); dust.renderOrder = 4; g.add(dust);
+    waterAnims.push(() => { const day = Math.max(0, night.d * 1.25 - 0.25); beamMat.uniforms.uDay.value = day; dustMat.uniforms.uDay.value = day; beam.visible = dust.visible = day > 0.01; });
+  });
+}
+
 /* ---------------- reflections in the ponds and the waterfall's pool ---------------- */
 // On capable devices ("high" quality) the ponds and the pool mirror the halls, the trees, the Buddha and the sky
 // (a planar reflection, an idea from Athenaion, MIT): the scene drawn again from below the water into a small
@@ -2619,8 +2692,6 @@ function incenseBundle() { // three sticks and a lotus bud, held together
   const bud = add(new THREE.SphereGeometry(0.05, 10, 8), lotusMat, 0.05, 0.31, 0.02, g, false); bud.scale.y = 1.7; bud.userData.lotus = true;
   return g;
 }
-const smokes = []; // incense smoke: soft puffs rising and fading
-function puff(x, y, z) { const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: softTex, color: 0xe8e4dc, transparent: true, opacity: 0.35, depthWrite: false })); m.position.set(x, y, z); m.scale.setScalar(0.08); m.userData = { t: 0, dx: (Math.random() - 0.5) * 0.08 }; scene.add(m); smokes.push(m); }
 function meritHere() {
   for (const a of altars) if (Math.hypot(player.x - a.near.x, player.z - a.near.z) < 1.1) return { kind: "offer", near: a.near, far: a.far, faceYaw: a.faceYaw, altar: a };
   if (gildImage.near && Math.hypot(player.x - gildImage.near.x, player.z - gildImage.near.z) < 1.1) return { kind: "gild", near: gildImage.near, far: gildImage.far, faceYaw: gildImage.faceYaw };
@@ -2758,11 +2829,9 @@ function poseMerit(model, B) {
   }
 }
 function meritStep(dt) {
-  // the smoke and the burning sticks go on whether or not he is making an offering
-  for (let i = smokes.length - 1; i >= 0; i--) { const m = smokes[i], d = m.userData; d.t += dt; m.position.y += dt * 0.35; m.position.x += d.dx * dt; m.scale.setScalar(0.08 + d.t * 0.12); m.material.opacity = 0.3 * Math.max(0, 1 - d.t / 2.6); if (d.t > 2.6) { scene.remove(m); m.material.dispose(); smokes.splice(i, 1); } }
+  // the burning sticks go on whether or not he is making an offering (their smoke: see "the air in the two shrine halls")
   for (const a of altars) {
     if (a.lit > 0) { a.lit -= dt; if (a.lit <= 0) { a.candles.forEach((f) => { f.visible = false; }); a.sticks.forEach((g) => scene.remove(g)); a.sticks = []; } }
-    a.sticks.forEach((g) => { if (Math.random() < dt * 2.2) { const e = g.children.find((c) => c.userData.ember); if (e) { const p = e.getWorldPosition(new THREE.Vector3()); puff(p.x, p.y + 0.02, p.z); } } });
   }
   if (merit.t < 0) return;
   const before = merit.t; merit.t += dt; const t = merit.t;
