@@ -1373,9 +1373,12 @@ function spire(h, k = 0.85) {
 }
 
 /* ---------------- running water: a waterfall that flows, foams and splashes ---------------- */
-// A curved sheet of water drawn by a small shader inside the standard lit material (so the sun, night, fog and
-// tone mapping treat it like everything else): streaks that stretch and speed up as the water falls, white water
-// low down and at the thin edges, a glassy roll over the lip and a fine moving sparkle. Where it lands, foam turns,
+// The fall is a bundle of streams (after Athenaion, MIT): overlapping ribbons that leave the lip together as one
+// glassy veil and break up lower down into separate strands, each with its own wobble, throw and speed, plus thin
+// detached strands in front and at the edges, some starting below the lip as if from a ledge. All one mesh, drawn
+// by a small shader inside the standard lit material (so the sun, night, fog and tone mapping treat it like
+// everything else): streaks that stretch and speed up as the water falls, white water low down and at the thin,
+// ragged edges, a glassy roll over the lip and a fine moving sparkle. Where it lands, foam turns,
 // rings spread across the pool, droplets splash up and mist billows out and fades. Calm motion slows all of it
 // down rather than stopping it.
 const waterAnims = [];
@@ -1389,20 +1392,24 @@ float wHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453)
 float wNoise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(wHash(i), wHash(i + vec2(1.0, 0.0)), f.x), mix(wHash(i + vec2(0.0, 1.0)), wHash(i + vec2(1.0, 1.0)), f.x), f.y); }
 float fallWhite = 0.0;
-vec4 fallWater(vec2 uv, float t) {
+vec4 fallWater(vec2 uv, float t, float seed, float kind, float speed) {
   float fall = 1.0 - uv.y;                       // 0 at the lip, 1 at the pool
-  float side = min(uv.x, 1.0 - uv.x);            // 0 at either edge
-  float v = sqrt(fall) * 4.0 - t * 1.1;          // water speeds up as it falls, so the streaks stretch toward the bottom
-  float s1 = wNoise(vec2(uv.x * 26.0, v * 1.6));
-  float s2 = wNoise(vec2(uv.x * 61.0 + 7.0, v * 3.3 - t * 0.6));
-  float s3 = wNoise(vec2(uv.x * 140.0 + 3.0, v * 7.0 - t * 1.5));
+  float side = min(uv.x, 1.0 - uv.x) * 2.0;      // 0 at either edge of this stream, 1 in its middle
+  float v = sqrt(fall) * 4.0 - t * 1.1 * speed;  // water speeds up as it falls, so the streaks stretch toward the bottom
+  float sx = uv.x + seed * 3.7;
+  float s1 = wNoise(vec2(sx * 9.0, v * 1.6 + seed * 11.0));
+  float s2 = wNoise(vec2(sx * 23.0 + 7.0, v * 3.3 - t * 0.6));
+  float s3 = wNoise(vec2(sx * 55.0 + 3.0, v * 7.0 - t * 1.5));
   float streak = smoothstep(0.42, 0.95, s1 * 0.5 + s2 * 0.35 + s3 * 0.15);
-  float aerated = smoothstep(0.15, 1.0, fall) * 0.55 + (1.0 - smoothstep(0.0, 0.14, side)) * 0.45; // white water low down and at the thin edges
-  float lip = (1.0 - smoothstep(0.0, 0.07, fall)) * 0.5;                                          // the glassy roll over the lip
-  float sparkle = pow(wNoise(vec2(uv.x * 220.0, v * 14.0 - t * 2.0)), 14.0) * 1.5;
+  // ragged edges: each stream frays more the further it falls (the strands, from the start)
+  float fray = wNoise(vec2(sx * 14.0, v * 2.2 + seed * 5.0));
+  float edge = smoothstep(0.0, 0.35 + 0.3 * kind, side - (fray - 0.5) * (0.25 + 0.55 * fall + 0.3 * kind));
+  float aerated = smoothstep(0.15, 1.0, fall) * 0.55 + (1.0 - smoothstep(0.0, 0.5, side)) * 0.35 + kind * 0.25; // white water low down, at the edges, in the thin strands
+  float lip = (1.0 - smoothstep(0.0, 0.07, fall)) * 0.5 * (1.0 - kind);                                          // the glassy roll over the lip
+  float sparkle = pow(wNoise(vec2(sx * 80.0, v * 14.0 - t * 2.0)), 14.0) * 1.5;
   fallWhite = clamp(streak * 0.85 + aerated * 0.6 + sparkle, 0.0, 1.0);
   vec3 col = mix(vec3(0.16, 0.42, 0.48), vec3(0.93, 0.98, 1.0), fallWhite) + lip * vec3(0.25, 0.3, 0.3);
-  float a = (0.5 + 0.5 * fallWhite) * smoothstep(0.0, 0.035, side) * (1.0 - smoothstep(0.97, 1.0, fall) * 0.4);
+  float a = (0.45 + 0.55 * fallWhite) * edge * (1.0 - smoothstep(0.96, 1.0, fall) * 0.4) * (1.0 - 0.35 * kind);
   return vec4(col, a);
 }`;
 // mist: puffs rising from the landing, drifting out, growing and fading; all worked out on the GPU (one draw call)
@@ -1446,22 +1453,47 @@ const foamTex = () => canvasTexture(256, 256, (g, w, h) => {
 const softTex = canvasTexture(64, 64, (g, w) => { const gr = g.createRadialGradient(w / 2, w / 2, 0, w / 2, w / 2, w / 2); gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(1, "rgba(255,255,255,0)"); g.fillStyle = gr; g.fillRect(0, 0, w, w); });
 function waterfall(x, zTop, yTop, yPool, width) {
   const drop = yTop - yPool, landZ = zTop + 0.85;
-  // the falling sheet: leaves the lip, curves outward a little, then drops straight
-  const geo = new THREE.PlaneGeometry(width, drop, 12, 32), pos = geo.attributes.position;
-  for (let i = 0; i < pos.count; i++) { const t = (pos.getY(i) + drop / 2) / drop; pos.setZ(i, 0.85 * Math.pow(1 - t, 0.6)); pos.setX(i, pos.getX(i) * (1 - (1 - t) * 0.06)); }
-  geo.computeVertexNormals();
+  // the streams: [centre across (-1..1), half width, throw, start below the lip (0..1), kind (0 veil, 1 strand), speed]
+  const R = (k) => { const v = Math.sin(k * 91.7 + 13.1) * 43758.5; return v - Math.floor(v); };
+  const streams = [];
+  const nVeil = 7;
+  for (let i = 0; i < nVeil; i++) { const c = -0.86 + 1.72 * i / (nVeil - 1); streams.push([c + (R(i) - 0.5) * 0.08, width / nVeil * (0.52 + 0.22 * R(i + 9)), 0.75 + 0.3 * R(i + 3), 0, 0, 0.9 + 0.25 * R(i + 5)]); } // (touching at the lip, parting lower down)
+  [[-1.02, 0.09, 1.0, 0.1], [-0.55, 0.06, 1.25, 0.0], [0.12, 0.07, 1.3, 0.22], [0.6, 0.05, 1.2, 0.05], [0.98, 0.1, 0.95, 0.15], [-0.2, 0.05, 1.35, 0.4]]
+    .forEach(([c, hw, th, st], k) => streams.push([c, hw, th, st, 1, 1.05 + 0.2 * R(k + 20)]));
+  const P = [], UV = [], SEED = [], KIND = [], SPEED = [], IDX = [];
+  const ROWS = 30, COLS = 3;
+  streams.forEach(([c, hw, th, st, kind, sp], si) => {
+    const base = P.length / 3, seed = R(si + 40), wob = 0.1 + 0.16 * R(si + 50), ph = R(si + 60) * 6.28, taper = 0.22 + 0.25 * R(si + 70);
+    for (let r = 0; r <= ROWS; r++) {
+      const f = st + (1 - st) * r / ROWS, t = 1 - f;                                   // f: 0 at the lip, 1 at the pool
+      const throwZ = th * Math.pow(f, 0.6) * (0.7 + 0.3 * kind) + (kind ? 0.12 : 0);    // out from the rock, and the strands in front
+      const cx = c * width / 2 + Math.sin(f * 3.2 + ph) * wob * f;                      // each stream wanders a little as it falls
+      const w = hw * (1 - taper * f);
+      for (let q = 0; q <= COLS; q++) {
+        const a = q / COLS;
+        P.push(x + cx + (a - 0.5) * 2 * w, yPool + drop * t, zTop + throwZ);
+        UV.push(a, t); SEED.push(seed); KIND.push(kind); SPEED.push(sp);
+      }
+    }
+    for (let r = 0; r < ROWS; r++) for (let q = 0; q < COLS; q++) { const a = base + r * (COLS + 1) + q, b = a + COLS + 1; IDX.push(a, b, a + 1, b, b + 1, a + 1); }
+  });
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(P, 3)); geo.setAttribute("uv", new THREE.Float32BufferAttribute(UV, 2));
+  geo.setAttribute("aSeed", new THREE.Float32BufferAttribute(SEED, 1)); geo.setAttribute("aKind", new THREE.Float32BufferAttribute(KIND, 1)); geo.setAttribute("aSpeed", new THREE.Float32BufferAttribute(SPEED, 1));
+  geo.setIndex(IDX); geo.computeVertexNormals();
   const uTime = { value: 0 };
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, roughness: 0.15, metalness: 0, emissive: 0x2c5560, emissiveIntensity: 0.35, depthWrite: false, side: THREE.DoubleSide });
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uTime = uTime;
-    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying vec2 vFallUv;").replace("#include <uv_vertex>", "#include <uv_vertex>\nvFallUv = uv;");
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nattribute float aSeed; attribute float aKind; attribute float aSpeed;\nvarying vec2 vFallUv; varying vec3 vFall;")
+      .replace("#include <uv_vertex>", "#include <uv_vertex>\nvFallUv = uv; vFall = vec3(aSeed, aKind, aSpeed);");
     sh.fragmentShader = sh.fragmentShader
-      .replace("#include <common>", "#include <common>\nvarying vec2 vFallUv;\nuniform float uTime;\n" + FALL_GLSL)
-      .replace("#include <map_fragment>", "#include <map_fragment>\n{ vec4 w = fallWater(vFallUv, uTime); diffuseColor.rgb *= w.rgb; diffuseColor.a *= w.a; }")
+      .replace("#include <common>", "#include <common>\nvarying vec2 vFallUv; varying vec3 vFall;\nuniform float uTime;\n" + FALL_GLSL)
+      .replace("#include <map_fragment>", "#include <map_fragment>\n{ vec4 w = fallWater(vFallUv, uTime, vFall.x, vFall.y, vFall.z); diffuseColor.rgb *= w.rgb; diffuseColor.a *= w.a; }")
       .replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(0.16, 0.19, 0.2) * fallWhite;"); // white water reads bright even in shade
   };
   mat.customProgramCacheKey = () => "waterfall-sheet";
-  const sheetMesh = new THREE.Mesh(geo, mat); sheetMesh.position.set(x, yPool + drop / 2, zTop); sheetMesh.renderOrder = 2; scene.add(sheetMesh);
+  const sheetMesh = new THREE.Mesh(geo, mat); sheetMesh.renderOrder = 2; scene.add(sheetMesh); // (built in place: positions are in the world)
   waterAnims.push((dt, t) => { uTime.value = t; });
   // foam where it lands: two layers turning opposite ways, gently breathing
   [[1, 0.9, 0.35], [-1, 0.7, 0.5]].forEach(([dir, op, spd], k) => {
@@ -6445,7 +6477,7 @@ document.fonts.load("64px Itim").then(() => document.fonts.load("36px Mali")).ca
 });
 camYaw = 0; camera.position.set(0, 8, 105);
 restoreSpot(); // back from a page of the site: stand where you were
-if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, two: () => ({ P1, P2, twoP, owner, kid }), meal, setMealTime: (v) => { mealForce = v; }, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, almsScene, almsShow, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, gardenSpots, paths, floors, ponds, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startKathin, kathinSpots, feed, startFeed, fishes, food, onBridge, merit, startMerit, meritHere, broom, fallenLeaves, can, waterPots, startWater, fold, startFold, foldPetal, altars, gildImage, bodhiBands, lane, novice, birds, cat, rain, petals, catShow, catPlan, pet, startPetDog, startPetCat, petStroke, look: (eye, at) => { camera.position.set(...eye); camera.lookAt(...at); if (composer) composer.render(); else renderer.render(scene, camera); }, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
+if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, renderer, two: () => ({ P1, P2, twoP, owner, kid }), meal, setMealTime: (v) => { mealForce = v; }, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, almsScene, almsShow, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, gardenSpots, paths, floors, ponds, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startKathin, kathinSpots, feed, startFeed, fishes, food, onBridge, merit, startMerit, meritHere, broom, fallenLeaves, can, waterPots, startWater, fold, startFold, foldPetal, altars, gildImage, bodhiBands, lane, novice, birds, cat, rain, petals, catShow, catPlan, pet, startPetDog, startPetCat, petStroke, look: (eye, at) => { camera.position.set(...eye); camera.lookAt(...at); if (composer) composer.render(); else renderer.render(scene, camera); }, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
 Promise.race([Promise.all(propJobs), new Promise((r) => setTimeout(r, 7000))]).then(() => {
   $("loading").hidden = true;
   canvas.focus();
