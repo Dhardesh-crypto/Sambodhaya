@@ -120,10 +120,49 @@ const MARBLE_SLABS = 2.2; // metres of floor per repeat of the texture (four sla
 const marbleFloor = (w, d) => P("marble_01", w / MARBLE_SLABS, d / MARBLE_SLABS, { color: 0xfff9f0, roughness: 0.45 });
 const M = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.85, ...extra });
 const S = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.6, ...extra });
+// Gold, lacquer and bronze (after Golden Temple, MIT): gold is laid as gold leaf, a true metal that mirrors the sky,
+// in small squares with faint seams, each square a shade apart and the shine a little uneven; lacquer has a glossy
+// clear coat over faint brush streaks; bronze is a dark, warm metal. Worked out in the shader from world position,
+// so no textures are loaded, and it works the same on instanced pieces.
+const LEAF_GLSL = `
+varying vec3 vLeafPos; varying vec3 vLeafNrm;
+float lfHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float lfNoise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(lfHash(i), lfHash(i + vec2(1.0, 0.0)), f.x), mix(lfHash(i + vec2(0.0, 1.0)), lfHash(i + vec2(1.0, 1.0)), f.x), f.y); }
+vec2 leafPlane() { vec3 a = abs(vLeafNrm); return a.y > 0.6 ? vLeafPos.xz : (a.x > a.z ? vLeafPos.zy : vLeafPos.xy); }`;
+const LEAF_VERT = `{ vec4 lp = vec4(transformed, 1.0); vec3 ln = objectNormal;
+  #ifdef USE_INSTANCING
+  lp = instanceMatrix * lp; ln = mat3(instanceMatrix) * ln;
+  #endif
+  vLeafPos = (modelMatrix * lp).xyz; vLeafNrm = normalize(mat3(modelMatrix) * ln); }`;
+function surface(mat, key, frag) {
+  mat.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying vec3 vLeafPos; varying vec3 vLeafNrm;").replace("#include <begin_vertex>", "#include <begin_vertex>\n" + LEAF_VERT);
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\n" + LEAF_GLSL + "\nfloat lfSeam = 0.0, lfNoiseV = 0.5;").replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\n" + frag.rough).replace("#include <map_fragment>", "#include <map_fragment>\n" + frag.color);
+  };
+  mat.customProgramCacheKey = () => key;
+  return mat;
+}
+const goldLeaf = (color = 0xe2b24c, extra = {}) => surface(new THREE.MeshStandardMaterial({ color, metalness: 0.95, roughness: 0.3, ...extra }), "gold-leaf", {
+  color: `{ vec2 c = leafPlane() / 0.085; vec2 f = fract(c); float tile = lfHash(floor(c));
+    lfSeam = 1.0 - smoothstep(0.0, 0.035, min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y)));
+    lfNoiseV = lfNoise(leafPlane() * 5.0);
+    diffuseColor.rgb *= (0.96 + 0.06 * tile) * (1.0 - 0.05 * lfSeam) * (0.94 + 0.08 * lfNoiseV); }`,
+  rough: `roughnessFactor = clamp(roughnessFactor * (0.65 + 0.6 * lfNoiseV) + lfSeam * 0.03, 0.08, 1.0);`,
+});
+const lacquer = (color, extra = {}) => surface(new THREE.MeshPhysicalMaterial({ color, roughness: 0.42, clearcoat: 1, clearcoatRoughness: 0.12, ...extra }), "lacquer", {
+  color: `{ vec2 q = leafPlane(); lfNoiseV = lfNoise(vec2(q.x * 1.2, q.y * 9.0)) * 0.6 + lfNoise(q * 3.0) * 0.4;   // brush streaks
+    diffuseColor.rgb *= 0.9 + 0.16 * lfNoiseV; }`,
+  rough: `roughnessFactor = clamp(roughnessFactor * (0.8 + 0.4 * lfNoiseV), 0.05, 1.0);`,
+});
+const BRONZE_MAT = surface(new THREE.MeshStandardMaterial({ color: 0x8a6a3a, metalness: 0.9, roughness: 0.42 }), "bronze", {
+  color: `{ lfNoiseV = lfNoise(leafPlane() * 7.0); diffuseColor.rgb *= mix(vec3(1.0), vec3(0.62, 0.78, 0.7), smoothstep(0.62, 0.9, lfNoiseV) * 0.6); }`, // a little green patina
+  rough: `roughnessFactor = clamp(roughnessFactor + (lfNoiseV - 0.5) * 0.3, 0.1, 1.0);`,
+});
 const MAT = {
   grass: new THREE.MeshStandardMaterial({ color: 0x7db552, roughness: 1, normalMap: HIGH ? tex("leafy_grass", "nor", 70, 70) : null, normalScale: new THREE.Vector2(0.6, 0.6) }), rock: P("mossy_rock", 3, 3), stone: P("brick_pavement_02", 3, 3, { color: new THREE.Color(1.75, 1.5, 1.2) }), stoneDark: M(0xb39f7d), wood: S(0x8a4a2a), woodDark: S(0x4a2a18),
-  roof: P("clay_roof_tiles_02", 0.4, 0.4, { color: 0xffb08a }), roofEdge: S(0xd9a640, { metalness: 0.55, roughness: 0.5 }), wall: P("beige_wall_001", 2, 1, { color: 0xfff4e2 }), gold: S(0xe0b24a, { metalness: 0.65, roughness: 0.45 }),
-  lacquer: S(0x8e1f17, { roughness: 0.45 }), roofGreen: S(0x2f6b4a, { roughness: 0.5 }),
+  roof: P("clay_roof_tiles_02", 0.4, 0.4, { color: 0xffb08a }), roofEdge: goldLeaf(0xd9a640, { roughness: 0.36 }), wall: P("beige_wall_001", 2, 1, { color: 0xfff4e2 }), gold: goldLeaf(),
+  lacquer: lacquer(0x8e1f17), roofGreen: S(0x2f6b4a, { roughness: 0.5 }),
   leaf: M(0x5f9e4a), leafLight: M(0x7db85a), trunk: M(0x7a5536), water: new THREE.MeshStandardMaterial({ color: 0x2f7f8a, roughness: 0.06, metalness: 0.15, transparent: true, opacity: 0.88 }),
   lotus: M(0xf28fb0), pad: M(0x4d8f45), glow: M(0xffd27a, { emissive: 0xffb84a, emissiveIntensity: 0.9 }), mountain: M(0x9fb0b8), mountainFar: M(0xbcc8cc),
 };
