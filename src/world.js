@@ -532,7 +532,8 @@ const pond = (x, z, r) => {
   add(new THREE.CircleGeometry(r, 40), S(0x24382b, { roughness: 1 }), x, 0.5, z, scene, false).rotation.x = -Math.PI / 2;
   colliders.push({ x, z, r: r + 0.6 });
 };
-{ const p0 = scene.children.length; pond(-14, 30, 6); pond(14, 30, 6); pond(-36, 22, 5); pond(36, 24, 4); mergeStatic(scene, p0); }
+// (across the road from the first, the silver and gold Bodhi tree stands where its twin was)
+{ const p0 = scene.children.length; pond(-14, 30, 6); pond(-36, 22, 5); pond(36, 24, 4); mergeStatic(scene, p0); }
 ponds.forEach(({ x, z, r }) => { const w = add(new THREE.CylinderGeometry(r, r, 0.3, 40), pondWaterMat, x, 0.4, z, scene, false); w.renderOrder = 2; pondWaters.push(w); });
 
 /* ---------------- text signs (Thai-ready canvas textures) ---------------- */
@@ -2207,6 +2208,171 @@ const nagaScales = (() => {
   props("naga", NAGA_H, nagaHeads, { fallback: () => nagaHeads.forEach(([hx, hz, , hy]) => add(new THREE.ConeGeometry(0.35, 1.6, 8), MAT.gold, hx, hy + 0.8, hz)) });
 }
 
+/* ---------------- the silver and gold Bodhi tree (ต้นโพธิ์เงิน-โพธิ์ทอง) just inside the gate ---------------- */
+// A gilded offering tree on a white lotus, on a round court of its own across the road from the lotus pond (in the
+// place of the pond's twin), the first thing you see through the gate.
+// Its branches sweep up in three tiers like the temple trees it follows (Wat Nong Khan's picture): gold at the top,
+// silver in the middle, copper below. Every leaf on it is a real gift: a donation, marked Verified by the caretakers,
+// that asked for a leaf (the public list: /.netlify/functions/leaves; no amounts). Leaves take the hooks of their
+// tier in a fixed scattered order; once every hook is taken, later leaves hang beneath earlier ones, a string of
+// leaves on each hook. They swing in the same gusts as the wind bells. Walk up and press E: the tree's list, a search
+// and the way to hang a leaf; tap a leaf to read it; world.html#leaf=<id> brings you to that leaf.
+const LEAF_TREE = { x: 14, z: 30, r: 1.8 };
+let windGust = 0.5; // (set by the wind bells, below, which wander the gusts)
+// a Bodhi leaf, hanging point down: heart-shaped with a long drip tip (also the wind bells' sail)
+const bodhiLeafShape = () => {
+  const leaf = new THREE.Shape();
+  leaf.moveTo(0, -0.02); leaf.bezierCurveTo(0.06, 0.0, 0.12, -0.05, 0.1, -0.13); leaf.bezierCurveTo(0.085, -0.19, 0.03, -0.22, 0, -0.32);
+  leaf.bezierCurveTo(-0.03, -0.22, -0.085, -0.19, -0.1, -0.13); leaf.bezierCurveTo(-0.12, -0.05, -0.06, 0.0, 0, -0.02);
+  return leaf;
+};
+const leafTree = { list: [], placed: [], byId: new Map(), sel: null, label: null, glow: null, meshes: {}, hooks: {} };
+{
+  const T = LEAF_TREE, g = new THREE.Group(); g.position.set(T.x, 0, T.z); scene.add(g);
+  const gold = goldLeaf(0xd9a838, { roughness: 0.32 });
+  // its court: paving like the road's, and a short path to it from the road
+  path(3.4, T.z, T.x - 3.4, T.z, 2.6);
+  add(new THREE.CylinderGeometry(4, 4, 0.15, 48), P("brick_pavement_02", 3, 3, { color: new THREE.Color(1.75, 1.5, 1.2) }), 0, -0.05, 0, g, false);
+  paths.push({ x1: T.x, z1: T.z, x2: T.x, z2: T.z + 0.01, w: 8 }); // (the court as a path: stone underfoot, no grass on it)
+  // the base: two round white steps and a lotus of upturned petals the trunk rises from
+  add(new THREE.CylinderGeometry(T.r, T.r + 0.08, 0.26, 40), WALL_WHITE, 0, 0.13, 0, g);
+  add(new THREE.CylinderGeometry(T.r - 0.35, T.r - 0.3, 0.24, 40), WALL_WHITE, 0, 0.38, 0, g);
+  add(new THREE.TorusGeometry(T.r - 0.33, 0.025, 6, 40), gold, 0, 0.5, 0, g, false).rotation.x = Math.PI / 2;
+  {
+    const petal = new THREE.SphereGeometry(1, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.55); petal.scale(0.22, 0.5, 0.11); // a cupped petal, open side out
+    const parts = [];
+    [[0.62, 0.5, 0.55, 12, 0], [0.45, 0.62, 0.3, 10, 0.3]].forEach(([rad, y, tilt, n, off]) => {
+      for (let i = 0; i < n; i++) {
+        const a = (i + off) / n * Math.PI * 2, p = petal.clone();
+        p.rotateX(-tilt); p.rotateY(-a + Math.PI / 2); p.translate(Math.cos(a) * rad, y + 0.08, Math.sin(a) * rad); parts.push(p);
+      }
+    });
+    add(mergeGeometries(parts), WALL_WHITE, 0, 0, 0, g);
+  }
+  // the trunk and its spire, and the branches: each sweeps out, rises and curls back at the tip
+  const parts = [new THREE.CylinderGeometry(0.06, 0.15, 6.6, 12).translate(0, 0.75 + 3.3, 0), new THREE.ConeGeometry(0.07, 1.1, 10).translate(0, 7.9, 0),
+    new THREE.SphereGeometry(0.11, 12, 8).translate(0, 7.3, 0)];
+  // [the tier's metal, [height, reach] of each whorl, branches per whorl, hooks per branch]
+  const TIERS = [["copper", [[2.0, 1.95], [2.6, 1.8], [3.2, 1.6]], 9, 5], ["silver", [[3.8, 1.38], [4.35, 1.22], [4.9, 1.06]], 8, 4], ["gold", [[5.45, 0.88], [5.95, 0.72], [6.4, 0.56]], 7, 3]];
+  let seed = 3; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (const [metal, whorls, n, k] of TIERS) {
+    const hooks = [];
+    whorls.forEach(([y, L], w) => {
+      for (let i = 0; i < n; i++) {
+        const a = (i + w * 0.5) / n * Math.PI * 2, c = Math.cos(a), s = Math.sin(a), P = (r, h) => new THREE.Vector3(c * r, y + h, s * r);
+        const curve = new THREE.CatmullRomCurve3([P(0.05, -0.06), P(0.35 * L, 0), P(0.72 * L, 0.12 * L), P(L, 0.42 * L), P(0.96 * L, 0.62 * L), P(0.84 * L, 0.66 * L)]);
+        parts.push(new THREE.TubeGeometry(curve, 20, metal === "gold" ? 0.022 : 0.03, 5));
+        for (let j = 0; j < k; j++) { const p = curve.getPointAt(0.24 + 0.52 * j / Math.max(1, k - 1)); hooks.push([T.x + p.x, p.y - 0.03, T.z + p.z]); }
+      }
+    });
+    for (let i = hooks.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [hooks[i], hooks[j]] = [hooks[j], hooks[i]]; } // scattered, so a new tier fills evenly
+    leafTree.hooks[metal] = hooks;
+  }
+  add(mergeGeometries(parts), gold, 0, 0, 0, g);
+  colliders.push({ x: T.x, z: T.z, r: T.r + 0.1 });
+  sign(tx("ต้นโพธิ์เงิน-โพธิ์ทอง", "Silver & gold Bodhi tree"), tx("ร่วมแขวนใบโพธิ์ สร้างวัดด้วยกัน", "Hang a leaf · build the temple together"), "🍃", T.x, 9.4, T.z, 4.4);
+  // the leaves: one batch per metal, each leaf on a short wire; the wire of a leaf lower on a string meets the tip above
+  const SPACING = 0.45, leafGeo = mergeGeometries([new THREE.ShapeGeometry(bodhiLeafShape(), 10).translate(0, -0.06, 0), new THREE.CylinderGeometry(0.004, 0.004, 0.08, 4).translate(0, -0.02, 0)]);
+  leafGeo.scale(1.1, 1.1, 1.1); // (0.43 m with its wire: about one string step)
+  const mats = {
+    gold: goldLeaf(0xe2b24c, { side: THREE.DoubleSide, roughness: 0.3 }),
+    silver: new THREE.MeshStandardMaterial({ color: 0xeef1f5, metalness: 0.85, roughness: 0.25, side: THREE.DoubleSide }),
+    copper: new THREE.MeshStandardMaterial({ color: 0xe08d5c, metalness: 0.8, roughness: 0.3, side: THREE.DoubleSide }),
+  };
+  const CAP = 1200; // per metal, before the instance buffers need to grow (they do, below)
+  const make = (metal, cap) => {
+    const old = leafTree.meshes[metal]; if (old) { scene.remove(old); old.dispose(); }
+    const m = new THREE.InstancedMesh(leafGeo, mats[metal], cap); m.count = 0; m.cap = cap;
+    m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.frustumCulled = false; m.castShadow = false; scene.add(m); leafTree.meshes[metal] = m;
+  };
+  ["gold", "silver", "copper"].forEach((k) => make(k, CAP));
+  // (re)hang every leaf from the list
+  leafTree.set = (list) => {
+    leafTree.list = (Array.isArray(list) ? list : []).filter((l) => l && l.id && mats[l.metal]);
+    const seen = { gold: 0, silver: 0, copper: 0 };
+    leafTree.placed = leafTree.list.map((l) => {
+      const H = leafTree.hooks[l.metal], i = seen[l.metal]++, h = H[i % H.length];
+      return { ...l, slot: i, hook: h, depth: Math.floor(i / H.length), ph: (i * 2.39 + l.metal.length) % 6.283, pos: new THREE.Vector3(h[0], h[1] - SPACING * Math.floor(i / H.length) - 0.2, h[2]) };
+    });
+    leafTree.byId = new Map(leafTree.placed.map((l) => [l.id, l]));
+    for (const k of Object.keys(seen)) { if (seen[k] > leafTree.meshes[k].cap) make(k, Math.ceil(seen[k] * 1.5)); leafTree.meshes[k].count = seen[k]; }
+    still = false;
+  };
+  // the leaves swing on their hooks (a string as one), and each turns a little on its own
+  const M = new THREE.Matrix4(), L2 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), v = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1);
+  let time = 0, still = false;
+  waterAnims.push((dt) => {
+    time += dt;
+    const far = Math.hypot(player.x - T.x, player.z - T.z) > 60;
+    if (far && still) return; // out of sight: leave them hanging as they are
+    const calm = settings.calmMotion, amp = calm ? 0 : 0.05 + 0.16 * windGust * windGust;
+    for (const l of leafTree.placed) {
+      const t = time * 1.1 + l.ph;
+      e.set(amp * Math.sin(t * 0.9 + l.depth), 0, amp * 0.7 * Math.sin(t * 0.73 + l.ph)); // the string swings from the hook
+      M.compose(v.set(l.hook[0], l.hook[1], l.hook[2]), q.setFromEuler(e), one);
+      L2.compose(v.set(0, -SPACING * l.depth - 0.04, 0), q.setFromEuler(e.set(0, l.ph + (calm ? 0 : (0.4 + windGust) * Math.sin(time * 0.6 + l.ph * 3)), 0)), one);
+      M.multiply(L2); leafTree.meshes[l.metal].setMatrixAt(l.slot, M);
+      l.pos.set(0, -0.17, 0).applyMatrix4(M); // (the middle of the leaf: where a tap finds it)
+    }
+    for (const k in leafTree.meshes) leafTree.meshes[k].instanceMatrix.needsUpdate = true;
+    still = far;
+    if (leafTree.glow) { const l = leafTree.byId.get(leafTree.sel); if (l) { leafTree.glow.position.copy(l.pos); leafTree.glow.material.opacity = calm ? 0.8 : 0.65 + 0.25 * Math.sin(time * 3); leafTree.label.position.set(l.pos.x, l.pos.y + 0.9, l.pos.z); } }
+  });
+}
+const LEAF_METAL = { gold: ["ใบโพธิ์ทอง", "Gold leaf"], silver: ["ใบโพธิ์เงิน", "Silver leaf"], copper: ["ใบโพธิ์ทองแดง", "Copper leaf"] };
+const leafName = (l) => l.name || tx("ผู้ไม่ประสงค์ออกนาม", "Anonymous");
+// light one leaf and name it above; with walk, the child goes to stand before it, looking up at it
+function showLeaf(id, walk = false) {
+  const l = leafTree.byId.get(id); if (!l) return false;
+  if (leafTree.label) { scene.remove(leafTree.label); leafTree.label.material.map.dispose(); signMats.splice(signMats.indexOf(leafTree.label.material), 1); }
+  const sub = [l.dedication && tx("อุทิศแด่ ", "for ") + l.dedication, l.wish].filter(Boolean).join(" · ") || tx(...LEAF_METAL[l.metal]);
+  leafTree.label = sign(leafName(l), sub.length > 46 ? sub.slice(0, 45) + "…" : sub, "🍃", l.pos.x, l.pos.y + 0.9, l.pos.z, 2.6);
+  if (!leafTree.glow) { leafTree.glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: 0xfff0b0, transparent: true, depthWrite: false, toneMapped: false })); leafTree.glow.scale.set(0.9, 0.9, 1); leafTree.glow.renderOrder = 6; scene.add(leafTree.glow); }
+  leafTree.glow.position.copy(l.pos); leafTree.sel = id;
+  if (walk) {
+    // he stands on the court on the road's side of the tree, a little toward the leaf's side, so the camera behind
+    // him is over the open road (the gate's open doors are toward the gate side)
+    const ang = ((Math.atan2(l.hook[2] - LEAF_TREE.z, l.hook[0] - LEAF_TREE.x) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI), R = LEAF_TREE.r + 2.6;
+    const side = Math.max(Math.PI * 1.15, Math.min(Math.PI * 1.3, ang)); // (pi: toward the road; more: toward the plaza)
+    player.x = LEAF_TREE.x + Math.cos(side) * R; player.z = LEAF_TREE.z + Math.sin(side) * R; player.y = groundAt(player.x, player.z);
+    player.yaw = Math.atan2(l.pos.x - player.x, l.pos.z - player.z);
+    camYaw = Math.atan2(player.x - LEAF_TREE.x, player.z - LEAF_TREE.z); camPitch = 0.06; camDist = 7; // (looking at the tree over his shoulder)
+  }
+  return true;
+}
+// a tap: the leaf nearest the line of sight, if one is close to it (leaves are small: a near miss still counts)
+function leafAtRay() {
+  if (!leafTree.placed.length || Math.hypot(camera.position.x - LEAF_TREE.x, camera.position.z - LEAF_TREE.z) > 30) return null;
+  let best = null, bestD = 0.3;
+  for (const l of leafTree.placed) { const d = ray.ray.distanceToPoint(l.pos); if (d < bestD) { best = l; bestD = d; } }
+  return best;
+}
+const LEAF_TREE_PLACE = { id: "leaftree", icon: "🍃", th: "ต้นโพธิ์เงิน-โพธิ์ทอง", en: "Silver & gold Bodhi tree", sub: ["ดูใบโพธิ์ หาชื่อ แขวนใบโพธิ์", "Read the leaves, find a name, hang a leaf"] };
+function openLeafTree() {
+  const n = (k) => leafTree.placed.filter((l) => l.metal === k).length;
+  openDialog(tx("🍃 ต้นโพธิ์เงิน-โพธิ์ทอง", "🍃 The silver and gold Bodhi tree"),
+    `<p>${tx("ทุกใบคือการร่วมสร้างวัดของใครสักคน บางใบอุทิศส่วนกุศลให้คนที่รัก แตะใบโพธิ์บนต้นเพื่ออ่าน", "Every leaf is someone's gift to the temple's building; some are dedicated to someone they love. Tap a leaf on the tree to read it.")}</p>
+     <p>${["gold", "silver", "copper"].map((k) => `${tx(...LEAF_METAL[k])} ${n(k)}`).join(" · ")}</p>
+     ${leafTree.placed.length ? `<label class="field">${tx("หาใบโพธิ์ (ชื่อหรือคำอุทิศ)", "Find a leaf (a name or a dedication)")}<input id="leaf-q" type="search" autocomplete="off"></label><ul class="places" id="leaf-found"></ul>` : `<p>${tx("ยังไม่มีใบโพธิ์บนต้น ใบแรกอาจเป็นของคุณ", "No leaves on the tree yet. The first could be yours.")}</p>`}
+     <p class="note">${tx("สำหรับผู้ใหญ่: ร่วมสมทบทุนสร้างวัด แล้วแขวนใบโพธิ์ที่มีชื่อของคุณหรือคนที่คุณรักได้ ไม่บริจาคก็ได้ วัดเปิดให้ทุกคนเหมือนเดิม", "For adults: give toward the temple's building and hang a leaf with your name, or a loved one's. Giving is entirely optional; the temple is open to everyone just the same.")}</p>
+     <div class="row"><a class="btn" href="${to2d("support")}">${tx("แขวนใบโพธิ์ →", "Hang a leaf →")}</a><a class="chip" href="${to2d("tree")}">${tx("ดูทุกใบ", "See every leaf")}</a><button class="chip" data-close>${tx("เดินต่อ", "Keep walking")}</button></div>`);
+  const q = $("leaf-q"), out = $("leaf-found"); if (!q) return;
+  const list = () => {
+    const w = q.value.trim().toLowerCase();
+    const hits = (w ? leafTree.placed.filter((l) => [l.name, l.dedication, l.wish].some((s) => s && s.toLowerCase().includes(w))) : leafTree.placed).slice(-12).reverse();
+    out.innerHTML = hits.map((l) => `<li><button data-leaf="${esc(l.id)}"><span class="ic">🍃</span><span><strong>${esc(leafName(l))}</strong>${l.dedication ? ` · ${esc(tx("อุทิศแด่ ", "for ") + l.dedication)}` : ""}</span></button></li>`).join("") || `<li>${tx("ไม่พบ", "Nothing found")}</li>`;
+  };
+  q.addEventListener("input", list); list();
+  out.addEventListener("click", (e) => { const b = e.target.closest("[data-leaf]"); if (b) { closeDialog(); showLeaf(b.dataset.leaf, true); } });
+}
+// the leaves load alongside the temple; a link to one leaf (world.html#leaf=<id>) brings the child to it once the
+// temple has loaded (see the end of this file)
+const leafLink = (location.hash.match(/^#leaf=([a-z0-9]{8,16})$/) || [])[1];
+const leavesLoaded = fetch("/.netlify/functions/leaves").then((r) => (r.ok ? r.json() : [])).catch(() => []).then((list) => leafTree.set(list));
+function goToLinkedLeaf() {
+  leavesLoaded.then(() => { if (!showLeaf(leafLink, true)) toast(tx("🍃 ใบโพธิ์นี้ยังไม่ขึ้นต้น จะแขวนเมื่อผู้ดูแลตรวจยอดโอนแล้ว", "🍃 This leaf isn't on the tree yet. It goes up once the caretakers have checked the transfer.")); });
+}
+
 /* ---------------- small things that make it feel lived in ---------------- */
 const BELL = [-6.8, 24.5]; // beside the entrance road: rung without stepping off the road
 props("bell", 4.6, [[BELL[0], BELL[1], 0.9]]); infoSpot("bell", BELL[0], 2.6, BELL[1], 2.6); colliders.push({ x: BELL[0], z: BELL[1], r: 1.6 });
@@ -3746,9 +3912,7 @@ const sound = createSound({ high: HIGH });
     const rod = new THREE.CylinderGeometry(0.005, 0.005, -PIVOT - 0.06, 5); rod.translate(0, (PIVOT + 0.06) / 2 - 0.06, 0);
     const ball = new THREE.SphereGeometry(0.022, 8, 6); ball.translate(0, -0.23, 0);
     const bodyGeo = mergeGeometries([ring, bell, rod, ball]);
-    const leaf = new THREE.Shape(); // a Bodhi leaf, hanging point down: heart-shaped with a long drip tip
-    leaf.moveTo(0, -0.02); leaf.bezierCurveTo(0.06, 0.0, 0.12, -0.05, 0.1, -0.13); leaf.bezierCurveTo(0.085, -0.19, 0.03, -0.22, 0, -0.32);
-    leaf.bezierCurveTo(-0.03, -0.22, -0.085, -0.19, -0.1, -0.13); leaf.bezierCurveTo(-0.12, -0.05, -0.06, 0.0, 0, -0.02);
+    const leaf = bodhiLeafShape();
     const leafHook = new THREE.TorusGeometry(0.012, 0.004, 5, 10); leafHook.translate(0, -0.008, 0);
     const leafGeo = mergeGeometries([new THREE.ShapeGeometry(leaf, 10), leafHook]);
     const leafMat = goldLeaf(0xc9973a, { side: THREE.DoubleSide, roughness: 0.5 });
@@ -3762,7 +3926,7 @@ const sound = createSound({ high: HIGH });
     waterAnims.push((dt) => {
       time += dt;
       if (Math.random() < dt * 0.15) target = 0.2 + Math.random() * 0.8; // gusts wander slowly
-      gust += (target - gust) * Math.min(1, dt * 0.3); sound.setGust(gust);
+      gust += (target - gust) * Math.min(1, dt * 0.3); sound.setGust(gust); windGust = gust;
       spots.forEach((b, i) => {
         b.kick *= Math.exp(-dt * 1.5);
         const amp = 0.04 + 0.2 * gust * gust + b.kick, t = time * b.w * 0.25;
@@ -5648,6 +5812,7 @@ function pickAt(x, y) {
   { const h = salas.learn; // a seated monk: what can be done before him (the child goes to him to do it)
     const s = h && h.teachers && kraap.t < 0 && alms.t < 0 && h.teachers.find((t) => t.rig && TEACHER_TALK[t.name] && ray.intersectObject(t.rig.holder, true).length);
     if (s) { openMonk(monkPlace(h, s)); return; } }
+  { const l = leafAtRay(); if (l) { showLeaf(l.id); return; } } // a leaf on the silver and gold Bodhi tree
   const info = infoAtRay(); if (info) { openInfo(info.id); return; }
   if (insideHall(player.x, player.z)) return; // inside a hall, clicks just turn the view
   for (const id of Object.keys(halls)) { if (ray.intersectObject(halls[id], true).length) { openPlace(PLACES.find((p) => p.id === id)); return; } }
@@ -5701,7 +5866,7 @@ function showPrompt(p) {
   if (!p) { el.hidden = true; return; }
   $(id + "-name").textContent = p.icon + " " + placeName(p);
   $(id + "-sub").textContent = p.stone != null ? (p.board ? tx("ป้ายเรื่องที่ ", "Story board ") : tx("เรื่องที่ ", "Story ")) + (p.stone + 1) : p.sub[L === "en" ? 1 : 0];
-  $(id + "-go").textContent = p.id === "lang" ? tx("เปลี่ยน", "Change") : p.id === "bell" ? tx("ตี", "Strike") : p.id === "donate" || p.id === "community" ? tx("เปิด", "Open") : p.id === "alms" ? tx("ใส่บาตร", "Offer") : p.id === "fish" ? tx("ให้อาหาร", "Feed") : p.merit ? tx("ทำบุญ", "Offer") : p.id === "broom" ? (broom.held ? tx("วาง", "Put back") : tx("หยิบ", "Pick up")) : p.id === "can" ? (can.held ? tx("วาง", "Put back") : tx("หยิบ", "Pick up")) : p.id === "water" ? tx("รดน้ำ", "Water") : p.id === "fold" ? tx("นั่งพับ", "Sit and fold") : p.id === "info" ? tx("อ่าน", "Read") : p.id === "bridge" ? tx("เลือก", "Choose") : p.id === "monk" ? (p.acts.length > 1 ? tx("เลือก", "Choose") : tx("ไหว้", "Greet")) : p.id === "cat" ? tx("ลูบ", "Pet") : tx("เข้า", "Visit");
+  $(id + "-go").textContent = p.id === "lang" ? tx("เปลี่ยน", "Change") : p.id === "bell" ? tx("ตี", "Strike") : p.id === "donate" || p.id === "community" || p.id === "leaftree" ? tx("เปิด", "Open") : p.id === "alms" ? tx("ใส่บาตร", "Offer") : p.id === "fish" ? tx("ให้อาหาร", "Feed") : p.merit ? tx("ทำบุญ", "Offer") : p.id === "broom" ? (broom.held ? tx("วาง", "Put back") : tx("หยิบ", "Pick up")) : p.id === "can" ? (can.held ? tx("วาง", "Put back") : tx("หยิบ", "Pick up")) : p.id === "water" ? tx("รดน้ำ", "Water") : p.id === "fold" ? tx("นั่งพับ", "Sit and fold") : p.id === "info" ? tx("อ่าน", "Read") : p.id === "bridge" ? tx("เลือก", "Choose") : p.id === "monk" ? (p.acts.length > 1 ? tx("เลือก", "Choose") : tx("ไหว้", "Greet")) : p.id === "cat" ? tx("ลูบ", "Pet") : tx("เข้า", "Visit");
   el.hidden = false;
 }
 $("prompt-go").addEventListener("click", () => { actFor(P1); if (near) openPlace(near); });
@@ -5777,6 +5942,7 @@ function restoreSpot() {
 function openPlace(p) {
   if (p.id === "bell") { ringBell(); return; }
   if (p.id === "donate") { openDonate(); return; }
+  if (p.id === "leaftree") { openLeafTree(); return; }
   if (p.id === "community") { openCommunity(); return; }
   if (p.id === "alms") { startAlms(p.monk); return; }
   if (p.id === "fish") { startFeed(); return; }
@@ -6928,6 +7094,7 @@ function kidStep(dt) {
   for (const s of journeyStones) { const d = Math.hypot(player.x - s.x, player.z - s.z); if (d < 2.6 && d < bestD) { best = { ...PLACES.find((p) => p.id === "journey"), stone: s.i }; bestD = d; } }
   if (Math.hypot(player.x - BELL[0], player.z - BELL[1]) < 4.4 && 3 < bestD) { best = BELL_PLACE; bestD = 3; } // reachable from the road
   { const d = Math.hypot(player.x - DONATE.x, player.z - (DONATE.z + 0.6 * DONATE.scale)); if (d < 2.6 && d < bestD) { best = DONATE_PLACE; bestD = d; } } // only when standing at the box
+  { const d = Math.hypot(player.x - LEAF_TREE.x, player.z - LEAF_TREE.z) - LEAF_TREE.r; if (d < 3.2 && d < bestD) { best = LEAF_TREE_PLACE; bestD = d; } } // anywhere on the silver and gold Bodhi tree's court
   { const d = Math.hypot(player.x - COMMUNITY.x, player.z - (COMMUNITY.z + 0.6 * COMMUNITY.scale)); if (d < 2.6 && d < bestD) { best = COMMUNITY_PLACE; bestD = d; } } // and at the community board
   { const m = monkHere(); if (m && m.d < bestD) { best = monkPlace(m.h, m.s); bestD = m.d; } }
   { const c = infoNear(); if (c && c.d + 1 < bestD) { const T = INFO_TEXT[c.id]; best = { id: "info", icon: "ℹ️", th: T.t[0], en: T.t[1], sub: ["เรื่องน่ารู้", "Good to know"], info: c.id, key: c.id }; bestD = c.d + 1; } } // (anything else here comes first)
@@ -6961,10 +7128,11 @@ document.fonts.load("64px Itim").then(() => document.fonts.load("36px Mali")).ca
 });
 camYaw = 0; camera.position.set(0, 8, 105);
 restoreSpot(); // back from a page of the site: stand where you were
-if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, renderer, reflectors, two: () => ({ P1, P2, twoP, owner, kid }), meal, setMealTime: (v) => { mealForce = v; }, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, almsScene, almsShow, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, gardenSpots, paths, floors, ponds, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startKathin, kathinSpots, feed, startFeed, fishes, food, onBridge, merit, startMerit, meritHere, broom, fallenLeaves, can, waterPots, startWater, fold, startFold, foldPetal, altars, gildImage, bodhiBands, lane, novice, birds, cat, rain, petals, catShow, catPlan, pet, startPetDog, startPetCat, petStroke, look: (eye, at) => { camera.position.set(...eye); camera.lookAt(...at); if (composer) composer.render(); else renderer.render(scene, camera); }, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
+if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, renderer, reflectors, two: () => ({ P1, P2, twoP, owner, kid }), meal, setMealTime: (v) => { mealForce = v; }, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, almsScene, almsShow, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, gardenSpots, paths, floors, ponds, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startKathin, kathinSpots, feed, startFeed, fishes, food, onBridge, merit, startMerit, meritHere, broom, fallenLeaves, can, waterPots, startWater, fold, startFold, foldPetal, altars, gildImage, bodhiBands, leafTree, showLeaf, lane, novice, birds, cat, rain, petals, catShow, catPlan, pet, startPetDog, startPetCat, petStroke, look: (eye, at) => { camera.position.set(...eye); camera.lookAt(...at); if (composer) composer.render(); else renderer.render(scene, camera); }, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
 Promise.race([Promise.all(propJobs), new Promise((r) => setTimeout(r, 7000))]).then(() => {
   $("loading").hidden = true;
   canvas.focus();
-  setTimeout(showDonationPath, 1200); // once the opening view has settled
+  if (leafLink) goToLinkedLeaf(); // a link to a leaf on the silver and gold Bodhi tree: straight to it
+  else setTimeout(showDonationPath, 1200); // once the opening view has settled
 });
 requestAnimationFrame(tick);

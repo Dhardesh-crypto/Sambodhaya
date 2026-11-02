@@ -875,7 +875,8 @@ function Support() {
   const S = SUPPORT;
   const ready = !!(S.recipient && (S.promptpayQr || S.promptpayId || S.bank) && S.retentionDays && S.contact);
   const method = S.promptpayQr || S.promptpayId ? "promptpay or bank" : "bank"; // (both are shown together)
-  const [f, setF] = useState({ anonymous: false, name: "", amount: "", note: "", email: "", thanks: "private", agree: false });
+  const [f, setF] = useState({ anonymous: false, name: "", amount: "", note: "", email: "", thanks: "private", agree: false, leaf: true, leafName: "", leafDed: "", leafWish: "" });
+  const [leafId] = useState(newLeafId);
   const [stage, setStage] = useState(1); // 1: the transfer details; 2: the slip form (shown once they say they've transferred)
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
@@ -884,11 +885,16 @@ function Support() {
   useEffect(() => { if (!file || !file.type.startsWith("image/")) { setPreview(null); return; } const u = URL.createObjectURL(file); setPreview(u); return () => URL.revokeObjectURL(u); }, [file]);
   const fileOk = file && file.size <= 8 * MB && /^(image\/|application\/pdf)/.test(file.type);
   const valid = ready && (f.anonymous || f.name.trim()) && Number(f.amount) > 0 && fileOk && f.agree && state !== "sending"; // (the slip itself shows the date and time)
+  // the Bodhi leaf: its metal follows the amount; the name on it is the donor's unless they write another (or none, anonymous)
+  const metal = metalFor(f.amount), wantLeaf = f.leaf && !!metal;
+  const leafName = (f.leafName.trim() || (f.anonymous ? "" : f.name.trim())).slice(0, 40);
   const submit = async (e) => {
     e.preventDefault(); if (!valid) return;
     setState("sending");
     try {
-      await sendForm("donation", { name: f.anonymous ? "(anonymous)" : f.name.trim(), amount: f.amount, method, note: f.note.trim(), email: f.email.trim(), thanks: f.anonymous ? "private" : f.thanks, adult: "yes", consent: "yes", lang, "bot-field": "" }, file);
+      const leaf = wantLeaf ? { leaf_id: leafId, leaf_metal: metal, leaf_name: leafName, leaf_dedication: f.leafDed.trim(), leaf_wish: f.leafWish.trim() } : {};
+      await sendForm("donation", { name: f.anonymous ? "(anonymous)" : f.name.trim(), amount: f.amount, method, note: f.note.trim(), email: f.email.trim(), thanks: f.anonymous ? "private" : f.thanks, adult: "yes", consent: "yes", lang, ...leaf, "bot-field": "" }, file);
+      if (wantLeaf) store.set("my-leaves", [...myLeaves().filter((x) => x !== leafId), leafId]); // (this device remembers its leaves, to mark them on the tree)
       setState("sent"); window.scrollTo(0, 0);
     } catch (err) { setState("error"); }
   };
@@ -900,7 +906,14 @@ function Support() {
         <p className="lede">{t(UI("ได้รับการแจ้งโอนแล้ว", "We've received your transfer notice."))}</p>
         <ol className="flow-steps"><li className="on">① {t(UI("โอน", "Transfer"))}</li><li className="on">② {t(UI("แจ้งสลิป", "Send slip"))}</li><li className="now">③ {t(UI("รอตรวจสอบ", "Awaiting check"))}</li></ol>
         <p>{t(UI("สถานะ: รอตรวจสอบ ผู้ดูแลจะตรวจยอดกับบัญชีก่อน แล้วจึงขอบคุณตามที่คุณเลือกไว้", "Status: awaiting check. The caretakers verify the amount against the account first, then thank you the way you chose."))}</p>
-        <div className="row"><button className="btn" onClick={() => go("gate")}>{t(UI("กลับประตูวัด", "Back to the temple gate"))}</button></div>
+        {wantLeaf && <div className="leaf-ask">
+          <LeafArt metal={metal} name={leafName || t(ANON_LEAF)} dedication={f.leafDed.trim()} wish={f.leafWish.trim()} size={120} />
+          <div>
+            <p>{t(UI("ใบโพธิ์ของคุณจะแขวนบนต้นเมื่อตรวจยอดแล้ว ลิงก์ของใบนี้ (เก็บไว้หรือแชร์ให้คนที่คุณอุทิศให้ได้):", "Your leaf goes up on the tree once the transfer is checked. Its link (keep it, or share it with the one you dedicated it to):"))}</p>
+            <p><a href={"#tree/" + leafId} className="mono">{leafLink(leafId)}</a> <Copy text={leafLink(leafId)} /></p>
+          </div>
+        </div>}
+        <div className="row"><button className="btn" onClick={() => go("gate")}>{t(UI("กลับประตูวัด", "Back to the temple gate"))}</button>{wantLeaf && <button className="btn" onClick={() => go("tree")}>🍃 {t(UI("ไปดูต้นโพธิ์", "See the Bodhi tree"))}</button>}</div>
       </div>
       <CommunityBox />
     </section>
@@ -935,6 +948,7 @@ function Support() {
         </div>
         {S.recipient ? <p className="quiet">{t(UI("ผู้รับเงิน", "Recipient"))}: {t(S.recipient)}</p> : waiting}
         {S.taxNote ? <p className="quiet">{t(S.taxNote)}</p> : <p className="quiet"><Tag kind="unknown" /> {t(UI("ข้อมูลเรื่องใบลดหย่อนภาษี: รอข้อมูลจากทีม", "Tax receipts: awaiting information from the team"))}</p>}
+        <p className="leaf-invite">🍃 {t(UI("ร่วมทำบุญแล้วแขวนใบโพธิ์ที่มีชื่อของคุณหรือคนที่คุณรักบนต้นโพธิ์ของวัดได้ ", "With your gift you can hang a leaf with your name, or a loved one's, on the temple's Bodhi tree. "))}<button type="button" className="link" onClick={() => go("tree")}>{t(UI("ดูต้นโพธิ์", "See the tree"))} →</button></p>
         <div className="row"><button type="button" className="btn big" onClick={() => { setStage(2); window.scrollTo(0, 0); }}>{t(UI("โอนเรียบร้อยแล้ว – แนบสลิป", "I've completed the transfer – attach the slip"))} →</button></div>
         <details className="uses-more">
           <summary>{t(UI("เงินสมทบนำไปใช้กับอะไรบ้าง", "What contributions go towards"))}</summary>
@@ -953,6 +967,21 @@ function Support() {
         <label className="toggle"><input type="checkbox" checked={f.anonymous} onChange={set("anonymous")} /> <span>{t(UI("ไม่ประสงค์ออกนาม", "I'd like to stay anonymous"))}</span></label>
         {!f.anonymous && <label className="fb-field" htmlFor="d-name">{t(UI("ชื่อผู้สมทบ", "Your name"))} *<input id="d-name" value={f.name} onChange={set("name")} autoComplete="name" /></label>}
         <label className="fb-field" htmlFor="d-amount">{t(UI("จำนวนเงิน (บาท)", "Amount (THB)"))} *<input id="d-amount" type="number" min="1" step="0.01" inputMode="decimal" value={f.amount} onChange={set("amount")} /></label>
+        <fieldset className="fb-types leaf-ask-box">
+          <legend>🍃 {t(UI("แขวนใบโพธิ์บนต้นโพธิ์เงิน-โพธิ์ทอง", "Hang a leaf on the silver and gold Bodhi tree"))}</legend>
+          <label className="toggle"><input type="checkbox" checked={f.leaf} onChange={set("leaf")} /> <span>{t(UI("แขวนใบโพธิ์ที่มีชื่อบนต้นโพธิ์ของวัด", "Hang a leaf with a name on the temple's Bodhi tree"))}</span></label>
+          {f.leaf && !metal && <p className="quiet">{t(UI(`ใบโพธิ์ทองแดงตั้งแต่ ${SUPPORT.leaves.copper} บาท ใบเงินตั้งแต่ ${SUPPORT.leaves.silver} บาท ใบทองตั้งแต่ ${SUPPORT.leaves.gold} บาท`, `Copper leaves from ${SUPPORT.leaves.copper} baht, silver from ${SUPPORT.leaves.silver}, gold from ${SUPPORT.leaves.gold}.`))}</p>}
+          {wantLeaf && <div className="leaf-ask">
+            <LeafArt metal={metal} name={leafName || t(ANON_LEAF)} dedication={f.leafDed.trim()} wish={f.leafWish.trim()} size={120} />
+            <div className="leaf-fields">
+              <p><strong>{t(METAL[metal])}</strong></p>
+              <label className="fb-field" htmlFor="l-name">{t(UI("ชื่อบนใบ", "Name on the leaf"))}<input id="l-name" maxLength={40} value={f.leafName} placeholder={f.anonymous ? t(ANON_LEAF) : f.name} onChange={set("leafName")} /></label>
+              <label className="fb-field" htmlFor="l-ded">{t(UI("อุทิศส่วนกุศลแด่ (ไม่ใส่ก็ได้)", "Dedicate it to (optional)"))}<input id="l-ded" maxLength={60} value={f.leafDed} placeholder={t(UI("เช่น คุณแม่ หรือชื่อผู้ล่วงลับ", "e.g. my mother, or someone who has passed away"))} onChange={set("leafDed")} /></label>
+              <label className="fb-field" htmlFor="l-wish">{t(UI("คำอธิษฐานสั้น ๆ (ไม่ใส่ก็ได้)", "A short wish (optional)"))}<input id="l-wish" maxLength={80} value={f.leafWish} onChange={set("leafWish")} /></label>
+            </div>
+          </div>}
+          {wantLeaf && <p className="quiet">{t(UI("ใบโพธิ์จะขึ้นต้นเมื่อผู้ดูแลตรวจยอดโอนแล้ว ชื่อและข้อความบนใบทุกคนเห็นได้และอยู่บนต้นต่อไป (ไม่แสดงจำนวนเงิน) ขอเอาลงได้ทุกเมื่อที่ ", "Your leaf goes up once the caretakers have checked the transfer. Everyone can see the name and words on it, and it stays on the tree (the amount is never shown). Ask us to take it down any time at "))}{S.contact || "…"}</p>}
+        </fieldset>
         <label className="fb-field" htmlFor="d-slip">{t(UI("สลิปการโอน (รูปหรือ PDF ไม่เกิน 8 MB)", "Transfer slip (image or PDF, up to 8 MB)"))} *
           <input id="d-slip" type="file" accept="image/*,application/pdf" onChange={(e) => setFile(e.target.files[0] || null)} />
         </label>
@@ -985,10 +1014,168 @@ function Support() {
   );
 }
 
+/* ---------- 🍃 the Bodhi leaf tree (ต้นโพธิ์เงิน-โพธิ์ทอง) ---------- */
+// A gift may hang a leaf on the temple's offering tree: copper, silver or gold by the amount (SUPPORT.leaves), with a
+// name, a dedication and a short wish. It goes up once the caretakers mark the gift Verified on the records page
+// (the database then copies it to the public list, without the amount). Read by this page and the 3D temple.
+const METALS = ["gold", "silver", "copper"];
+const METAL = {
+  gold: { th: "ใบโพธิ์ทอง", en: "Gold leaf", hi: "#fff1b0", mid: "#e2b24c", lo: "#9c6c18" },
+  silver: { th: "ใบโพธิ์เงิน", en: "Silver leaf", hi: "#ffffff", mid: "#cfd5dc", lo: "#7c8691" },
+  copper: { th: "ใบโพธิ์ทองแดง", en: "Copper leaf", hi: "#ffd2b0", mid: "#c9804e", lo: "#7a3f1e" },
+};
+const metalFor = (amount) => { const a = Number(amount) || 0, L = SUPPORT.leaves; return a >= L.gold ? "gold" : a >= L.silver ? "silver" : a >= L.copper ? "copper" : null; };
+const newLeafId = () => { const A = "abcdefghijkmnpqrstuvwxyz23456789", r = new Uint8Array(10); crypto.getRandomValues(r); return Array.from(r, (b) => A[b % A.length]).join(""); };
+const leafLink = (id) => `${location.origin}/#tree/${id}`;
+const ANON_LEAF = UI("ผู้ไม่ประสงค์ออกนาม", "Anonymous");
+const myLeaves = () => store.get("my-leaves", []);
+let leavesCache = null;
+function useLeaves() {
+  const [st, setSt] = useState(leavesCache ? { list: leavesCache, state: "ok" } : { list: [], state: "loading" });
+  useEffect(() => {
+    let live = true;
+    fetch("/.netlify/functions/leaves").then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((list) => { leavesCache = Array.isArray(list) ? list : []; if (live) setSt({ list: leavesCache, state: "ok" }); })
+      .catch(() => { if (live) setSt((s) => (s.state === "ok" ? s : { list: [], state: "error" })); });
+    return () => { live = false; };
+  }, []);
+  return st;
+}
+// a Bodhi leaf, point down: heart-shaped with a long drip tip (the same outline as the leaves in the 3D temple)
+const LEAF_PATH = "M0,-46 C14,-58 40,-50 38,-24 C36,-4 14,14 0,52 C-14,14 -36,-4 -38,-24 C-40,-50 -14,-58 0,-46 Z";
+function LeafGrad({ id, metal }) {
+  const m = METAL[metal];
+  return <linearGradient id={id} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor={m.hi} /><stop offset=".45" stopColor={m.mid} /><stop offset="1" stopColor={m.lo} /></linearGradient>;
+}
+// one leaf drawn large, with its words: the preview on the support page and the leaf card on the tree page
+function LeafArt({ metal = "gold", name, dedication, wish, size = 180 }) {
+  const { t } = useApp();
+  const id = "lg-" + metal, ink = metal === "copper" ? "#fff6ea" : "#3a2a1d";
+  const line = (s, n) => (s && s.length > n ? s.slice(0, n - 1) + "…" : s);
+  return (
+    <svg className="leaf-art" viewBox="-50 -64 100 124" width={size} height={size * 1.24} role="img"
+      aria-label={[t(METAL[metal]), name, dedication && t(UI("อุทิศแด่ ", "Dedicated to ")) + dedication, wish].filter(Boolean).join(" · ")}>
+      <defs><LeafGrad id={id} metal={metal} /></defs>
+      <line x1="0" y1="-64" x2="0" y2="-46" stroke="#8a6a3a" strokeWidth="1.2" />
+      <path d={LEAF_PATH} fill={`url(#${id})`} stroke={METAL[metal].lo} strokeWidth="1.2" />
+      <path d="M0,-44 L0,46 M0,-20 L-22,-34 M0,-20 L22,-34 M0,0 L-24,-12 M0,0 L24,-12" stroke={METAL[metal].lo} strokeOpacity=".35" strokeWidth=".8" fill="none" />
+      <g fill={ink} textAnchor="middle" fontFamily="Itim, Mali, sans-serif">
+        <text y="-18" fontSize="9">{line(name, 18)}</text>
+        {dedication && <><text y="-4" fontSize="5">{t(UI("อุทิศส่วนกุศลแด่", "dedicated to"))}</text><text y="5" fontSize="6.5">{line(dedication, 22)}</text></>}
+        {wish && <text y={dedication ? 17 : 0} fontSize="5.5">{line(wish, 26)}</text>}
+      </g>
+    </svg>
+  );
+}
+// The tree on this page: a gilded tree in three tiers, gold at the top, silver in the middle and copper below, like
+// the temple's offering trees. Each tier has hooks along its branches; leaves take the hooks in a fixed scattered
+// order, and once every hook of a tier is taken, the next leaves hang beneath the earlier ones on the same hooks.
+const TIERS = { gold: [[150, 62], [122, 50]], silver: [[262, 104], [228, 92], [196, 80]], copper: [[392, 150], [356, 138], [322, 126], [290, 114]] };
+const HOOKS = (() => {
+  const out = {};
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (const k of METALS) {
+    const list = [], n = k === "gold" ? 5 : k === "silver" ? 7 : 9;
+    TIERS[k].forEach(([y, span]) => [-1, 1].forEach((s) => {
+      for (let i = 0; i < n; i++) {
+        const u = 0.22 + 0.74 * i / (n - 1), x = 200 + s * span * u, by = y - 34 * u * u; // along the branch as it sweeps up
+        list.push([x, by]);
+      }
+    }));
+    for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [list[i], list[j]] = [list[j], list[i]]; }
+    out[k] = list;
+  }
+  return out;
+})();
+const branchPath = ([y, span], s) => `M200,${y + 6} Q${200 + s * span * 0.55},${y + 4} ${200 + s * span},${y - 34} q${s * 6},-14 ${-s * 4},-16`;
+function placeLeaves(list) {
+  const seen = { gold: 0, silver: 0, copper: 0 };
+  return list.filter((l) => METAL[l.metal]).map((l) => {
+    const H = HOOKS[l.metal], i = seen[l.metal]++, [x, y] = H[i % H.length], depth = Math.floor(i / H.length);
+    return { ...l, x, y: y + 10 + depth * 15, top: y + depth * 15 };
+  });
+}
+function TreeSvg({ leaves, sel, mine, onPick }) {
+  const { t } = useApp();
+  return (
+    <svg className="leaf-tree" viewBox="0 0 400 500" role="group" aria-label={t(UI("ต้นโพธิ์เงิน-โพธิ์ทองของวัด", "The temple's silver and gold Bodhi tree"))}>
+      <defs>{METALS.map((k) => <LeafGrad key={k} id={"tg-" + k} metal={k} />)}
+        <linearGradient id="tg-trunk" x1="0" x2="1"><stop offset="0" stopColor="#9c6c18" /><stop offset=".5" stopColor="#f2cf6a" /><stop offset="1" stopColor="#9c6c18" /></linearGradient></defs>
+      <path d="M200,22 L206,60 L194,60 Z" fill="url(#tg-trunk)" />
+      <rect x="194" y="58" width="12" height="372" rx="5" fill="url(#tg-trunk)" />
+      {METALS.map((k) => TIERS[k].map((b, i) => [-1, 1].map((s) => <path key={k + i + s} d={branchPath(b, s)} fill="none" stroke="url(#tg-trunk)" strokeWidth={k === "copper" ? 5 : 4} strokeLinecap="round" />)))}
+      <path d="M128,452 Q140,420 200,424 Q260,420 272,452 Z" fill="#e6e1d6" stroke="#b9ae9c" />
+      {[-56, -28, 0, 28, 56].map((dx) => <ellipse key={dx} cx={200 + dx} cy="430" rx="16" ry="20" fill="#f4f0e8" stroke="#c9bfae" />)}
+      <rect x="96" y="450" width="208" height="16" rx="4" fill="#d8d2c8" /><rect x="76" y="466" width="248" height="18" rx="4" fill="#c9c1b4" />
+      {leaves.map((l) => {
+        const on = sel === l.id, own = mine.includes(l.id), sc = on ? 0.36 : 0.2;
+        return (
+          <g key={l.id} className={"tree-leaf" + (on ? " on" : "") + (own ? " mine" : "")} transform={`translate(${l.x},${l.y})`} onClick={() => onPick(l.id)}
+            role="button" tabIndex={0} aria-label={(l.name || t(ANON_LEAF)) + " · " + t(METAL[l.metal])} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onPick(l.id); } }}>
+            <line x1="0" y1={l.top - l.y} x2="0" y2={-46 * sc} stroke="#8a6a3a" strokeWidth=".6" />
+            {on && <circle r="26" fill="#fff4c8" opacity=".7" />}
+            <path d={LEAF_PATH} transform={`scale(${sc})`} fill={`url(#tg-${l.metal})`} stroke={own ? "#a5560f" : METAL[l.metal].lo} strokeWidth={own ? 10 : 3} />
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+function TreePage({ focus }) {
+  const { t, go } = useApp();
+  const { list, state } = useLeaves();
+  const [sel, setSel] = useState(focus || null);
+  const [q, setQ] = useState("");
+  useEffect(() => { if (focus) setSel(focus); }, [focus]);
+  const mine = myLeaves();
+  const placed = placeLeaves(list);
+  const leaf = placed.find((l) => l.id === sel);
+  const pending = sel && state === "ok" && !leaf;
+  const pick = (id) => { setSel(id); try { history.replaceState(null, "", "#tree/" + id); } catch (e) {} };
+  const words = q.trim().toLowerCase();
+  const found = words ? placed.filter((l) => [l.name, l.dedication, l.wish].some((s) => s && s.toLowerCase().includes(words))).slice(-40).reverse() : [];
+  const count = (k) => placed.filter((l) => l.metal === k).length;
+  const [copied, setCopied] = useState(false);
+  return (
+    <section className="zone tree-page">
+      <h1 className="zone-title">🍃 {t(UI("ต้นโพธิ์เงิน-โพธิ์ทอง", "The silver and gold Bodhi tree"))}</h1>
+      <p className="lede">{t(UI("ทุกใบคือการร่วมสร้างวัดของใครสักคน บางใบอุทิศส่วนกุศลให้คนที่รัก", "Every leaf is someone's gift to the temple's building; some are dedicated to someone they love."))}</p>
+      <div className="tree-wrap">
+        <TreeSvg leaves={placed} sel={sel} mine={mine} onPick={pick} />
+        <div className="tree-side">
+          {state === "loading" && <p className="quiet">{t(UI("กำลังโหลดใบโพธิ์…", "Loading the leaves…"))}</p>}
+          {state === "error" && <p className="notice">{t(UI("ตอนนี้โหลดใบโพธิ์ไม่ได้ ลองใหม่ภายหลัง", "The leaves can't be loaded right now. Please try again later."))}</p>}
+          {state === "ok" && <p className="tree-count">{METALS.map((k) => <span key={k}><svg viewBox="-50 -64 100 124" width="14" height="17" aria-hidden="true"><defs><LeafGrad id={"tc-" + k} metal={k} /></defs><path d={LEAF_PATH} fill={`url(#tc-${k})`} /></svg> {t(METAL[k])} {count(k)}</span>)}</p>}
+          {state === "ok" && !placed.length && <p>{t(UI("ยังไม่มีใบโพธิ์บนต้น ใบแรกอาจเป็นของคุณ", "No leaves on the tree yet. The first could be yours."))}</p>}
+          {leaf && <div className="leaf-card">
+            <LeafArt metal={leaf.metal} name={leaf.name || t(ANON_LEAF)} dedication={leaf.dedication} wish={leaf.wish} size={150} />
+            <div>
+              <p className="leaf-name">{leaf.name || t(ANON_LEAF)}</p>
+              {leaf.dedication && <p>{t(UI("อุทิศส่วนกุศลแด่ ", "Dedicated to "))}{leaf.dedication}</p>}
+              {leaf.wish && <p>“{leaf.wish}”</p>}
+              <p className="quiet">{t(METAL[leaf.metal])} · {leaf.hung}</p>
+              <div className="row">
+                <button type="button" className="chip" onClick={() => { const u = leafLink(leaf.id); (navigator.share ? navigator.share({ title: t(UI("ใบโพธิ์ของฉันที่วัดสัมโพธายะ", "My Bodhi leaf at Sambodhaya")), url: u }) : navigator.clipboard.writeText(u).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); })).catch(() => {}); }}>{copied ? "✓ " + t(UI("คัดลอกแล้ว", "Copied")) : "🔗 " + t(UI("แชร์ใบนี้", "Share this leaf"))}</button>
+                <a className="chip" href={`world.html#leaf=${leaf.id}`}>🏯 {t(UI("ดูในวัด 3 มิติ", "See it in the 3D temple"))}</a>
+              </div>
+            </div>
+          </div>}
+          {pending && <p className="notice">{t(UI("ใบนี้ยังไม่ขึ้นต้น จะแขวนเมื่อผู้ดูแลตรวจยอดโอนแล้ว", "This leaf isn't on the tree yet. It goes up once the caretakers have checked the transfer."))}</p>}
+          <label className="fb-field" htmlFor="leaf-q">{t(UI("หาใบโพธิ์ (ชื่อหรือคำอุทิศ)", "Find a leaf (a name or a dedication)"))}<input id="leaf-q" type="search" value={q} onChange={(e) => setQ(e.target.value)} /></label>
+          {words && <ul className="leaf-found">{found.length ? found.map((l) => <li key={l.id}><button type="button" className="link" onClick={() => pick(l.id)}>{l.name || t(ANON_LEAF)}{l.dedication ? ` → ${l.dedication}` : ""}</button></li>) : <li className="quiet">{t(UI("ไม่พบ", "Nothing found"))}</li>}</ul>}
+          <div className="row"><button type="button" className="btn" onClick={() => go("support")}>🍃 {t(UI("ร่วมแขวนใบโพธิ์", "Hang a leaf"))}</button></div>
+          <p className="quiet">{t(UI(`ใบโพธิ์ทองแดงตั้งแต่ ${SUPPORT.leaves.copper} บาท ใบเงินตั้งแต่ ${SUPPORT.leaves.silver} บาท ใบทองตั้งแต่ ${SUPPORT.leaves.gold} บาท ไม่แสดงจำนวนเงินบนใบ`, `Copper leaves from ${SUPPORT.leaves.copper} baht, silver from ${SUPPORT.leaves.silver}, gold from ${SUPPORT.leaves.gold}. The amount is never shown on a leaf.`))}</p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /* ---------- app shell & router ---------- */
-const VIEWS = ["gate", "yard", "learn", "unit", "library", "media", "access", "rest", "care", "exit", "garden", "journey", "support", "feedback"];
+const VIEWS = ["gate", "yard", "learn", "unit", "library", "media", "access", "rest", "care", "exit", "garden", "journey", "support", "feedback", "tree"];
 function parseHash() {
   const h = (location.hash || "").replace("#", "");
+  const tr = h.match(/^tree\/([a-z0-9]{8,16})$/); if (tr) return { view: "tree", arg: tr[1] };
   const m = h.match(/^u0([1-8])$/); if (m) return { view: "unit", arg: +m[1] - 1 };
   if (h === "wheel") return { view: "media", arg: "wheel" };
   return { view: VIEWS.includes(h) ? h : "gate", arg: null };
@@ -1038,10 +1225,11 @@ function App() {
         {V === "garden" && <Garden />}
         {V === "journey" && <Journey />}
         {V === "support" && <Support />}
+        {V === "tree" && <TreePage focus={route.arg} />}
         {V === "feedback" && <FeedbackPage />}
       </main>
       {V !== "feedback" && <FeedbackWidget />}
-      {V === "gate" ? <footer className="foot"><Wayfinding /><a className="adult-link" href="#support">🤲 {t(UI("สมทบทุนพัฒนาและสร้างวัด (สำหรับผู้ใหญ่)", "Support the temple's development (for adults)"))}</a><CommunityLink /></footer> : <footer className="foot"><p className="rights">{t(UI("ที่นี่คุณ ถามได้ • ไม่เชื่อได้ • ตรวจได้ • ข้ามได้ • พักได้ • ออกได้", "Here you may ask • disagree • check • skip • rest • leave"))}</p><a className="adult-link" href="#support">🤲 {t(UI("สมทบทุนพัฒนาและสร้างวัด (สำหรับผู้ใหญ่)", "Support the temple's development (for adults)"))}</a><CommunityLink /></footer>}
+      {V === "gate" ? <footer className="foot"><Wayfinding /><a className="adult-link" href="#support">🤲 {t(UI("สมทบทุนพัฒนาและสร้างวัด (สำหรับผู้ใหญ่)", "Support the temple's development (for adults)"))}</a><a className="adult-link" href="#tree">🍃 {t(UI("ต้นโพธิ์เงิน-โพธิ์ทอง", "The silver and gold Bodhi tree"))}</a><CommunityLink /></footer> : <footer className="foot"><p className="rights">{t(UI("ที่นี่คุณ ถามได้ • ไม่เชื่อได้ • ตรวจได้ • ข้ามได้ • พักได้ • ออกได้", "Here you may ask • disagree • check • skip • rest • leave"))}</p><a className="adult-link" href="#support">🤲 {t(UI("สมทบทุนพัฒนาและสร้างวัด (สำหรับผู้ใหญ่)", "Support the temple's development (for adults)"))}</a><a className="adult-link" href="#tree">🍃 {t(UI("ต้นโพธิ์เงิน-โพธิ์ทอง", "The silver and gold Bodhi tree"))}</a><CommunityLink /></footer>}
     </Ctx.Provider>
   );
 }

@@ -298,6 +298,26 @@ textarea { font: inherit; width: 100%; box-sizing: border-box; border: 1.5px sol
 .pay.bank dd .mono { white-space: nowrap; }
 .qr { width: 220px; max-width: 100%; height: auto; border: var(--line); border-radius: 12px; background: #fff; }
 .pay-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; } /* two equal cards, side by side */
+/* the Bodhi leaf tree (#tree) and the leaf on the support page */
+.leaf-ask { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+.leaf-ask .leaf-art { flex: none; filter: drop-shadow(2px 3px 0 rgba(58, 42, 29, .25)); }
+.leaf-fields { flex: 1 1 180px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.leaf-fields p { margin: 0; }
+.leaf-ask .mono { overflow-wrap: anywhere; }
+.leaf-invite { background: var(--leaf-soft); border-radius: 14px; padding: 10px 14px; margin: 0; }
+.tree-wrap { display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-start; }
+.leaf-tree { flex: 1 1 320px; max-width: 460px; width: 100%; height: auto; background: linear-gradient(#e4f2fa, #fdf8ee); border: var(--line); border-radius: 22px; box-shadow: var(--pop); }
+.tree-side { flex: 1 1 260px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.tree-leaf { cursor: pointer; }
+.tree-leaf:focus { outline: none; }
+.tree-leaf:focus-visible circle, .tree-leaf.on circle { stroke: var(--saffron); stroke-width: 1.5; }
+.tree-count { display: flex; gap: 14px; flex-wrap: wrap; margin: 0; }
+.tree-count span { display: inline-flex; align-items: center; gap: 4px; }
+.leaf-card { display: flex; gap: 12px; flex-wrap: wrap; background: var(--cream); border: 1.5px solid var(--line-soft); border-radius: 18px; padding: 12px; }
+.leaf-card > div { flex: 1 1 180px; min-width: 0; }
+.leaf-card p { margin: 4px 0; overflow-wrap: anywhere; }
+.leaf-name { font-family: var(--display); font-size: 1.25rem; }
+.leaf-found { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
 .pay-card { min-width: 0; background: var(--cream); border: 1.5px solid var(--line-soft); border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
 .pay-card h3 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 1.15rem; }
 .qr-ph { aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border: 3px dashed var(--line-soft); color: var(--muted); text-align: center; font-family: var(--display); }
@@ -353,7 +373,7 @@ textarea { font: inherit; width: 100%; box-sizing: border-box; border: 1.5px sol
   <input name="type"><textarea name="message"></textarea><input name="page"><input name="lang"><input name="device"><input name="email"><input type="file" name="attachment"><input name="bot-field">
 </form>
 <form name="donation" data-netlify="true" netlify-honeypot="bot-field" enctype="multipart/form-data" hidden>
-  <input name="name"><input name="amount"><input name="date"><input name="time"><input name="method"><textarea name="note"></textarea><input name="email"><input name="thanks"><input name="adult"><input name="consent"><input name="lang"><input type="file" name="attachment"><input name="bot-field">
+  <input name="name"><input name="amount"><input name="date"><input name="time"><input name="method"><textarea name="note"></textarea><input name="email"><input name="thanks"><input name="adult"><input name="consent"><input name="lang"><input name="leaf_id"><input name="leaf_metal"><input name="leaf_name"><input name="leaf_dedication"><input name="leaf_wish"><input type="file" name="attachment"><input name="bot-field">
 </form>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>

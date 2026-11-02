@@ -26,6 +26,12 @@ function fields(form, d, sub) {
       slip: fileUrl(d.attachment), // (Netlify's link to the file; open it from the Netlify dashboard if it has expired)
       submission_id: sub.id,
       adult_consent: d.adult === "yes" && d.consent === "yes" ? "18+, consented" : `18+: ${d.adult || "?"}, consent: ${d.consent || "?"}`,
+      // the Bodhi leaf, if one was asked for (it is hung on the tree once the donation is marked Verified)
+      leaf_id: d.leaf_id,
+      leaf_metal: d.leaf_metal,
+      leaf_name: d.leaf_name,
+      leaf_dedication: d.leaf_dedication,
+      leaf_wish: d.leaf_wish,
     };
   }
   return {

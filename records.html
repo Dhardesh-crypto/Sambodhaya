@@ -86,6 +86,7 @@ a { color: var(--saffron-deep); }
         <li class="ro-only" data-th="แจ้งผลแก่ผู้ดูแลเว็บไซต์ พร้อมรหัสรายการ: ตรงกัน (Verified) หรือมีปัญหา (Problem) ผู้ดูแลจะเปลี่ยนสถานะให้ ลิงก์นี้แก้ไขไม่ได้" data-en="Tell the site's caretaker the result, with the submission ID: it matches (Verified) or there is a problem (Problem). They change the status; this link cannot."></li>
         <li class="edit-only" hidden data-th="ตั้งสถานะ: ตรงกัน = ตรวจแล้ว (Verified) ไม่ตรงหรือไม่พบเงินเข้า = มีปัญหา (Problem) เขียนบันทึกสั้น ๆ ถ้าต้องการ แล้วกด “บันทึก” ในแถวนั้น" data-en="Set the status: it matches = Verified; doesn't match or no money arrived = Problem. Add a short note if useful, then press Save on that row."></li>
         <li data-th="การขอบคุณ: “ส่วนตัว” ขอบคุณทางอีเมลถ้ามีให้ ไม่แสดงชื่อ · “แสดงชื่อ” ใส่ชื่อในรายชื่อผู้สนับสนุน ห้ามแสดงจำนวนเงิน · “(anonymous)” ไม่ต้องติดต่อ" data-en="Thanks: “private” means thank them by email if they gave one, never show the name · “public” means add the name to the supporters list, never the amount · “(anonymous)” means no contact."></li>
+        <li data-th="ใบโพธิ์: ถ้ารายการขอแขวนใบโพธิ์ อ่านชื่อ คำอุทิศ และคำอธิษฐานก่อน และดูว่าจำนวนเงินถึงชนิดใบ (ทองแดง 99 · เงิน 999 · ทอง 9999 บาท) เมื่อตั้งเป็น “ตรวจแล้ว” ใบจะขึ้นต้นโพธิ์บนเว็บไซต์ทันที (ไม่แสดงจำนวนเงิน) ตั้งเป็นสถานะอื่นใบจะถูกเอาลง ถ้าข้อความไม่เหมาะสม ตั้ง “มีปัญหา” แล้วติดต่อผู้บริจาค" data-en="Bodhi leaf: if a gift asks for a leaf, read its name, dedication and wish first, and check the amount reaches the leaf's metal (copper 99 · silver 999 · gold 9999 baht). Marking it Verified hangs the leaf on the site's Bodhi tree at once (never the amount); any other status takes it down. If the words aren't fit to show, mark it Problem and contact the donor."></li>
         <li data-th="ข้อมูลและสลิปเก็บไว้ 90 วันตามที่สัญญาไว้ แถวจะถูกลบเองในวัน “ลบหลัง” ลบรายการใน Netlify ด้วยภายในวันนั้น" data-en="Data and slips are kept 90 days, as promised. Each row is deleted by itself on its “delete after” date; delete the submission in Netlify by then too."></li>
         <li data-th="อย่าส่งต่อลิงก์นี้หรือข้อมูลผู้บริจาค ลิงก์นี้มีกุญแจอยู่ในตัว" data-en="Don't pass this link or donors' details on: the link carries its own key."></li>
         <li class="edit-only" hidden data-th="ลิงก์นี้เป็นลิงก์แก้ไข ใช้เฉพาะผู้ตรวจสลิป ผู้อื่นใช้ลิงก์ดูอย่างเดียว" data-en="This is the edit link: only for the people who check slips. Everyone else gets the view-only link."></li>
@@ -145,6 +146,7 @@ a { color: var(--saffron-deep); }
     rows.forEach((r) => { const tr = el("tr"); cols.forEach((c) => { const td = el("td", c.cls || null); const v = c.cell(r); if (v instanceof Node) td.append(v); else td.textContent = v == null ? "" : v; tr.append(td); }); body.append(tr); });
   }
 
+  const LEAF_METAL = { gold: ["ทอง", "gold"], silver: ["เงิน", "silver"], copper: ["ทองแดง", "copper"] };
   const DON = [
     { th: "ส่งเมื่อ (เวลาไทย)", en: "Submitted (Thai time)", cls: "when", cell: (r) => bkk(r.submitted) },
     { th: "สถานะ", en: "Status", cell: (r) => (editing ? statusPicker(r) : statusBadge(r.status)) },
@@ -154,6 +156,7 @@ a { color: var(--saffron-deep); }
     { th: "สลิป", en: "Slip", cls: "nowrap", cell: (r) => safeLink(r.slip, T("เปิดสลิป", "Open slip")) },
     { th: "ช่องทาง", en: "Method", cls: "nowrap", cell: (r) => r.method },
     { th: "การขอบคุณ", en: "Thanks", cls: "nowrap", cell: (r) => (THANKS[r.thanks] ? T(...THANKS[r.thanks]) : r.thanks) },
+    { th: "ใบโพธิ์", en: "Bodhi leaf", cls: "long", cell: (r) => (r.leaf_id ? [`${T(...LEAF_METAL[r.leaf_metal])}:`, r.leaf_name || T("ไม่ประสงค์ออกนาม", "anonymous"), r.leaf_dedication && `· ${T("อุทิศแด่", "for")} ${r.leaf_dedication}`, r.leaf_wish && `· “${r.leaf_wish}”`].filter(Boolean).join(" ") : "") },
     { th: "อีเมล", en: "Email", cls: "nowrap", cell: (r) => r.email },
     { th: "หมายเหตุ", en: "Note", cls: "long", cell: (r) => r.note },
     { th: "ภาษา", en: "Language", cell: (r) => r.language },
@@ -204,7 +207,7 @@ a { color: var(--saffron-deep); }
 
   function shownDonations() {
     const st = $("status").value, q = $("q").value.trim().toLowerCase();
-    return data.donations.filter((r) => (!st || r.status === st) && (!q || [r.name, r.email, r.note, r.admin_note, r.submission_id, r.method].some((v) => (v || "").toLowerCase().includes(q))));
+    return data.donations.filter((r) => (!st || r.status === st) && (!q || [r.name, r.email, r.note, r.admin_note, r.submission_id, r.method, r.leaf_name, r.leaf_dedication].some((v) => (v || "").toLowerCase().includes(q))));
   }
 
   function tiles() {
@@ -243,7 +246,7 @@ a { color: var(--saffron-deep); }
   }
 
   function csv() {
-    const cols = ["submitted", "status", "admin_note", "checked_at", "name", "amount_thb", "method", "thanks", "email", "note", "language", "adult_consent", "slip", "delete_after", "submission_id"];
+    const cols = ["submitted", "status", "admin_note", "checked_at", "name", "amount_thb", "method", "thanks", "leaf_metal", "leaf_name", "leaf_dedication", "leaf_wish", "leaf_id", "email", "note", "language", "adult_consent", "slip", "delete_after", "submission_id"];
     const q = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
     const text = "﻿" + [cols.join(","), ...shownDonations().map((r) => cols.map((c) => q(r[c])).join(","))].join("\r\n");
     const a = el("a"); a.href = URL.createObjectURL(new Blob([text], { type: "text/csv;charset=utf-8" })); a.download = `sambodhaya-donations-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
