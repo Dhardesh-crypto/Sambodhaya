@@ -2304,7 +2304,7 @@ const leafTree = { list: [], placed: [], byId: new Map(), sel: null, label: null
   const mats = {
     gold: goldLeaf(0xe2b24c, { side: THREE.DoubleSide, roughness: 0.3 }),
     silver: new THREE.MeshStandardMaterial({ color: 0xeef1f5, metalness: 0.85, roughness: 0.25, side: THREE.DoubleSide }),
-    copper: new THREE.MeshStandardMaterial({ color: 0xe08d5c, metalness: 0.8, roughness: 0.3, side: THREE.DoubleSide }),
+    copper: new THREE.MeshStandardMaterial({ color: 0xe0a08e, metalness: 0.8, roughness: 0.3, side: THREE.DoubleSide }),
   };
   const CAP = 1200; // per metal, before the instance buffers need to grow (they do, below)
   const make = (metal, cap) => {
@@ -2346,7 +2346,7 @@ const leafTree = { list: [], placed: [], byId: new Map(), sel: null, label: null
     if (leafTree.glow) { const l = leafTree.byId.get(leafTree.sel); if (l) { leafTree.glow.position.copy(l.pos); leafTree.glow.material.opacity = calm ? 0.8 : 0.65 + 0.25 * Math.sin(time * 3); leafTree.label.position.set(l.pos.x, l.pos.y + 0.9, l.pos.z); } }
   });
 }
-const LEAF_METAL = { gold: ["ใบโพธิ์ทอง", "Gold leaf"], silver: ["ใบโพธิ์เงิน", "Silver leaf"], copper: ["ใบโพธิ์ทองแดง", "Copper leaf"] };
+const LEAF_METAL = { gold: ["ใบโพธิ์ทอง", "Gold leaf"], silver: ["ใบโพธิ์เงิน", "Silver leaf"], copper: ["ใบโพธิ์นาก", "Pink gold leaf"] };
 const leafName = (l) => l.name || tx("ผู้ไม่ประสงค์ออกนาม", "Anonymous");
 // light one leaf and name it above; with walk, the child goes to stand before it, looking up at it
 function showLeaf(id, walk = false) {

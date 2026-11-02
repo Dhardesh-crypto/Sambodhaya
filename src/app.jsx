@@ -993,7 +993,7 @@ function Support() {
         <fieldset className="fb-types leaf-ask-box">
           <legend>🍃 {t(UI("แขวนใบโพธิ์บนต้นโพธิ์เงิน-โพธิ์ทอง", "Hang a leaf on the silver and gold Bodhi tree"))}</legend>
           <label className="toggle"><input type="checkbox" checked={f.leaf} onChange={set("leaf")} /> <span>{t(UI("แขวนใบโพธิ์ที่มีชื่อบนต้นโพธิ์ของวัด", "Hang a leaf with a name on the temple's Bodhi tree"))}</span></label>
-          {f.leaf && !metal && <p className="quiet">{t(UI(`ใบโพธิ์ทองแดงตั้งแต่ ${SUPPORT.leaves.copper} บาท ใบเงินตั้งแต่ ${SUPPORT.leaves.silver} บาท ใบทองตั้งแต่ ${SUPPORT.leaves.gold} บาท`, `Copper leaves from ${SUPPORT.leaves.copper} baht, silver from ${SUPPORT.leaves.silver}, gold from ${SUPPORT.leaves.gold}.`))}</p>}
+          {f.leaf && !metal && <p className="quiet">{t(UI(`ใบโพธิ์นากตั้งแต่ ${SUPPORT.leaves.copper} บาท ใบเงินตั้งแต่ ${SUPPORT.leaves.silver} บาท ใบทองตั้งแต่ ${SUPPORT.leaves.gold} บาท`, `Pink gold (nak) leaves from ${SUPPORT.leaves.copper} baht, silver from ${SUPPORT.leaves.silver}, gold from ${SUPPORT.leaves.gold}.`))}</p>}
           {wantLeaf && <div className="leaf-ask">
             <LeafArt metal={metal} name={leafName || t(ANON_LEAF)} dedication={f.leafDed.trim()} wish={f.leafWish.trim()} size={120} />
             <div className="leaf-fields">
@@ -1045,7 +1045,7 @@ const METALS = ["gold", "silver", "copper"];
 const METAL = {
   gold: { th: "ใบโพธิ์ทอง", en: "Gold leaf", hi: "#fff1b0", mid: "#e2b24c", lo: "#9c6c18" },
   silver: { th: "ใบโพธิ์เงิน", en: "Silver leaf", hi: "#ffffff", mid: "#cfd5dc", lo: "#7c8691" },
-  copper: { th: "ใบโพธิ์ทองแดง", en: "Copper leaf", hi: "#ffd2b0", mid: "#c9804e", lo: "#7a3f1e" },
+  copper: { th: "ใบโพธิ์นาก", en: "Pink gold leaf", hi: "#ffdcd2", mid: "#c98674", lo: "#7a4234" },
 };
 const metalFor = (amount) => { const a = Number(amount) || 0, L = SUPPORT.leaves; return a >= L.gold ? "gold" : a >= L.silver ? "silver" : a >= L.copper ? "copper" : null; };
 const newLeafId = () => { const A = "abcdefghijkmnpqrstuvwxyz23456789", r = new Uint8Array(10); crypto.getRandomValues(r); return Array.from(r, (b) => A[b % A.length]).join(""); };
@@ -1187,7 +1187,7 @@ function TreePage({ focus }) {
           <label className="fb-field" htmlFor="leaf-q">{t(UI("หาใบโพธิ์ (ชื่อหรือคำอุทิศ)", "Find a leaf (a name or a dedication)"))}<input id="leaf-q" type="search" value={q} onChange={(e) => setQ(e.target.value)} /></label>
           {words && <ul className="leaf-found">{found.length ? found.map((l) => <li key={l.id}><button type="button" className="link" onClick={() => pick(l.id)}>{l.name || t(ANON_LEAF)}{l.dedication ? ` → ${l.dedication}` : ""}</button></li>) : <li className="quiet">{t(UI("ไม่พบ", "Nothing found"))}</li>}</ul>}
           <div className="row"><button type="button" className="btn" onClick={() => go("support")}>🍃 {t(UI("ร่วมแขวนใบโพธิ์", "Hang a leaf"))}</button></div>
-          <p className="quiet">{t(UI(`ใบโพธิ์ทองแดงตั้งแต่ ${SUPPORT.leaves.copper} บาท ใบเงินตั้งแต่ ${SUPPORT.leaves.silver} บาท ใบทองตั้งแต่ ${SUPPORT.leaves.gold} บาท ไม่แสดงจำนวนเงินบนใบ`, `Copper leaves from ${SUPPORT.leaves.copper} baht, silver from ${SUPPORT.leaves.silver}, gold from ${SUPPORT.leaves.gold}. The amount is never shown on a leaf.`))}</p>
+          <p className="quiet">{t(UI(`ใบโพธิ์นากตั้งแต่ ${SUPPORT.leaves.copper} บาท ใบเงินตั้งแต่ ${SUPPORT.leaves.silver} บาท ใบทองตั้งแต่ ${SUPPORT.leaves.gold} บาท ไม่แสดงจำนวนเงินบนใบ`, `Pink gold (nak) leaves from ${SUPPORT.leaves.copper} baht, silver from ${SUPPORT.leaves.silver}, gold from ${SUPPORT.leaves.gold}. The amount is never shown on a leaf.`))}</p>
         </div>
       </div>
     </section>
