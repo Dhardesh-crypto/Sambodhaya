@@ -532,8 +532,7 @@ const pond = (x, z, r) => {
   add(new THREE.CircleGeometry(r, 40), S(0x24382b, { roughness: 1 }), x, 0.5, z, scene, false).rotation.x = -Math.PI / 2;
   colliders.push({ x, z, r: r + 0.6 });
 };
-// (across the road from the first, the silver and gold Bodhi tree stands where its twin was)
-{ const p0 = scene.children.length; pond(-14, 30, 6); pond(-36, 22, 5); pond(36, 24, 4); mergeStatic(scene, p0); }
+{ const p0 = scene.children.length; pond(-14, 30, 6); pond(14, 30, 6); pond(-36, 22, 5); pond(36, 24, 4); mergeStatic(scene, p0); }
 ponds.forEach(({ x, z, r }) => { const w = add(new THREE.CylinderGeometry(r, r, 0.3, 40), pondWaterMat, x, 0.4, z, scene, false); w.renderOrder = 2; pondWaters.push(w); });
 
 /* ---------------- text signs (Thai-ready canvas textures) ---------------- */
@@ -2209,15 +2208,15 @@ const nagaScales = (() => {
 }
 
 /* ---------------- the silver and gold Bodhi tree (ต้นโพธิ์เงิน-โพธิ์ทอง) just inside the gate ---------------- */
-// A gilded offering tree on a white lotus, on a round court of its own across the road from the lotus pond (in the
-// place of the pond's twin), the first thing you see through the gate.
+// A gilded offering tree on a white lotus, on a round court of its own just inside the main gate, right of the road:
+// the first thing you see over the wall from the bridge (the garden's shade trees keep clear of it).
 // Its branches sweep up in three tiers like the temple trees it follows (Wat Nong Khan's picture): gold at the top,
 // silver in the middle, copper below. Every leaf on it is a real gift: a donation, marked Verified by the caretakers,
 // that asked for a leaf (the public list: /.netlify/functions/leaves; no amounts). Leaves take the hooks of their
 // tier in a fixed scattered order; once every hook is taken, later leaves hang beneath earlier ones, a string of
 // leaves on each hook. They swing in the same gusts as the wind bells. Walk up and press E: the tree's list, a search
 // and the way to hang a leaf; tap a leaf to read it; world.html#leaf=<id> brings you to that leaf.
-const LEAF_TREE = { x: 14, z: 30, r: 1.8 };
+const LEAF_TREE = { x: 13.9, z: 54.9, s: 1.35, r: 1.8 * 1.35 }; // s: the tree's scale (tall enough to show over the guardian giant from the bridge); r: its base's radius
 let windGust = 0.5; // (set by the wind bells, below, which wander the gusts)
 // a Bodhi leaf, hanging point down: heart-shaped with a long drip tip (also the wind bells' sail)
 const bodhiLeafShape = () => {
@@ -2228,16 +2227,16 @@ const bodhiLeafShape = () => {
 };
 const leafTree = { list: [], placed: [], byId: new Map(), sel: null, label: null, glow: null, meshes: {}, hooks: {} };
 {
-  const T = LEAF_TREE, g = new THREE.Group(); g.position.set(T.x, 0, T.z); scene.add(g);
+  const T = LEAF_TREE, g = new THREE.Group(), R0 = T.r / T.s; g.position.set(T.x, 0, T.z); g.scale.setScalar(T.s); scene.add(g); // (built at R0, then scaled)
   const gold = goldLeaf(0xd9a838, { roughness: 0.32 });
   // its court: paving like the road's, and a short path to it from the road
-  path(3.4, T.z, T.x - 3.4, T.z, 2.6);
-  add(new THREE.CylinderGeometry(4, 4, 0.15, 48), P("brick_pavement_02", 3, 3, { color: new THREE.Color(1.75, 1.5, 1.2) }), 0, -0.05, 0, g, false);
-  paths.push({ x1: T.x, z1: T.z, x2: T.x, z2: T.z + 0.01, w: 8 }); // (the court as a path: stone underfoot, no grass on it)
+  path(3.4, T.z, T.x - 4.6, T.z, 2.6);
+  add(new THREE.CylinderGeometry(5, 5, 0.15, 48), P("brick_pavement_02", 4, 4, { color: new THREE.Color(1.75, 1.5, 1.2) }), T.x, -0.05, T.z, scene, false);
+  paths.push({ x1: T.x, z1: T.z, x2: T.x, z2: T.z + 0.01, w: 10 }); // (the court as a path: stone underfoot, no grass on it)
   // the base: two round white steps and a lotus of upturned petals the trunk rises from
-  add(new THREE.CylinderGeometry(T.r, T.r + 0.08, 0.26, 40), WALL_WHITE, 0, 0.13, 0, g);
-  add(new THREE.CylinderGeometry(T.r - 0.35, T.r - 0.3, 0.24, 40), WALL_WHITE, 0, 0.38, 0, g);
-  add(new THREE.TorusGeometry(T.r - 0.33, 0.025, 6, 40), gold, 0, 0.5, 0, g, false).rotation.x = Math.PI / 2;
+  add(new THREE.CylinderGeometry(R0, R0 + 0.08, 0.26, 40), WALL_WHITE, 0, 0.13, 0, g);
+  add(new THREE.CylinderGeometry(R0 - 0.35, R0 - 0.3, 0.24, 40), WALL_WHITE, 0, 0.38, 0, g);
+  add(new THREE.TorusGeometry(R0 - 0.33, 0.025, 6, 40), gold, 0, 0.5, 0, g, false).rotation.x = Math.PI / 2;
   {
     const petal = new THREE.SphereGeometry(1, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.55); petal.scale(0.22, 0.5, 0.11); // a cupped petal, open side out
     const parts = [];
@@ -2262,7 +2261,7 @@ const leafTree = { list: [], placed: [], byId: new Map(), sel: null, label: null
         const a = (i + w * 0.5) / n * Math.PI * 2, c = Math.cos(a), s = Math.sin(a), P = (r, h) => new THREE.Vector3(c * r, y + h, s * r);
         const curve = new THREE.CatmullRomCurve3([P(0.05, -0.06), P(0.35 * L, 0), P(0.72 * L, 0.12 * L), P(L, 0.42 * L), P(0.96 * L, 0.62 * L), P(0.84 * L, 0.66 * L)]);
         parts.push(new THREE.TubeGeometry(curve, 20, metal === "gold" ? 0.022 : 0.03, 5));
-        for (let j = 0; j < k; j++) { const p = curve.getPointAt(0.24 + 0.52 * j / Math.max(1, k - 1)); hooks.push([T.x + p.x, p.y - 0.03, T.z + p.z]); }
+        for (let j = 0; j < k; j++) { const p = curve.getPointAt(0.24 + 0.52 * j / Math.max(1, k - 1)); hooks.push([T.x + p.x * T.s, (p.y - 0.03) * T.s, T.z + p.z * T.s]); }
       }
     });
     for (let i = hooks.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [hooks[i], hooks[j]] = [hooks[j], hooks[i]]; } // scattered, so a new tier fills evenly
@@ -2270,10 +2269,10 @@ const leafTree = { list: [], placed: [], byId: new Map(), sel: null, label: null
   }
   add(mergeGeometries(parts), gold, 0, 0, 0, g);
   colliders.push({ x: T.x, z: T.z, r: T.r + 0.1 });
-  sign(tx("ต้นโพธิ์เงิน-โพธิ์ทอง", "Silver & gold Bodhi tree"), tx("ร่วมแขวนใบโพธิ์ สร้างวัดด้วยกัน", "Hang a leaf · build the temple together"), "🍃", T.x, 9.4, T.z, 4.4);
+  sign(tx("ต้นโพธิ์เงิน-โพธิ์ทอง", "Silver & gold Bodhi tree"), tx("ร่วมแขวนใบโพธิ์ สร้างวัดด้วยกัน", "Hang a leaf · build the temple together"), "🍃", T.x, 8.2 * T.s + 1.2, T.z, 4.4);
   // the leaves: one batch per metal, each leaf on a short wire; the wire of a leaf lower on a string meets the tip above
-  const SPACING = 0.45, leafGeo = mergeGeometries([new THREE.ShapeGeometry(bodhiLeafShape(), 10).translate(0, -0.06, 0), new THREE.CylinderGeometry(0.004, 0.004, 0.08, 4).translate(0, -0.02, 0)]);
-  leafGeo.scale(1.1, 1.1, 1.1); // (0.43 m with its wire: about one string step)
+  const SPACING = 0.5, leafGeo = mergeGeometries([new THREE.ShapeGeometry(bodhiLeafShape(), 10).translate(0, -0.06, 0), new THREE.CylinderGeometry(0.004, 0.004, 0.08, 4).translate(0, -0.02, 0)]);
+  leafGeo.scale(1.25, 1.25, 1.25); // (0.49 m with its wire: about one string step)
   const mats = {
     gold: goldLeaf(0xe2b24c, { side: THREE.DoubleSide, roughness: 0.3 }),
     silver: new THREE.MeshStandardMaterial({ color: 0xeef1f5, metalness: 0.85, roughness: 0.25, side: THREE.DoubleSide }),
@@ -2331,12 +2330,12 @@ function showLeaf(id, walk = false) {
   leafTree.glow.position.copy(l.pos); leafTree.sel = id;
   if (walk) {
     // he stands on the court on the road's side of the tree, a little toward the leaf's side, so the camera behind
-    // him is over the open road (the gate's open doors are toward the gate side)
+    // him is over the open road
     const ang = ((Math.atan2(l.hook[2] - LEAF_TREE.z, l.hook[0] - LEAF_TREE.x) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI), R = LEAF_TREE.r + 2.6;
-    const side = Math.max(Math.PI * 1.15, Math.min(Math.PI * 1.3, ang)); // (pi: toward the road; more: toward the plaza)
+    const side = Math.max(Math.PI * 0.92, Math.min(Math.PI * 1.08, ang)); // (pi: toward the road; the camera passes between the two lamps)
     player.x = LEAF_TREE.x + Math.cos(side) * R; player.z = LEAF_TREE.z + Math.sin(side) * R; player.y = groundAt(player.x, player.z);
     player.yaw = Math.atan2(l.pos.x - player.x, l.pos.z - player.z);
-    camYaw = Math.atan2(player.x - LEAF_TREE.x, player.z - LEAF_TREE.z); camPitch = 0.06; camDist = 7; // (looking at the tree over his shoulder)
+    camYaw = Math.atan2(player.x - LEAF_TREE.x, player.z - LEAF_TREE.z); camPitch = 0.02; camDist = 6.5; // (looking at the tree over his shoulder, from the road's edge: the alms row is beyond)
   }
   return true;
 }
