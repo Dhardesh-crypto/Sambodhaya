@@ -8,6 +8,28 @@ const store = {
   set(k, v) { try { localStorage.setItem("sambodhaya-" + k, JSON.stringify(v)); } catch (e) {} },
   del(k) { try { localStorage.removeItem("sambodhaya-" + k); } catch (e) {} },
 };
+// Anonymous visit counts (netlify/functions/track.mjs), as in the 3D temple (src/world.js): which pages a visit opens,
+// whether it goes into the 3D temple, and whether a donation notice is sent (never the amount); never who the visitor
+// is. A random id for this browser tab only, no cookies; off with Do Not Track or Global Privacy Control, and away from
+// the live site unless ?track is in the address.
+const track = (() => {
+  const live = /(^|\.)sambodhaya\.netlify\.app$/.test(location.hostname) || /[?&]track\b/.test(location.search);
+  if (!live || navigator.doNotTrack === "1" || navigator.globalPrivacyControl) return () => {};
+  let v = null; try { v = sessionStorage.getItem("sambodhaya-visit"); } catch (e) {}
+  if (!v || !/^[a-z0-9]{8,24}$/.test(v)) { v = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => "abcdefghijkmnpqrstuvwxyz23456789"[b % 32]).join(""); try { sessionStorage.setItem("sambodhaya-visit", v); } catch (e) {} }
+  const t0 = performance.now(), sent = new Set(), q = [], sec = () => Math.round((performance.now() - t0) / 1000);
+  const touch = matchMedia("(pointer: coarse)").matches, device = touch ? (Math.min(screen.width, screen.height) < 600 ? "phone" : "tablet") : "desktop";
+  const flush = () => {
+    if (!q.length) return;
+    const body = JSON.stringify({ v, p: "site", d: device, l: store.get("settings", {}).lang === "en" ? "en" : "th", e: q.splice(0, 40) });
+    if (!(navigator.sendBeacon && navigator.sendBeacon("/.netlify/functions/track", new Blob([body], { type: "application/json" })))) fetch("/.netlify/functions/track", { method: "POST", body, keepalive: true }).catch(() => {});
+  };
+  setInterval(flush, 15000);
+  addEventListener("visibilitychange", () => { if (document.hidden) { q.push(["hide", sec()]); flush(); } });
+  addEventListener("click", (e) => { const a = e.target.closest && e.target.closest('a[href^="world.html"]'); if (a) { q.push(["s_to3d", sec()]); flush(); } }, true); // (before the page goes)
+  return (ev) => { if (sent.has(ev)) return; sent.add(ev); q.push([ev, sec()]); if (q.length >= 20) flush(); };
+})();
+track("s_open");
 const IMG = { bg: "img/temple-bg.webp", dog: "img/temple-dog.jpg", entrance: "img/entrance.jpg", world: "img/world-preview.jpg" };
 
 // UI wording (not teaching). Thai first; English is a draft.
@@ -895,6 +917,7 @@ function Support() {
       const leaf = wantLeaf ? { leaf_id: leafId, leaf_metal: metal, leaf_name: leafName, leaf_dedication: f.leafDed.trim(), leaf_wish: f.leafWish.trim() } : {};
       await sendForm("donation", { name: f.anonymous ? "(anonymous)" : f.name.trim(), amount: f.amount, method, note: f.note.trim(), email: f.email.trim(), thanks: f.anonymous ? "private" : f.thanks, adult: "yes", consent: "yes", lang, ...leaf, "bot-field": "" }, file);
       if (wantLeaf) store.set("my-leaves", [...myLeaves().filter((x) => x !== leafId), leafId]); // (this device remembers its leaves, to mark them on the tree)
+      track("donation_sent"); if (wantLeaf) track("leaf_asked");
       setState("sent"); window.scrollTo(0, 0);
     } catch (err) { setState("error"); }
   };
@@ -1191,6 +1214,7 @@ function App() {
   useEffect(() => { store.set("settings", settings); const r = document.documentElement; r.lang = settings.lang; r.dataset.size = settings.size; r.dataset.contrast = settings.contrast ? "on" : "off"; r.dataset.motion = settings.calmMotion ? "calm" : "normal"; if (settings.mute) hush(); }, [settings]);
   useEffect(() => { if (remember) store.set("trail", trail); }, [trail, remember]);
   useEffect(() => { if (main.current) { main.current.focus({ preventScroll: true }); window.scrollTo(0, 0); } }, [route.view, route.arg]);
+  useEffect(() => { track("s_" + route.view); }, [route.view]);
   const go = (view, arg = null) => { hush(); location.hash = view === "unit" ? "u0" + (arg + 1) : view === "media" && arg === "wheel" ? "wheel" : view; };
   const setRemember = (v) => { setRememberState(v); store.set("remember", v); if (!v) { store.del("trail"); } else store.set("trail", trail); };
   const addTrail = (u) => setTrail((tr) => (tr.length && tr[tr.length - 1].u === u ? tr : [...tr.filter((f) => f.u !== u), { u, code: UNITS[u].code }]));

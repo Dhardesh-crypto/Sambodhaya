@@ -35,6 +35,7 @@ input[type="search"] { background: var(--cream); border: 1.5px solid var(--ink);
 .badge-ro { display: inline-block; font-size: .8rem; background: var(--leaf-soft); border: 1.5px solid var(--ink); border-radius: 999px; padding: 0 10px; }
 .badge-ro.edit { background: var(--gold-soft); }
 td select { padding: 1px 10px; font-size: .85rem; }
+.note { color: var(--muted, #6e5c4c); font-size: .9rem; max-width: 75ch; }
 .note-edit { display: flex; gap: 6px; align-items: center; min-width: 260px; }
 .note-edit input { flex: 1 1 auto; min-width: 0; background: var(--cream); border: 1.5px solid var(--ink); border-radius: 10px; padding: 2px 8px; font-size: .85rem; }
 .note-edit button { padding: 1px 12px; font-size: .85rem; }
@@ -110,6 +111,10 @@ a { color: var(--saffron-deep); }
 
     <h2 data-th="ความคิดเห็น" data-en="Feedback"></h2>
     <div class="wrap"><table id="fb"></table></div>
+
+    <h2 data-th="ผู้มาเยือน (14 วันล่าสุด)" data-en="Visits (last 14 days)"></h2>
+    <p class="note" data-th="นับแบบไม่ระบุตัวตน: แต่ละแถวคือจำนวนการเข้าชมในวันนั้นที่ไปถึงแต่ละขั้น ไม่มีชื่อ ไม่มีที่อยู่ IP ไม่มีคุกกี้ การเข้าชมหนึ่งครั้งคือหนึ่งแท็บของเบราว์เซอร์ ผู้ที่ตั้งค่าไม่ให้ติดตาม (Do Not Track) จะไม่ถูกนับ เวลาอยู่คือค่ากลาง (ครึ่งหนึ่งอยู่นานกว่านี้)" data-en="Counted anonymously: each row is how many visits that day reached each step. No names, no IP addresses, no cookies; a visit is one browser tab. Visitors who ask not to be tracked (Do Not Track) aren't counted. Stay is the median (half stayed longer)."></p>
+    <div class="wrap"><table id="visits"></table></div>
   </div>
 </main>
 
@@ -163,6 +168,25 @@ a { color: var(--saffron-deep); }
     { th: "18+ / ยินยอม", en: "18+ / consent", cls: "nowrap", cell: (r) => r.adult_consent },
     { th: "ลบหลัง", en: "Delete after", cls: "nowrap", cell: (r) => { const n = daysLeft(r.delete_after), s = el("span", n <= 14 ? "soon" : null, `${r.delete_after} (${n} ${T("วัน", n === 1 ? "day" : "days")})`); return s; } },
     { th: "รหัสรายการ", en: "Submission ID", cls: "id", cell: (r) => r.submission_id },
+  ];
+  const mins = (s) => (s == null ? "" : s < 60 ? `${Math.round(s)} s` : `${Math.floor(s / 60)} min ${Math.round(s % 60)} s`);
+  const pct = (n, of) => (of ? `${n} (${Math.round(100 * n / of)}%)` : `${n}`);
+  const VIS = [
+    { th: "วัน", en: "Day", cls: "nowrap", cell: (r) => r.day },
+    { th: "การเข้าชม", en: "Visits", cls: "num", cell: (r) => r.visits },
+    { th: "จากมือถือ", en: "On a phone", cls: "num", cell: (r) => pct(r.phone, r.visits) },
+    { th: "เปิดวัด 3 มิติ", en: "Opened the 3D temple", cls: "num", cell: (r) => pct(r.w_start, r.visits) },
+    { th: "โหลดเสร็จ", en: "3D loaded", cls: "num", cell: (r) => pct(r.w_loaded, r.w_start) },
+    { th: "เริ่มเดิน", en: "Started walking", cls: "num", cell: (r) => pct(r.w_move, r.w_loaded) },
+    { th: "ทำกิจกรรมแรก", en: "Did a first thing", cls: "num", cell: (r) => pct(r.w_act, r.w_loaded) },
+    { th: "ต้อนรับครบ 3 อย่าง", en: "Finished the welcome", cls: "num", cell: (r) => pct(r.welcome_done, r.w_loaded) },
+    { th: "เปิดภารกิจ", en: "Opened quests", cls: "num", cell: (r) => pct(r.quests_open, r.w_loaded) },
+    { th: "ต้นโพธิ์เงิน-ทอง", en: "Bodhi tree", cls: "num", cell: (r) => r.tree },
+    { th: "หน้าสมทบทุน / ตู้บริจาค", en: "Support page / box", cls: "num", cell: (r) => r.donate },
+    { th: "ส่งแจ้งโอน", en: "Donation sent", cls: "num", cell: (r) => r.donation_sent },
+    { th: "ขอใบโพธิ์", en: "Asked for a leaf", cls: "num", cell: (r) => r.leaf_asked },
+    { th: "อยู่นาน (ค่ากลาง)", en: "Stay (median)", cls: "nowrap", cell: (r) => mins(r.stay_median) },
+    { th: "อยู่ในวัด 3 มิติ (ค่ากลาง)", en: "Stay in 3D (median)", cls: "nowrap", cell: (r) => mins(r.stay_3d_median) },
   ];
   const FB = [
     { th: "ส่งเมื่อ (เวลาไทย)", en: "Submitted (Thai time)", cls: "when", cell: (r) => bkk(r.submitted) },
@@ -230,6 +254,7 @@ a { color: var(--saffron-deep); }
     tiles();
     table($("don"), DON, shownDonations(), T("ยังไม่มีรายการ", "No donations yet"));
     table($("fb"), FB, data.feedback, T("ยังไม่มีความคิดเห็น", "No feedback yet"));
+    table($("visits"), VIS, (data.visits || []).slice(0, 14), T("ยังไม่มีข้อมูล", "Nothing counted yet"));
   }
 
   async function load() {

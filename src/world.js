@@ -57,9 +57,32 @@ function infoSpot(id, x, y, z, r, near = 0, when = null) { INFO.push({ id, x, y,
 /* ---------------- renderer, scene, camera ---------------- */
 // Quality: "high" = sunset sky lighting, soft shadows, glow and detailed models; "light" = for weaker phones.
 // Chosen automatically the first time, then remembered on this device only.
-const weak = matchMedia("(pointer: coarse)").matches && (navigator.deviceMemory || 4) <= 4;
+// (phones: a touch screen under 600 px on its short side; tablets and others with little memory too)
+const touch = matchMedia("(pointer: coarse)").matches, phone = touch && Math.min(screen.width, screen.height) < 600;
+const weak = phone || (touch && (navigator.deviceMemory || 4) <= 4);
 let quality = read("world-quality", weak ? "light" : "high");
 const HIGH = quality === "high";
+
+// Anonymous visit counts (netlify/functions/track.mjs): which steps a visit reaches and how long it stays, never who
+// the visitor is. A random id for this browser tab only (sessionStorage, shared with the site's pages), no cookies.
+// Off with Do Not Track or Global Privacy Control, and off away from the live site unless ?track is in the address.
+const track = (() => {
+  const live = /(^|\.)sambodhaya\.netlify\.app$/.test(location.hostname) || /[?&]track\b/.test(location.search);
+  if (!live || navigator.doNotTrack === "1" || navigator.globalPrivacyControl) return () => {};
+  let v = null; try { v = sessionStorage.getItem("sambodhaya-visit"); } catch (e) {}
+  if (!v || !/^[a-z0-9]{8,24}$/.test(v)) { v = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => "abcdefghijkmnpqrstuvwxyz23456789"[b % 32]).join(""); try { sessionStorage.setItem("sambodhaya-visit", v); } catch (e) {} }
+  const t0 = performance.now(), sent = new Set(), q = [], sec = () => Math.round((performance.now() - t0) / 1000);
+  const device = phone ? "phone" : touch ? "tablet" : "desktop";
+  const flush = () => {
+    if (!q.length) return;
+    const body = JSON.stringify({ v, p: "3d", d: device, q: quality, l: settings.lang === "en" ? "en" : "th", e: q.splice(0, 40) });
+    if (!(navigator.sendBeacon && navigator.sendBeacon("/.netlify/functions/track", new Blob([body], { type: "application/json" })))) fetch("/.netlify/functions/track", { method: "POST", body, keepalive: true }).catch(() => {});
+  };
+  setInterval(flush, 15000);
+  addEventListener("visibilitychange", () => { if (document.hidden) { q.push(["hide", sec()]); flush(); } }); // (how long it stayed)
+  return (ev, once = true) => { if (once && sent.has(ev)) return; sent.add(ev); q.push([ev, sec()]); if (q.length >= 20) flush(); };
+})();
+track("w_start");
 
 const canvas = document.getElementById("view");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !HIGH, powerPreference: "high-performance" });
@@ -1965,7 +1988,12 @@ const COMMUNITY = { x: -7, z: 37.2, scale: 2, lift: -1.8, url: CONTENT.signs.com
 // fades in and out, all at once.
 function showDonationPath() {
   if (Math.hypot(player.x, player.z - 93) > 8) return;
-  const route = [[-1.2, 89], [-1.2, 42.5], [2.4, 40.4], [DONATE.x - 1.3, 38.9]], dots = [];
+  lightPath([[-1.2, 89], [-1.2, 42.5], [2.4, 40.4], [DONATE.x - 1.3, 38.9]], () => { boxFlare.t = boxFlare.len; }); // the last light is on: the box answers
+}
+// a trail of lights along a route of [x, z] points, lighting up toward its end (the welcome uses it too); onLit: when
+// the last one is on
+function lightPath(route, onLit = null) {
+  const dots = [];
   for (let k = 1; k < route.length; k++) {
     const [x0, z0] = route[k - 1], [x1, z1] = route[k], L = Math.hypot(x1 - x0, z1 - z0);
     for (let u = k === 1 ? 0 : 1.1; u <= L; u += 1.1) { const x = x0 + (x1 - x0) * u / L, z = z0 + (z1 - z0) * u / L; dots.push([x, groundAt(x, z) + 0.08, z]); }
@@ -1978,7 +2006,7 @@ function showDonationPath() {
   let t = 0, reached = false;
   glowAnims.push((dt) => {
     t += dt;
-    if (!reached && t >= SWEEP + 0.35) { reached = true; boxFlare.t = boxFlare.len; } // the last light is on: the box answers
+    if (!reached && t >= SWEEP + 0.35) { reached = true; if (onLit) onLit(); }
     dots.forEach(([x, y, z], i) => {
       const k = SWEEP ? Math.min(1, Math.max(0, (t - (i / dots.length) * SWEEP) / 0.35)) : 1; // each dot lights up in turn
       o.position.set(x, y, z); o.scale.setScalar(k * (calm ? 1 : 1 + 0.15 * Math.sin(t * 4 - i * 0.45))); o.updateMatrix(); im.setMatrixAt(i, o.matrix);
@@ -2068,6 +2096,7 @@ kinds.forEach(([name, h], k) => {
   }) });
 });
 
+const guardians = []; // where the two guardian giants stand, outside the gateway
 const YAKSHA_H = 6.2; // the guardians stand about as tall as the gateway's posts
 /* ---------------- the temple wall (kampaeng kaew): white, with lotus-bud posts ---------------- */
 // White plaster on a moulded plinth, topped with a rounded lotus coping (บัวคว่ำบัวหงาย); between the lengths, square
@@ -2135,7 +2164,7 @@ const YAKSHA_H = 6.2; // the guardians stand about as tall as the gateway's post
   [[-1, "yaksha-green"], [1, "yaksha-white"]].forEach(([sg, name]) => {
     add(new THREE.BoxGeometry(2.3, 0.7, 1.9), wallMat, sg * YX, 0.35, YZ);
     add(new THREE.BoxGeometry(2.45, 0.12, 2.05), MAT.gold, sg * YX, 0.72, YZ, scene, false);
-    props(name, YAKSHA_H, [[sg * YX, YZ, MONK_TURN, 0.78]]); infoSpot("yaksha", sg * YX, 3.2, YZ, 2.2, 2.8);
+    props(name, YAKSHA_H, [[sg * YX, YZ, MONK_TURN, 0.78]]); infoSpot("yaksha", sg * YX, 3.2, YZ, 2.2, 2.8); guardians.push([sg * YX, YZ]);
   });
   sign(txo(CONTENT.signs.gate.title), txo(CONTENT.signs.gate.sub), "☸", 0, 12.4, GZ, 6);
 }
@@ -4962,6 +4991,7 @@ function startWai() {
   wai.faceYaw = here.face ? Math.atan2(here.face.x - player.x, here.face.z - player.z) : null;
   wai.t = 0;
   if (monksNear() || teacherNear(4)) questEvent("waiMonk");
+  if (guardians.some(([x, z]) => Math.hypot(player.x - x, player.z - z) < 9)) questEvent("waiGuard"); // (the welcome; the gateway between them counts)
 }
 // a teacher seated within d of the child (the main hall's monks)
 function teacherNear(d) {
@@ -5811,10 +5841,33 @@ function pickAt(x, y) {
   { const h = salas.learn; // a seated monk: what can be done before him (the child goes to him to do it)
     const s = h && h.teachers && kraap.t < 0 && alms.t < 0 && h.teachers.find((t) => t.rig && TEACHER_TALK[t.name] && ray.intersectObject(t.rig.holder, true).length);
     if (s) { openMonk(monkPlace(h, s)); return; } }
-  { const l = leafAtRay(); if (l) { showLeaf(l.id); return; } } // a leaf on the silver and gold Bodhi tree
+  { const l = leafAtRay(); if (l) { track("leaf_tap"); showLeaf(l.id); return; } } // a leaf on the silver and gold Bodhi tree
   const info = infoAtRay(); if (info) { openInfo(info.id); return; }
   if (insideHall(player.x, player.z)) return; // inside a hall, clicks just turn the view
   for (const id of Object.keys(halls)) { if (ray.intersectObject(halls[id], true).length) { openPlace(PLACES.find((p) => p.id === id)); return; } }
+  // anywhere else on the ground (not too far): walk there
+  const hit = new THREE.Vector3();
+  if (!twoP && ray.ray.intersectPlane(GROUND_PLANE, hit) && Math.hypot(hit.x - player.x, hit.z - player.z) < 45) setWalkTo(hit.x, hit.z);
+}
+// Tap (or click) a spot on the ground and he walks there, round what is in the way as far as sliding along it goes;
+// a ring marks the spot. Any key or the stick takes over; he stops when he arrives, or when he can get no closer.
+const GROUND_PLANE = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.02);
+let walkTo = null;
+const walkMark = new THREE.Mesh(new THREE.RingGeometry(0.35, 0.5, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffc04d, transparent: true, opacity: 0.85, depthWrite: false, toneMapped: false }));
+walkMark.visible = false; walkMark.renderOrder = 3; scene.add(walkMark);
+function setWalkTo(x, z) {
+  walkTo = { x, z, best: Math.hypot(x - player.x, z - player.z), stuck: 0 };
+  walkMark.position.set(x, groundAt(x, z) + 0.05, z); walkMark.visible = true; track("tap_walk");
+}
+function stopWalkTo() { walkTo = null; walkMark.visible = false; }
+// the way to the tapped spot, as the stick would give it (relative to the camera); null when there is none
+function walkToInput(dt) {
+  if (!walkTo) return null;
+  const dx = walkTo.x - player.x, dz = walkTo.z - player.z, d = Math.hypot(dx, dz);
+  if (d < 0.6) { stopWalkTo(); return null; }
+  if (d < walkTo.best - 0.2) { walkTo.best = d; walkTo.stuck = 0; } else if ((walkTo.stuck += dt) > 1.5) { stopWalkTo(); return null; } // (stuck: no nearer in 1.5 s of walking)
+  const s = Math.sin(camYaw), c = Math.cos(camYaw);
+  return { fx: (dx * c - dz * s) / d, fz: (dx * s + dz * c) / d };
 }
 
 /* ---------------- collisions ---------------- */
@@ -5901,7 +5954,7 @@ function openDonate() {
 const BELL_PLACE = { id: "bell", icon: "🔔", th: "ระฆังวัด", en: "Temple bell", sub: ["ตีระฆังได้ ฟังเสียงจนเงียบ", "Strike it, and listen until it fades"] };
 function ringBell() {
   if (settings.mute) { askSound(); return; }
-  sound.bell(BELL[0], 3.4, BELL[1]); stamp("bell");
+  sound.bell(BELL[0], 3.4, BELL[1]); stamp("bell"); questEvent("ringBell");
 }
 const dialogOpen = () => !$("dlg").hidden;
 let lastFocus = null;
@@ -5923,7 +5976,7 @@ const SPOT_KEY = "sambodhaya-3d-spot";
 function saveSpot() {
   try { sessionStorage.setItem(SPOT_KEY, JSON.stringify({ x: player.x, z: player.z, yaw: player.yaw, camYaw, camPitch, camDist, t: Date.now() })); } catch (e) {}
 }
-addEventListener("click", (e) => { const a = e.target.closest && e.target.closest('a[href*="from=3d"]'); if (a) saveSpot(); }, true);
+addEventListener("click", (e) => { const a = e.target.closest && e.target.closest('a[href*="from=3d"]'); if (a) { saveSpot(); const h = (a.getAttribute("href").split("#")[1] || ""); if (h === "support" || h === "tree") track("to_" + h); } }, true);
 function restoreSpot() {
   const nav = performance.getEntriesByType && performance.getEntriesByType("navigation")[0];
   const returning = /[?&]return=1\b/.test(location.search) || (nav && nav.type === "back_forward");
@@ -5940,8 +5993,8 @@ function restoreSpot() {
 }
 function openPlace(p) {
   if (p.id === "bell") { ringBell(); return; }
-  if (p.id === "donate") { openDonate(); return; }
-  if (p.id === "leaftree") { openLeafTree(); return; }
+  if (p.id === "donate") { track("donate_open"); openDonate(); return; }
+  if (p.id === "leaftree") { track("tree_open"); openLeafTree(); return; }
   if (p.id === "community") { openCommunity(); return; }
   if (p.id === "alms") { startAlms(p.monk); return; }
   if (p.id === "fish") { startFeed(); return; }
@@ -6336,6 +6389,12 @@ $("fold").addEventListener("keydown", (e) => { const p = e.target.closest("[data
 // with a line on why it is done. No scores and no failing; the steps may be done in any order. Progress is kept on
 // this device only.
 const QUESTS = [
+  // the first visit's welcome: starts by itself, three small things on the way in (see "the welcome" below)
+  { id: "welcome", icon: "🙏", name: ["ยินดีต้อนรับสู่วัด", "Welcome to the temple"], steps: [
+    { ev: "feed", t: ["ให้อาหารปลาจากสะพาน", "Feed the fish from the bridge"], why: ["การให้อาหารสัตว์อย่างอ่อนโยนเป็นการฝึกความเมตตา", "Feeding animals gently is a way to practise kindness."], at: () => [[player.x, player.z], [0, 86.5]] },
+    { ev: "waiGuard", t: ["ไหว้ยักษ์ทวารบาลที่ประตูวัด (ปุ่ม 🙏)", "Make a wai to the guardian giants at the gate (the 🙏 button)"], why: ["ยักษ์เฝ้าประตูวัด เราทักทายอย่างสุภาพเมื่อเข้ามา เป็นการเคารพสถานที่", "The giants guard the temple's gate. We greet them politely as we come in, out of respect for the place."], at: () => [[player.x, player.z], [0, 79.5]] },
+    { ev: "ringBell", t: ["ตีระฆัง แล้วฟังเสียงจนเงียบ", "Ring the bell, and listen until it fades"], why: ["เสียงระฆังเตือนให้เรามีสติ", "The bell's sound reminds us to be mindful."], at: () => [[player.x, player.z], [-1.2, Math.min(player.z, 70)], [-1.2, 27], [-4.6, 25.4]] },
+  ] },
   { id: "visit", icon: "🛕", name: ["มาวัดครั้งแรก", "A first visit to the temple"], steps: [
     { ev: "shoesOff", t: ["ถอดรองเท้าก่อนขึ้นศาลา", "Take off your shoes at the steps of a hall"], why: ["รองเท้าใช้เดินข้างนอก ในศาลาเราใส่ถุงเท้าหรือเดินเท้าเปล่า เพื่อรักษาความสะอาดและแสดงความเคารพ", "Shoes are for outside: in a hall we go in socks or barefoot, to keep it clean and to show respect."] },
     { ev: "kraap", t: ["กราบพระ 3 ครั้ง หน้าพระพุทธรูป", "Bow three times before the Buddha image"], why: ["กราบครั้งที่หนึ่งระลึกถึงพระพุทธ ครั้งที่สองพระธรรม ครั้งที่สามพระสงฆ์", "The first bow is for the Buddha, the second for the Dhamma, the third for the Sangha."] },
@@ -6386,6 +6445,7 @@ function nextToast() {
 const hintShown = {}; // once per visit
 function hint(k) { if (hintShown[k]) return; hintShown[k] = true; toast(`💡 ${esc(tx(...HINTS[k]))}`, 8); }
 function questEvent(ev) {
+  track("w_act"); // (the first thing done, of any kind)
   const st = STAMPS.find((x) => x.ev === ev); if (st) stamp(st.id);
   const q = questOf(questState.active); if (!q) return;
   const ticks = questState.ticks[q.id] || (questState.ticks[q.id] = []), i = q.steps.findIndex((s) => s.ev === ev);
@@ -6394,12 +6454,36 @@ function questEvent(ev) {
   toast(`<strong>✓ ${esc(tx(...s.t))}</strong><br>${esc(tx(...s.why))}`, 8);
   if (ticks.length === q.steps.length) {
     if (!questState.done.includes(q.id)) questState.done.push(q.id);
+    if (q.id === "welcome") { track("welcome_done"); setTimeout(openWelcomeEnd, 3500); }
     toast(`🌸 <strong>${esc(tx("ทำภารกิจสำเร็จแล้ว:", "Quest complete:"))} ${esc(tx(...q.name))}</strong><br>${esc(tx("อนุโมทนาสาธุ ลองภารกิจอื่นได้ที่ปุ่ม 📜", "Well done. Try another quest with the 📜 button."))}`, 9);
     questState.active = null;
   }
+  else if (q.id === "welcome") { track("welcome_" + ticks.length); setTimeout(guideWelcome, 2500); }
   saveQuests(); renderQuest();
 }
-function startQuest(id) { questState.active = id; questState.ticks[id] = []; saveQuests(); renderQuest(); }
+function startQuest(id) { questState.active = id; questState.ticks[id] = []; saveQuests(); renderQuest(); if (id === "welcome") setTimeout(guideWelcome, 800); }
+// the welcome: lights the way to its next step, and at the end says what else there is to do
+function guideWelcome() {
+  const q = questOf("welcome"), ticks = questState.ticks.welcome || [];
+  if (questState.active !== "welcome") return;
+  const s = q.steps.find((x, i) => !ticks.includes(i)); if (s && s.at) lightPath(s.at());
+}
+function startWelcome() {
+  write("welcomed", true); track("welcome_start"); startQuest("welcome");
+  toast(`🙏 <strong>${esc(tx("ยินดีต้อนรับ!", "Welcome!"))}</strong> ${esc(tx("ลองทำสามอย่างนี้ตอนเดินเข้าวัด แสงบนพื้นจะพาไป (หยุดได้ที่ปุ่ม 📜 ภารกิจ)", "Try these three things on your way in; the lights on the ground show the way. (Stop any time with the 📜 Quests button.)"))}`, 9);
+}
+function openWelcomeEnd() {
+  openDialog(tx("🌸 ยินดีต้อนรับสู่วัดสัมโพธายะ", "🌸 Welcome to Sambodhaya"),
+    `<p>${esc(tx("ในวัดยังมีอีกหลายอย่างให้ทำ เลือกได้เลย หรือเดินชมไปเรื่อย ๆ ก็ได้", "There's much more to do in the temple. Pick one, or just wander."))}</p>
+     <ul class="places">
+       <li><button data-welcome="quests"><span class="ic">📜</span><span><strong>${esc(tx("ภารกิจ", "Quests"))}</strong> · ${esc(tx("ใส่บาตร ถวายธูปเทียน ทอดกฐิน ฯลฯ", "give alms, offer incense, the Kathina…"))}</span></button></li>
+       <li><button data-welcome="passport"><span class="ic">📖</span><span><strong>${esc(tx("สมุดเดินทาง", "Passport"))}</strong> · ${esc(tx("สะสมตราประทับจากทุกที่ในวัด", "collect a stamp from every corner"))}</span></button></li>
+       <li><button data-welcome="journey"><span class="ic">👣</span><span><strong>${esc(tx("เส้นทางของฉัน", "My Journey"))}</strong> · ${esc(tx("ตามรอยเรื่องของพระพุทธเจ้าทีละก้าว", "the Buddha's story, step by step"))}</span></button></li>
+       <li><button data-welcome="places"><span class="ic">🗺️</span><span><strong>${esc(tx("ที่ต่าง ๆ ในวัด", "Places"))}</strong> · ${esc(tx("ศาลาเรียนรู้ สวนสังเกตใจ และอื่น ๆ", "the Learning Hall, the Practice Garden and more"))}</span></button></li>
+     </ul>
+     <div class="row"><button class="chip" data-close>${esc(tx("เดินชมต่อ", "Keep exploring"))}</button></div>`);
+}
+
 function renderQuest() {
   const box = $("questbox"), q = questOf(questState.active); if (!box) return;
   if (!q) { box.hidden = true; return; }
@@ -6520,27 +6604,28 @@ function kraapEnded(kind) {
 $("dlg").addEventListener("click", (e) => {
   const ma = e.target.closest("[data-monk-act]"); if (ma) { const a = monkActs[+ma.dataset.monkAct]; closeDialog(); if (a) a.run(); return; }
   const qs = e.target.closest("[data-quest]"); if (qs) { startQuest(qs.dataset.quest); closeDialog(); return; }
-  if (e.target.closest("[data-quest-stop]")) { questState.active = null; saveQuests(); renderQuest(); closeDialog(); return; }
+  if (e.target.closest("[data-quest-stop]")) { if (questState.active === "welcome") track("welcome_stop"); questState.active = null; saveQuests(); renderQuest(); closeDialog(); return; }
+  const wl = e.target.closest("[data-welcome]"); if (wl) { const w = wl.dataset.welcome; track("welcome_pick_" + w); closeDialog(); if (w === "quests") openQuests(); else if (w === "passport") openPassport(); else if (w === "places") openPlaces(false); else teleport("journey"); return; }
   const go = e.target.closest("[data-go]"); if (go) { teleport(go.dataset.go); closeDialog(); return; }
   if (e.target.closest("[data-pet]")) { closeDialog(); startPetDog(); return; }
   if (e.target.closest("[data-photo-share]") && lastPhoto) { navigator.share({ files: [lastPhoto.file], title: "วัดสัมโพธายะ · Sambodhaya" }).catch(() => {}); return; }
   if (e.target.closest("[data-close]")) closeDialog();
 });
 $("btn-places").addEventListener("click", () => openPlaces(false));
-$("btn-quest").addEventListener("click", openQuests);
+$("btn-quest").addEventListener("click", () => { track("quests_open"); openQuests(); });
 $("btn-photo").addEventListener("click", () => setPhoto(true));
 $("photo-done").addEventListener("click", () => setPhoto(false));
 $("photo-shot").addEventListener("click", takePhoto);
 $("photo-in").addEventListener("click", () => { camDist = clampDist(camDist / 1.25); });
 $("photo-out").addEventListener("click", () => { camDist = clampDist(camDist * 1.25); });
-$("btn-passport").addEventListener("click", openPassport);
+$("btn-passport").addEventListener("click", () => { track("passport_open"); openPassport(); });
 $("medi").addEventListener("click", (e) => { const b = e.target.closest("[data-medi]"); if (b) startMedi(+b.dataset.medi); else if (e.target.closest("#medi-stop")) stopMedi(); });
 $("quest-head").addEventListener("click", () => $("questbox").classList.toggle("folded"));
 renderQuest();
 $("btn-help").addEventListener("click", () => openDialog(tx("❔ วิธีเดินในวัด", "❔ How to walk around"),
   `<p>${tx("⌨️ W A S D หรือปุ่มลูกศร = เดิน • Shift = วิ่ง • Space = กระโดด • E = เข้าศาลาที่อยู่ใกล้ • G = เรียกหมาวัด • Q = ไหว้ 🙏 • C = นั่งสมาธิ 🧘 (เดินเพื่อลุก) • K = กราบพระ 🙇 (หน้าพระพุทธรูป) • P = ลูบหัวหมา 🐾 • ใส่บาตร 🍚: ยืนหน้าพระที่ถนนหน้าประตูวัด แล้วกด E (พระบิณฑบาตเฉพาะตอนเช้า 6:00–11:00 ตามนาฬิกาเครื่องนี้)", "⌨️ W A S D or arrow keys = walk • Shift = run • Space = jump • E = visit the nearby hall • G = call the temple dog • Q = wai 🙏 • C = sit 🧘 (walk to stand up) • K = pay tribute 🙇 (before a Buddha image) • P = pet the dog 🐾 • give alms 🍚: stand before a monk on the road outside the gate and press E (monks go on the alms round only in the morning, 6:00–11:00 by this device's clock)")}</p>
-   <p>${tx("🖱️ ลากเมาส์ = หมุนมุมมอง • ล้อเมาส์ = ซูม • คลิกหมาวัดหรือศาลา = เปิด", "🖱️ Drag = turn the view • Wheel = zoom • Click the dog or a hall = open it")}</p>
-   <p>${tx("📱 จอยซ้ายล่าง = เดิน • ลากจอ = หมุนมุมมอง • ปุ่ม E = เข้า", "📱 Bottom-left stick = walk • Drag the screen = turn the view • E button = visit")}</p>
+   <p>${tx("🖱️ ลากเมาส์ = หมุนมุมมอง • ล้อเมาส์ = ซูม • คลิกหมาวัดหรือศาลา = เปิด • คลิกที่พื้น = เดินไปตรงนั้น", "🖱️ Drag = turn the view • Wheel = zoom • Click the dog or a hall = open it • Click the ground = walk there")}</p>
+   <p>${tx("📱 แตะที่พื้น = เดินไปตรงนั้น • จอยซ้ายล่าง = เดิน • ลากจอ = หมุนมุมมอง • ปุ่ม E = เข้า", "📱 Tap the ground = walk there • Bottom-left stick = walk • Drag the screen = turn the view • E button = visit")}</p>
    <p>${tx("🔈 ปุ่มเสียง = เปิดเสียงนก ลม น้ำตก และกระดิ่งชายคา (ปิดอยู่จนกว่าจะกด) • 🔔 เดินไปที่ระฆังแล้วกด E เพื่อตีระฆัง", "🔈 Sound button = birds, breeze, the waterfall and the roof bells (off until you press it) • 🔔 Walk to the bell and press E to strike it")}</p>
    <p class="quiet">🤲 <a href="${to2d("support")}">${tx("สมทบทุนพัฒนาและสร้างวัด (สำหรับผู้ใหญ่)", "Support the temple's development (for adults)")}</a> • ${tx("หรือที่ตู้รับบริจาคที่เสาประตูขวา", "or at the donation box on the right-hand gate post")}</p>
    <p class="note">${tx("ที่นี่ไม่มีคะแนน ไม่มีของให้เก็บ และไม่มีการแข่งขัน เดินดูตามสบาย และออกได้ทุกเมื่อที่ประตูขวา", "There are no points, nothing to collect and no competition here. Walk around as you like, and leave any time by the right-hand gate.")}</p>
@@ -6953,6 +7038,8 @@ function kidStep(dt) {
   let fx = 0, fz = 0, inp = { run: false };
   if (!dialogOpen()) {
     inp = kidInput(); fx = inp.fx; fz = inp.fz;
+    if (Math.hypot(fx, fz) > 0.05) stopWalkTo(); // (keys or the stick take over)
+    else if (!twoP) { if (kraap.t >= 0 || sit.on || feed.t >= 0 || alms.t >= 0 || merit.t >= 0) stopWalkTo(); else { const w = walkToInput(dt); if (w) { fx = w.fx; fz = w.fz; } } }
     if (inp.jump && !sit.on && sit.rise <= 0 && kraap.t < 0 && alms.t < 0 && shoes.t < 0 && feed.t < 0 && merit.t < 0 && player.y <= groundAt(player.x, player.z) + 0.01) player.vy = 9;
   }
   if (kraap.t >= 0) { // paying tribute: stay put (it ends by itself); glide to the spot and face the image first
@@ -7006,6 +7093,7 @@ function kidStep(dt) {
   const running = inp.run;
   const speed = (running ? (player.clips.walk && !player.clips.run && player.gait.walk ? Math.min(6, player.gait.walk.speed * 2.2) : 6) : 2.6) * mag * (1 - 0.35 * stoop.w); // (slower, walking low before the monks) a 10-year-old's natural walking and running pace at this scale (the girl: a brisk walk her stride keeps up with)
   if (mag > 0.05) {
+    track("w_move");
     const s = Math.sin(camYaw), c = Math.cos(camYaw);
     const nx = fx / (Math.hypot(fx, fz) || 1), nz = fz / (Math.hypot(fx, fz) || 1);
     const wx = nx * c + nz * s, wz = -nx * s + nz * c;
@@ -7128,10 +7216,13 @@ document.fonts.load("64px Itim").then(() => document.fonts.load("36px Mali")).ca
 camYaw = 0; camera.position.set(0, 8, 105);
 restoreSpot(); // back from a page of the site: stand where you were
 if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, renderer, reflectors, two: () => ({ P1, P2, twoP, owner, kid }), meal, setMealTime: (v) => { mealForce = v; }, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, almsScene, almsShow, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, gardenSpots, paths, floors, ponds, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startKathin, kathinSpots, feed, startFeed, fishes, food, onBridge, merit, startMerit, meritHere, broom, fallenLeaves, can, waterPots, startWater, fold, startFold, foldPetal, altars, gildImage, bodhiBands, leafTree, showLeaf, lane, novice, birds, cat, rain, petals, catShow, catPlan, pet, startPetDog, startPetCat, petStroke, look: (eye, at) => { camera.position.set(...eye); camera.lookAt(...at); if (composer) composer.render(); else renderer.render(scene, camera); }, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
-Promise.race([Promise.all(propJobs), new Promise((r) => setTimeout(r, 7000))]).then(() => {
+// (on a phone the temple shows sooner: models still on their way pop in when they arrive)
+Promise.race([Promise.all(propJobs), new Promise((r) => setTimeout(r, phone ? 4000 : 7000))]).then(() => {
   $("loading").hidden = true;
-  canvas.focus();
+  canvas.focus(); track("w_loaded");
+  const atGate = Math.hypot(player.x, player.z - 93) < 8;
   if (leafLink) goToLinkedLeaf(); // a link to a leaf on the silver and gold Bodhi tree: straight to it
+  else if (atGate && !read("welcomed", false) && !questState.active && !twoP) setTimeout(startWelcome, 1500); // the first visit: the welcome
   else setTimeout(showDonationPath, 1200); // once the opening view has settled
 });
 requestAnimationFrame(tick);
