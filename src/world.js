@@ -2096,7 +2096,6 @@ kinds.forEach(([name, h], k) => {
   }) });
 });
 
-const guardians = []; // where the two guardian giants stand, outside the gateway
 const YAKSHA_H = 6.2; // the guardians stand about as tall as the gateway's posts
 /* ---------------- the temple wall (kampaeng kaew): white, with lotus-bud posts ---------------- */
 // White plaster on a moulded plinth, topped with a rounded lotus coping (บัวคว่ำบัวหงาย); between the lengths, square
@@ -2164,7 +2163,7 @@ const YAKSHA_H = 6.2; // the guardians stand about as tall as the gateway's post
   [[-1, "yaksha-green"], [1, "yaksha-white"]].forEach(([sg, name]) => {
     add(new THREE.BoxGeometry(2.3, 0.7, 1.9), wallMat, sg * YX, 0.35, YZ);
     add(new THREE.BoxGeometry(2.45, 0.12, 2.05), MAT.gold, sg * YX, 0.72, YZ, scene, false);
-    props(name, YAKSHA_H, [[sg * YX, YZ, MONK_TURN, 0.78]]); infoSpot("yaksha", sg * YX, 3.2, YZ, 2.2, 2.8); guardians.push([sg * YX, YZ]);
+    props(name, YAKSHA_H, [[sg * YX, YZ, MONK_TURN, 0.78]]); infoSpot("yaksha", sg * YX, 3.2, YZ, 2.2, 2.8);
   });
   sign(txo(CONTENT.signs.gate.title), txo(CONTENT.signs.gate.sub), "☸", 0, 12.4, GZ, 6);
 }
@@ -4991,7 +4990,6 @@ function startWai() {
   wai.faceYaw = here.face ? Math.atan2(here.face.x - player.x, here.face.z - player.z) : null;
   wai.t = 0;
   if (monksNear() || teacherNear(4)) questEvent("waiMonk");
-  if (guardians.some(([x, z]) => Math.hypot(player.x - x, player.z - z) < 9)) questEvent("waiGuard"); // (the welcome; the gateway between them counts)
 }
 // a teacher seated within d of the child (the main hall's monks)
 function teacherNear(d) {
@@ -6050,6 +6048,7 @@ const INFO_TEXT = Object.fromEntries(Object.entries(CONTENT.cards).map(([id, c])
 const seenInfo = new Set(read("info-seen", []));
 function openInfo(id) {
   const T = INFO_TEXT[id]; if (!T) return;
+  if (id === "yaksha") questEvent("readGuard"); // (the welcome's second step)
   if (!seenInfo.has(id)) { stamp("card-" + id); seenInfo.add(id); write("info-seen", [...seenInfo]); }
   openDialog(`${T.icon} ${esc(tx(...T.t))}`, `<p>${esc(tx(...T.d))}</p><div class="row"><button class="chip" data-close>${esc(tx("ปิด", "Close"))}</button></div>`);
 }
@@ -6392,7 +6391,7 @@ const QUESTS = [
   // the first visit's welcome: starts by itself, three small things on the way in (see "the welcome" below)
   { id: "welcome", icon: "🙏", name: ["ยินดีต้อนรับสู่วัด", "Welcome to the temple"], steps: [
     { ev: "feed", t: ["ให้อาหารปลาจากสะพาน", "Feed the fish from the bridge"], why: ["การให้อาหารสัตว์อย่างอ่อนโยนเป็นการฝึกความเมตตา", "Feeding animals gently is a way to practise kindness."], at: () => [[player.x, player.z], [0, 86.5]] },
-    { ev: "waiGuard", t: ["ไหว้ยักษ์ทวารบาลที่ประตูวัด (ปุ่ม 🙏)", "Make a wai to the guardian giants at the gate (the 🙏 button)"], why: ["ยักษ์เฝ้าประตูวัด เราทักทายอย่างสุภาพเมื่อเข้ามา เป็นการเคารพสถานที่", "The giants guard the temple's gate. We greet them politely as we come in, out of respect for the place."], at: () => [[player.x, player.z], [0, 79.5]] },
+    { ev: "readGuard", t: ["แตะยักษ์ทวารบาลที่ประตูวัด เพื่อรู้ว่าท่านเป็นใคร", "Tap a guardian giant at the gate to find out who they are"], why: ["ยักษ์เฝ้าประตูวัด เป็นผู้พิทักษ์พระพุทธศาสนา ไม่ใช่ปีศาจที่น่ากลัว", "The giants guard the temple's gate. They protect the Buddha's teaching: guardians, not monsters."], at: () => [[player.x, player.z], [0, 80.5]] },
     { ev: "ringBell", t: ["ตีระฆัง แล้วฟังเสียงจนเงียบ", "Ring the bell, and listen until it fades"], why: ["เสียงระฆังเตือนให้เรามีสติ", "The bell's sound reminds us to be mindful."], at: () => [[player.x, player.z], [-1.2, Math.min(player.z, 70)], [-1.2, 27], [-4.6, 25.4]] },
   ] },
   { id: "visit", icon: "🛕", name: ["มาวัดครั้งแรก", "A first visit to the temple"], steps: [
