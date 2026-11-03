@@ -4251,10 +4251,13 @@ const boyLoader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 const boyReady = {};
 // kit "boy" wears his sneakers; kit "boy-socks" is the same boy in his white socks, for inside the halls (and the
 // same for "girl" and "girl-socks", in her school shoes)
+// Kits with a lighter model for light quality (<kit>-lite.glb: fewer triangles, smaller textures, the same skeleton
+// and walk, made with .dev/tools/refit-character.py)
+const LITE_KITS = new Set(["boy", "boy-socks"]);
 function loadBoy(kit = "boy", copy = 1) {
   // boy.glb holds the model and its walk; the other files hold only an animation for the same skeleton
-  const key = copy > 1 ? kit + "#" + copy : kit;
-  if (!boyReady[key]) boyReady[key] = Promise.all([kit, kit + "-idle", kit + "-run", kit + "-sit"].map((n) => new Promise((res) => boyLoader.load(`assets/models/${n}.glb`, res, undefined, () => res(null)))))
+  const key = copy > 1 ? kit + "#" + copy : kit, model = !HIGH && LITE_KITS.has(kit) ? kit + "-lite" : kit;
+  if (!boyReady[key]) boyReady[key] = Promise.all([model, kit + "-idle", kit + "-run", kit + "-sit"].map((n) => new Promise((res) => boyLoader.load(`assets/models/${n}.glb`, res, undefined, () => res(null)))))
     .then(([walk, idle, run, sitting]) => {
       if (!walk) return null;
       const obj = walk.scene, holder = new THREE.Group(); holder.add(obj); fitModel(obj);
@@ -5191,12 +5194,12 @@ function handShape(model) {
 // which rises less) is painted the skin colour round that eye, with a dark line of lashes along the edge.
 // [centre x, y, z, radius x, y, z] for each eye; the lid's colour
 const EYES = {
-  "boy": { lid: "#fbab7e", eyes: [
-    [-0.0612, 0.748, 0.2011, 0.0283, 0.0156, 0.0255],
-    [0.0568, 0.748, 0.2019, 0.0283, 0.0156, 0.0255]] },
-  "boy-socks": { lid: "#f3a176", eyes: [
-    [-0.0619, 0.7612, 0.1119, 0.0288, 0.0184, 0.0259],
-    [0.0581, 0.7616, 0.1121, 0.0288, 0.0184, 0.0259]] },
+  "boy": { lid: "#eaa666", eyes: [
+    [-0.0616, 0.7508, 0.1842, 0.0283, 0.0165, 0.0255],
+    [0.0631, 0.7504, 0.1839, 0.0283, 0.0165, 0.0255]] },
+  "boy-socks": { lid: "#eaa666", eyes: [
+    [-0.0576, 0.7502, 0.1278, 0.0283, 0.0165, 0.0255],
+    [0.0671, 0.7498, 0.1275, 0.0283, 0.0165, 0.0255]] },
   "girl": { lid: "#fab895", eyes: [
     [-0.0583, 0.802, 0.157, 0.0298, 0.0194, 0.0268],
     [0.0481, 0.8048, 0.1572, 0.0298, 0.0194, 0.0268]] },
