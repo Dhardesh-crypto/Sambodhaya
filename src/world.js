@@ -969,9 +969,6 @@ PLACES.forEach((p) => {
   const [sx, sz, sy] = h ? h.signAt : ({ garden: [-6.6, -55, 7.4], journey: [15, 49, 5] }[p.id] || [...p.pos, 5]);
   signs.push(sign(L === "en" ? p.en : p.th, p.sub[L === "en" ? 1 : 0], p.icon, sx, sy, sz, 5.2));
 });
-// before the great Bodhi tree's platform, on the entrance side: the tree's own sign, which invites a leaf (the courtyard
-// itself needs none: standing here, its place still offers "where would you like to go today?")
-sign(tx("ต้นโพธิ์เงิน-โพธิ์ทอง", "Silver & gold Bodhi tree"), tx("ร่วมแขวนใบโพธิ์ สร้างวัดด้วยกัน", "Hang a leaf · build the temple together"), "🍃", 0, 3.3, 8.6, 5);
 
 /* ---- The shrine, shared by the Learning Hall and the Universal Hall ----
    Seating follows temple custom: visitors and students sit on the floor; teachers and monks sit on a
@@ -1914,13 +1911,22 @@ const glowTexture = () => glowTex || (glowTex = canvasTexture(128, 128, (c) => {
   gr.addColorStop(0, "rgba(255,236,190,1)"); gr.addColorStop(0.35, "rgba(255,196,106,.55)"); gr.addColorStop(1, "rgba(255,170,60,0)");
   c.fillStyle = gr; c.fillRect(0, 0, 128, 128);
 }));
-{
-  const g = new THREE.Group(); g.position.set(DONATE.x, DONATE.lift, DONATE.z); g.scale.setScalar(DONATE.scale); scene.add(g);
+// a donation box: ivory with gold trim on a gold plinth, its red front lit (drawn by draw, redrawn once the Thai fonts
+// are in); in g, whose scale and lift (-0.9 x scale) set it on the ground
+function donationBox(g, draw) {
   add(new THREE.BoxGeometry(0.95, 1.15, 0.6), S(0xf3ead6, { roughness: 0.4 }), 0, 1.75, 0, g);
   add(new THREE.BoxGeometry(1.05, 0.1, 0.7), MAT.gold, 0, 2.37, 0, g);      // lid
   add(new THREE.BoxGeometry(1.05, 0.08, 0.7), MAT.gold, 0, 1.16, 0, g, false); // base trim
   add(new THREE.BoxGeometry(0.42, 0.03, 0.06), S(0x1a1008, { roughness: 1 }), 0, 2.43, 0.05, g, false); // coin slot
   add(new THREE.BoxGeometry(0.8, 0.28, 0.5), MAT.gold, 0, 1.04, 0, g);       // the plinth it stands on (down to the ground)
+  const tex = canvasTexture(256, 320, draw);
+  signDraws.push(() => { draw(tex.image.getContext("2d")); tex.needsUpdate = true; });
+  const front = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 1.0), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.7, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.5 }));
+  front.position.set(0, 1.75, 0.305); g.add(front);
+  return front;
+}
+{
+  const g = new THREE.Group(); g.position.set(DONATE.x, DONATE.lift, DONATE.z); g.scale.setScalar(DONATE.scale); scene.add(g);
   const drawFront = (c, w = 256, h = 320) => {
     c.clearRect(0, 0, w, h); c.fillStyle = "#8e1f17"; c.fillRect(0, 0, w, h);
     c.strokeStyle = "#e8b84a"; c.lineWidth = 10; c.strokeRect(10, 10, w - 20, h - 20);
@@ -1929,10 +1935,7 @@ const glowTexture = () => glowTex || (glowTex = canvasTexture(128, 128, (c) => {
     c.font = "40px Itim, sans-serif"; c.fillText("ตู้รับบริจาค", w / 2, 190);
     c.font = "26px Mali, sans-serif"; c.fillStyle = "#fff4d6"; c.fillText(tx("สำหรับผู้ใหญ่", "For adults"), w / 2, 246);
   };
-  const tex = canvasTexture(256, 320, drawFront);
-  signDraws.push(() => { drawFront(tex.image.getContext("2d")); tex.needsUpdate = true; }); // redrawn once the Thai fonts are in
-  const front = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 1.0), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.7, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.5 }));
-  front.position.set(0, 1.75, 0.305); g.add(front);
+  const front = donationBox(g, drawFront);
   colliders.push({ x: DONATE.x, z: DONATE.z, r: 0.6 * DONATE.scale });
   sign(txo(CONTENT.signs.donation_box.title), txo(CONTENT.signs.donation_box.sub), "🪷", DONATE.x, 2.45 * DONATE.scale + DONATE.lift + 1.95, DONATE.z + 0.4, 4.4); // as big as the gate's signs
   // a soft warm glow round the box, gently breathing (steady with calm motion); normal blending, as an additive
@@ -2255,7 +2258,7 @@ const bodhiLeafShape = () => {
 // platform and down into it, its limbs reaching out and up into a broad dome of heart-shaped leaves that billow in
 // clusters, droop at the rim and glow yellow-green where the sun shines through them; on capable devices the light
 // falls through the crown in soft shafts. Built here, not loaded: a few draw calls, the leaves all one batch (fewer
-// and larger on phones). The platform, the earth and the cloths tied round the trunk are above.
+// and larger on phones). The platform and the earth are above.
 {
   const S = 1.6, B = 1.35; // the scale it is drawn at, and the earth's height at the trunk
   const mound = (r) => 1.32 + 0.25 * (1 - Math.min(1, r / 6.7) ** 2); // (the earth inside the platform, as above)
@@ -2348,7 +2351,7 @@ const bodhiLeafShape = () => {
     crown.setColorAt(i, out < 0.5 ? col.copy(dark).lerp(mid, out * 2) : col.copy(mid).lerp(lite, out * 2 - 1));
   }
   crown.onBeforeRender = (r, sc, cam) => sunView.copy(sun.position).normalize().transformDirection(cam.matrixWorldInverse);
-  crown.castShadow = HIGH; crown.raycast = () => {}; scene.add(crown); // (taps and the cloth's fitting look past the leaves)
+  crown.castShadow = HIGH; crown.raycast = () => {}; scene.add(crown); // (taps look past the leaves)
   // fresh fallen leaves, yellow and brown, on the earth among the roots
   {
     const n = HIGH ? 160 : 80, fallen = new THREE.InstancedMesh(new THREE.ShapeGeometry(bodhiLeafShape(), 3).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ roughness: 0.8, side: THREE.DoubleSide }), n);
@@ -2491,6 +2494,25 @@ function openLeafTree() {
   };
   q.addEventListener("input", list); list();
   out.addEventListener("click", (e) => { const b = e.target.closest("[data-leaf]"); if (b) { closeDialog(); showLeaf(b.dataset.leaf, true); } });
+}
+// Before the great Bodhi tree's platform, on the entrance side: the tree's sign, which invites a leaf (the courtyard
+// itself needs none: standing here, its place still offers "where would you like to go today?"), and beside it a
+// smaller donation box with a Bodhi leaf on its front. Standing at the box (E), or tapping it or the sign from anywhere
+// in the courtyard, opens the tree's leaves and the way to hang one.
+const LEAF_BOX = { x: 3.6, z: 8.2, scale: 1.8 }; // (about his height, like the box at the entrance)
+const leafPick = [];
+{
+  const g = new THREE.Group(); g.position.set(LEAF_BOX.x, -0.9 * LEAF_BOX.scale, LEAF_BOX.z); g.scale.setScalar(LEAF_BOX.scale); scene.add(g);
+  donationBox(g, (c, w = 256, h = 320) => {
+    c.clearRect(0, 0, w, h); c.fillStyle = "#8e1f17"; c.fillRect(0, 0, w, h);
+    c.strokeStyle = "#e8b84a"; c.lineWidth = 10; c.strokeRect(10, 10, w - 20, h - 20);
+    c.textAlign = "center"; c.textBaseline = "middle"; c.fillStyle = "#f2cc62";
+    c.font = "80px sans-serif"; c.fillText("🍃", w / 2, 92);
+    c.font = "40px Itim, sans-serif"; c.fillText("แขวนใบโพธิ์", w / 2, 190);
+    c.font = "26px Mali, sans-serif"; c.fillStyle = "#fff4d6"; c.fillText(tx("สำหรับผู้ใหญ่", "Hang a leaf · adults"), w / 2, 246);
+  });
+  colliders.push({ x: LEAF_BOX.x, z: LEAF_BOX.z, r: 0.6 * LEAF_BOX.scale });
+  leafPick.push(g, sign(tx("ต้นโพธิ์เงิน-โพธิ์ทอง", "Silver & gold Bodhi tree"), tx("ร่วมแขวนใบโพธิ์ สร้างวัดด้วยกัน", "Hang a leaf · build the temple together"), "🍃", 0, 3.3, 8.6, 5));
 }
 // the leaves load alongside the temple; a link to one leaf (world.html#leaf=<id>) brings the child to it once the
 // temple has loaded (see the end of this file)
@@ -2960,22 +2982,21 @@ function fishStep(dt) {
   }
 }
 
-/* ---------------- making merit (ทำบุญ): incense, candles and a lotus; gold leaf; cloth on the Bodhi tree ---------------- */
-// Three offerings, posed on the boy's skeleton like the wai. Before a Buddha image they are made kneeling, as in
+/* ---------------- making merit (ทำบุญ): incense, candles and a lotus; gold leaf ---------------- */
+// Two offerings, posed on the boy's skeleton like the wai. Before a Buddha image they are made kneeling, as in
 // Thailand, with the kraap's kneeling and bows (below):
 // • kneeling at the low incense table before a shrine he lights the two candles, lights three incense sticks from
 //   them, holds the sticks and a lotus bud between his palms in the high wai, plants the incense in the sand and the
 //   lotus in the vase, brings his hands to a wai at the chest, moves back on his knees and bows three times; the
 //   candles and incense burn on (smoke rising) for a few minutes;
 // • kneeling before the small bronze image he makes the high wai, presses a leaf of gold onto it, makes the high
-//   wai again, moves back and bows three times; the gold stays where he pressed;
-// • standing at the edge of the Bodhi tree's platform he makes a wai holding a folded three-coloured cloth, and a
-//   new band of cloth appears around the trunk, shaped to it.
+//   wai again, moves back and bows three times; the gold stays where he pressed.
+// (At the great Bodhi tree's platform the offering is a leaf on the tree: see "the silver and gold Bodhi leaves".
+// The standing offering below, merit.t and poseMerit, is kept for offerings made standing.)
 let merit = { t: -1, kind: null, spot: null, faceYaw: 0, dur: 0, altar: null, items: null, placed: false, done: false };
 const MERIT = {
   offer: { place: { id: "offer", icon: "🪔", th: "บูชาพระด้วยธูปเทียนดอกไม้", en: "Offer incense, candles and a lotus", sub: ["คุกเข่า จุดเทียน จุดธูป ถวายดอกบัว แล้วกราบ 3 ครั้ง", "Kneel, light the candles and incense, offer a lotus, bow three times"] } },
   gild: { place: { id: "gild", icon: "✨", th: "ปิดทององค์พระ", en: "Apply gold leaf", sub: ["คุกเข่า ปิดทอง แล้วกราบ 3 ครั้ง", "Kneel, press on a leaf of gold, bow three times"] } },
-  cloth: { dur: 4.4, place: { id: "cloth", icon: "🎗️", th: "ผูกผ้าสามสีต้นโพธิ์", en: "Tie a cloth on the Bodhi tree", sub: ["ผ้าสามสี แล้วไหว้", "A three-coloured cloth, then wai"] } },
 };
 const incenseMat = S(0x8c2f22, { roughness: 0.9 }), emberMat = new THREE.MeshBasicMaterial({ color: 0xff7a2a }), lotusMat = S(0xf2a3b8, { roughness: 0.7 }), stemMat = S(0x4f8f3f, { roughness: 0.8 });
 function incenseBundle() { // three sticks and a lotus bud, held together
@@ -2989,8 +3010,6 @@ function incenseBundle() { // three sticks and a lotus bud, held together
 function meritHere() {
   for (const a of altars) if (Math.hypot(player.x - a.near.x, player.z - a.near.z) < 1.1) return { kind: "offer", near: a.near, far: a.far, faceYaw: a.faceYaw, altar: a };
   if (gildImage.near && Math.hypot(player.x - gildImage.near.x, player.z - gildImage.near.z) < 1.1) return { kind: "gild", near: gildImage.near, far: gildImage.far, faceYaw: gildImage.faceYaw };
-  const d = Math.hypot(player.x, player.z);
-  if (d > 7.2 && d < 9.2 && player.y < 0.5) { const a = Math.atan2(player.x, player.z); return { kind: "cloth", spot: { x: Math.sin(a) * 7.9, z: Math.cos(a) * 7.9 }, faceYaw: a + Math.PI }; }
   return null;
 }
 function startMerit(here) {
@@ -2998,11 +3017,7 @@ function startMerit(here) {
   if (!here || merit.t >= 0 || kraap.t >= 0 || alms.t >= 0 || feed.t >= 0) return;
   if (sit.on) { sit.on = false; sit.rise = 0; sit.faceYaw = null; }
   if (broom.held) putBroomBack();
-  if (here.kind !== "cloth") { startKneelingOffering(here); return; }
-  wai.t = -1; wai.level = "buddha";
-  Object.assign(merit, here, { t: 0, dur: 4.4, items: clothBundle(), placed: false, done: false });
-  merit.items.visible = false; scene.add(merit.items);
-  if (player.mixer) playClip("idle", 0.4);
+  startKneelingOffering(here);
 }
 // Kneeling offerings run on the kraap (its kneeling, wai and bows), with two more channels: the right hand reaching
 // to something (the candles, the urn, the image) and the incense held. Keyframes:
@@ -3088,7 +3103,6 @@ function kneelHand(model, fwd, up, t) {
   const along = hs.points.reduce((a, q) => a + q.clone().applyQuaternion(Q).dot(fwd), 0) / hs.points.length * model.getWorldScale(new THREE.Vector3()).y;
   return { target: kneelReach(t).addScaledVector(fwd, -along - 0.05), Q };
 }
-const clothBundle = () => { const g = new THREE.Group(); [0xf2c230, 0xc8322a, 0x3f9a4f].forEach((c, i) => add(new THREE.BoxGeometry(0.2, 0.05, 0.14), S(c, { roughness: 0.9 }), 0, 0.05 + i * 0.05, 0, g, false)); return g; };
 // envelopes for each offering: reach (to a point), wai (hands together), bow
 function meritState(t) {
   const k = merit.kind, e = (a, b, c, d) => smooth(a, b, t) * (1 - smooth(c, d, t));
@@ -3132,7 +3146,6 @@ function meritStep(dt) {
   if (t < 0.8) { player.x += (merit.spot.x - player.x) * Math.min(1, dt * 8); player.z += (merit.spot.z - player.z) * Math.min(1, dt * 8); }
   let dy = merit.faceYaw - player.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); player.yaw += dy * Math.min(1, dt * 8);
   const at = (x) => before < x && t >= x;
-  if (merit.kind === "cloth" && at(2.4)) { tieCloth(); if (merit.items) { merit.items.visible = false; merit.placed = true; } }
   if (t > merit.dur) { if (merit.items && !merit.placed) scene.remove(merit.items); merit.t = -1; merit.kind = null; merit.items = null; }
 }
 // a leaf of gold where his fingers pressed, lying on the image's surface
@@ -3153,24 +3166,6 @@ function gildOne(jitter) {
   if (gildImage.leaves.length > 120) { const old = gildImage.leaves.shift(); old.parent && old.parent.remove(old); }
   return true;
 }
-// a three-coloured cloth around the Bodhi tree's trunk, shaped to the trunk at its height
-const bodhiBands = [];
-function tieCloth() {
-  const n = bodhiBands.length % 7, y = 4.3 + n * 0.3;
-  const shown = (o) => { while (o) { if (!o.visible) return false; o = o.parent; } return true; };
-  const meshes = []; scene.traverse((o) => { if (o.isMesh && shown(o)) { const p = o.getWorldPosition(new THREE.Vector3()); if (Math.hypot(p.x, p.z) < 3 && p.y < 12) meshes.push(o); } });
-  const ray = new THREE.Raycaster(), N = 20, pts = [[], [], []];
-  for (let k = 0; k < N; k++) {
-    const a = k / N * Math.PI * 2; ray.set(new THREE.Vector3(Math.cos(a) * 6, y, Math.sin(a) * 6), new THREE.Vector3(-Math.cos(a), 0, -Math.sin(a))); ray.far = 6;
-    const hit = ray.intersectObjects(meshes, true).find((h) => shown(h.object)); const r = (hit ? 6 - hit.distance : 1.4) + 0.05;
-    [0, 1, 2].forEach((j) => pts[j].push(new THREE.Vector3(Math.cos(a) * r, y + (j - 1) * 0.07, Math.sin(a) * r)));
-  }
-  if (bodhiBands[n]) { scene.remove(bodhiBands[n]); }
-  const g = new THREE.Group();
-  [0xf2c230, 0xc8322a, 0x3f9a4f].forEach((c, j) => g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts[j], true), 60, 0.045, 6, true), S(c, { roughness: 0.9 }))));
-  scene.add(g); bodhiBands[n] = g;
-}
-
 /* ---------------- the tool rack (ที่เก็บอุปกรณ์) ---------------- */
 // The broom and the watering can share one low teak rack by the plaza, facing the entrance road, each on its own
 // gold-ringed place. While a child holds one, its ring glows and an arrow bobs above it, seen from across the
@@ -5944,6 +5939,7 @@ function pickAt(x, y) {
     const s = h && h.teachers && kraap.t < 0 && alms.t < 0 && h.teachers.find((t) => t.rig && TEACHER_TALK[t.name] && ray.intersectObject(t.rig.holder, true).length);
     if (s) { openMonk(monkPlace(h, s)); return; } }
   { const l = leafAtRay(); if (l) { track("leaf_tap"); showLeaf(l.id); return; } } // a leaf on the silver and gold Bodhi tree
+  if (Math.hypot(camera.position.x - LEAF_BOX.x, camera.position.z - LEAF_BOX.z) < 40 && ray.intersectObjects(leafPick, true).length) { track("tree_open"); openLeafTree(); return; } // its sign, or the leaf box
   const info = infoAtRay(); if (info) { openInfo(info.id); return; }
   if (insideHall(player.x, player.z)) return; // inside a hall, clicks just turn the view
   for (const id of Object.keys(halls)) { if (ray.intersectObject(halls[id], true).length) { openPlace(PLACES.find((p) => p.id === id)); return; } }
@@ -7290,6 +7286,7 @@ function kidStep(dt) {
   if (Math.hypot(player.x - BELL[0], player.z - BELL[1]) < 4.4 && 3 < bestD) { best = BELL_PLACE; bestD = 3; } // reachable from the road
   { const d = Math.hypot(player.x - DONATE.x, player.z - (DONATE.z + 0.6 * DONATE.scale)); if (d < 2.6 && d < bestD) { best = DONATE_PLACE; bestD = d; } } // only when standing at the box
   { const d = Math.hypot(player.x - LEAF_TREE.x, player.z - LEAF_TREE.z) - LEAF_TREE.r; if (d < 1.6 && d + 0.5 < bestD) { best = LEAF_TREE_PLACE; bestD = d + 0.5; } } // at the wall of the great Bodhi tree's platform (the courtyard's own place and the cloth come first)
+  { const d = Math.hypot(player.x - LEAF_BOX.x, player.z - (LEAF_BOX.z + 0.6 * LEAF_BOX.scale)); if (d < 2 && d < bestD) { best = LEAF_TREE_PLACE; bestD = d; } } // standing at the leaf box
   { const d = Math.hypot(player.x - COMMUNITY.x, player.z - (COMMUNITY.z + 0.6 * COMMUNITY.scale)); if (d < 2.6 && d < bestD) { best = COMMUNITY_PLACE; bestD = d; } } // and at the community board
   { const m = monkHere(); if (m && m.d < bestD) { best = monkPlace(m.h, m.s); bestD = m.d; } }
   { const c = infoNear(); if (c && c.d + 1 < bestD) { const T = INFO_TEXT[c.id]; best = { id: "info", icon: "ℹ️", th: T.t[0], en: T.t[1], sub: ["เรื่องน่ารู้", "Good to know"], info: c.id, key: c.id }; bestD = c.d + 1; } } // (anything else here comes first)
@@ -7323,7 +7320,7 @@ document.fonts.load("64px Itim").then(() => document.fonts.load("36px Mali")).ca
 });
 camYaw = 0; camera.position.set(0, 8, 105);
 restoreSpot(); // back from a page of the site: stand where you were
-if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, renderer, reflectors, two: () => ({ P1, P2, twoP, owner, kid }), meal, setMealTime: (v) => { mealForce = v; }, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, almsScene, almsShow, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, gardenSpots, paths, floors, ponds, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startGreet, startKathin, kathinSpots, feed, startFeed, fishes, food, onBridge, merit, startMerit, meritHere, broom, fallenLeaves, can, waterPots, startWater, fold, startFold, foldPetal, altars, gildImage, bodhiBands, leafTree, showLeaf, lane, novice, birds, cat, rain, petals, catShow, catPlan, pet, startPetDog, startPetCat, petStroke, look: (eye, at) => { camera.position.set(...eye); camera.lookAt(...at); if (composer) composer.render(); else renderer.render(scene, camera); }, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
+if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, renderer, reflectors, two: () => ({ P1, P2, twoP, owner, kid }), meal, setMealTime: (v) => { mealForce = v; }, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, almsScene, almsShow, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, gardenSpots, paths, floors, ponds, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startGreet, startKathin, kathinSpots, feed, startFeed, fishes, food, onBridge, merit, startMerit, meritHere, broom, fallenLeaves, can, waterPots, startWater, fold, startFold, foldPetal, altars, gildImage, leafTree, showLeaf, lane, novice, birds, cat, rain, petals, catShow, catPlan, pet, startPetDog, startPetCat, petStroke, look: (eye, at) => { camera.position.set(...eye); camera.lookAt(...at); if (composer) composer.render(); else renderer.render(scene, camera); }, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
 // (on a phone the temple shows sooner: models still on their way pop in when they arrive)
 Promise.race([Promise.all(propJobs), new Promise((r) => setTimeout(r, phone ? 4000 : 7000))]).then(() => {
   $("loading").hidden = true;
