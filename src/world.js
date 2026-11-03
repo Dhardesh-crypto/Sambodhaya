@@ -518,14 +518,8 @@ const LANE = { x1: 22, z1: -9, x2: 34, z2: -9, w: 1.5 };
     geo.computeVertexNormals();
     const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: soilTex, roughness: 1 })); m.rotation.x = -Math.PI / 2; m.position.y = 1.32; m.receiveShadow = true; scene.add(m);
   }
-  const simple = new THREE.Group(); scene.add(simple);
-  add(new THREE.CylinderGeometry(1.4, 2.2, 10, 8), MAT.trunk, 0, 6, 0, simple);
-  [[-2.5, 7, 0.8, -0.6], [2.4, 8, -0.4, 0.7], [0.5, 9, 2.2, 0.3]].forEach(([x, y, z, r]) => { const b = add(new THREE.CylinderGeometry(0.5, 0.8, 6, 6), MAT.trunk, x, y, z, simple); b.rotation.z = r; b.rotation.x = z * 0.2; });
-  [[0, 14, 0, 8], [-6, 12, 2, 5.5], [6, 12.5, -1, 5.5], [2, 15, 5, 5], [-3, 15.5, -5, 5], [5, 11, 5, 4.5], [-5, 11, -4, 4.5]].forEach(([x, y, z, r], i) =>
-    add(new THREE.IcosahedronGeometry(r, 1), i % 2 ? MAT.leaf : MAT.leafLight, x, y, z, simple));
-  // the Bodhi tree model replaces the simple one once it has loaded
-  loadProp("bodhi").then((m) => { if (m) simple.visible = false; });
-  props("bodhi", 18, [[0, 0, 0.6, 1.4]]); infoSpot("bodhi", 0, 5, 0, 8, 4.2);
+  // the tree itself is built further down (it needs the wind and the frame hooks): "the great Bodhi tree itself"
+  infoSpot("bodhi", 0, 5, 0, 8, 4.2);
   colliders.push({ x: 0, z: 0, r: 7 });
 }
 
@@ -974,7 +968,7 @@ PLACES.forEach((p) => {
   const [sx, sz, sy] = h ? h.signAt : ({ garden: [-6.6, -55, 7.4], journey: [15, 49, 5] }[p.id] || [...p.pos, 5]);
   signs.push(sign(L === "en" ? p.en : p.th, p.sub[L === "en" ? 1 : 0], p.icon, sx, sy, sz, 5.2));
 });
-{ const y = CONTENT.places.yard; sign(txo(y.name), txo(y.sub), y.icon, 0, 21, 0, 8); }
+{ const y = CONTENT.places.yard; sign(txo(y.name), txo(y.sub), y.icon, 0, 3.3, 8.6, 5); } // (before the Bodhi tree's platform, on the entrance side)
 
 /* ---- The shrine, shared by the Learning Hall and the Universal Hall ----
    Seating follows temple custom: visitors and students sit on the floor; teachers and monks sit on a
@@ -2253,6 +2247,134 @@ const bodhiLeafShape = () => {
   leaf.bezierCurveTo(-0.03, -0.22, -0.085, -0.19, -0.1, -0.13); leaf.bezierCurveTo(-0.12, -0.05, -0.06, 0.0, 0, -0.02);
   return leaf;
 };
+/* ---------------- the great Bodhi tree itself, at the centre on its platform ---------------- */
+// A living Bodhi tree, about 18 m: its trunk many stems twisted into one, its roots spreading over the earth inside the
+// platform and down into it, its limbs reaching out and up into a broad dome of heart-shaped leaves that billow in
+// clusters, droop at the rim and glow yellow-green where the sun shines through them; on capable devices the light
+// falls through the crown in soft shafts. Built here, not loaded: a few draw calls, the leaves all one batch (fewer
+// and larger on phones). The platform, the earth and the cloths tied round the trunk are above.
+{
+  const S = 1.6, B = 1.35; // the scale it is drawn at, and the earth's height at the trunk
+  const mound = (r) => 1.32 + 0.25 * (1 - Math.min(1, r / 6.7) ** 2); // (the earth inside the platform, as above)
+  let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647, V = (x, y, z) => new THREE.Vector3(x, y, z);
+  const W = (x, y, z) => V(x * S, B + y * S, z * S); // (trunk, limbs and crown are laid out a size down, then scaled)
+  // the wood: tubes that taper along a curve (a TubeGeometry's radius is fixed), streaked light and dark along their
+  // length like the bark's ridges, greener where they meet the earth
+  const wood = [];
+  const tube = (pts, r0, r1, seg, rad) => {
+    const c = new THREE.CatmullRomCurve3(pts), geo = new THREE.TubeGeometry(c, seg, 1, rad), p = geo.attributes.position, n = geo.attributes.normal;
+    const col = new Float32Array(p.count * 3), tone = 0.85 + 0.3 * rnd(), ctr = new THREE.Vector3();
+    for (let i = 0; i <= seg; i++) {
+      const u = i / seg, r = r0 + (r1 - r0) * Math.pow(u, 0.8); c.getPointAt(u, ctr);
+      const moss = Math.max(0, 1 - (ctr.y - mound(Math.hypot(ctr.x, ctr.z))) / 0.8) * 0.3;
+      for (let j = 0; j <= rad; j++) {
+        const k = i * (rad + 1) + j, ridge = 0.72 + 0.28 * Math.sin(j / rad * 6.283 * 3 + u * 9 + tone * 7) * Math.sin(u * 23 + j);
+        p.setXYZ(k, ctr.x + n.getX(k) * r, ctr.y + n.getY(k) * r, ctr.z + n.getZ(k) * r);
+        col.set([(0.5 - moss * 0.25) * ridge * tone, (0.36 + moss * 0.12) * ridge * tone, 0.23 * ridge * tone], k * 3);
+      }
+    }
+    geo.setAttribute("color", new THREE.BufferAttribute(col, 3)); geo.computeVertexNormals(); wood.push(geo);
+    return c;
+  };
+  // the trunk: seven stems twisted round each other into one, round a core, splaying at the foot
+  tube([W(0, -0.1, 0), W(0, 2, 0), W(0, 4.1, 0)], 0.62 * S, 0.3 * S, 8, 12);
+  for (let s = 0; s < 7; s++) {
+    const a0 = s / 7 * Math.PI * 2, pts = [];
+    for (let k = 0; k <= 8; k++) { const h = k / 8, a = a0 + h * 1.9, rr = 0.3 + 0.62 * Math.pow(1 - h, 2.2); pts.push(W(Math.cos(a) * rr, -0.1 + h * 3.5, Math.sin(a) * rr)); }
+    tube(pts, 0.3 * S, 0.17 * S, 26, 8);
+  }
+  // the roots: out over the earth and down into it, some with a smaller root off them; all inside the platform's wall
+  for (let i = 0; i < 16; i++) {
+    let a = (i + rnd() * 0.6) / 16 * Math.PI * 2; const L = 3 + rnd() * 2.2, pts = [];
+    for (let k = 0; k <= 6; k++) { const u = k / 6, r = 1.2 + u * L; a += (rnd() - 0.5) * 0.12; pts.push(V(Math.cos(a) * r, mound(r) + 0.95 * Math.pow(1 - u, 2.5) - 0.14 * u * u, Math.sin(a) * r)); }
+    const c = tube(pts, 0.42, 0.05, 22, 7);
+    if (rnd() < 0.6) {
+      const p0 = c.getPointAt(0.45), b = a + (rnd() < 0.5 ? -0.7 : 0.7), l = 1.2 + rnd() * 1.2, e = (k) => { const x = p0.x + Math.cos(b) * l * k, z = p0.z + Math.sin(b) * l * k; return V(x, mound(Math.hypot(x, z)) + 0.06 - 0.16 * k, z); };
+      tube([p0, e(0.5), e(1)], 0.14, 0.03, 10, 5);
+    }
+  }
+  const CROWN = { y: B + 7.9 * S, rx: 6.6 * S, up: 3.3 * S, down: 2.5 * S, droop: 1.9 * S };
+  const within = (p) => { const k = Math.hypot(p.x, p.z) / (CROWN.rx * 0.72); if (k > 1) { p.x /= k; p.z /= k; } const h = Math.hypot(p.x, p.z) / CROWN.rx, top = CROWN.y + CROWN.up * 0.45 * Math.sqrt(1 - h * h) - CROWN.droop * h * h; p.y = Math.min(p.y, top); return p; }; // (no twig through the leaves)
+  // the limbs: from the top of the trunk out and up, the lower ones long and nearly level, the upper ones rising into
+  // the crown; each with side branches whose tips hold the leaves
+  for (let i = 0; i < 9; i++) {
+    const a = (i + 0.35 * rnd()) / 9 * Math.PI * 2, low = i % 2 === 0, c = Math.cos(a), s = Math.sin(a);
+    const out = low ? [0.3, 1.5, 3.0, 4.4, 5.6] : [0.25, 0.9, 1.9, 2.9, 3.7], up = low ? [3.5, 4.0, 4.8, 6.0, 7.4] : [3.6, 4.8, 6.3, 7.8, 9.0];
+    const pts = out.map((r, k) => within(W(c * r + (k ? (rnd() - 0.5) * 0.4 : 0), up[k], s * r + (k ? (rnd() - 0.5) * 0.4 : 0))));
+    const limb = tube(pts, 0.3 * S, 0.06 * S, 26, 8);
+    for (const u of [0.42, 0.62, 0.8]) {
+      const p0 = limb.getPointAt(u), b = a + (rnd() < 0.5 ? -1 : 1) * (0.5 + 0.5 * rnd()), l = (1.4 + rnd() * 1.4) * S, rise = (low ? 0.8 + rnd() : 1.2 + rnd() * 1.2) * S;
+      const p2 = within(V(p0.x + Math.cos(b) * l, p0.y + rise, p0.z + Math.sin(b) * l));
+      tube([p0, within(V(p0.x + Math.cos(b) * l * 0.5, p0.y + rise * 0.6, p0.z + Math.sin(b) * l * 0.5)), p2], 0.11 * S, 0.03 * S, 10, 5);
+    }
+  }
+  add(mergeGeometries(wood), new THREE.MeshStandardMaterial({ vertexColors: true, color: 0xd8b48a, roughness: 0.92 }), 0, 0, 0);
+  // the crown: a broad dome of leaves, billowing in clusters, its rim drooping; brighter and yellower outside, on top
+  // and toward the sun, deep green within
+  const sunDir = sun.position.clone().normalize(), sunView = new THREE.Vector3(), leafWind = { value: 0 }, day = { value: 1 };
+  const crownMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.55, side: THREE.DoubleSide });
+  crownMat.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, { uWaterTime: waterTime, uLeafWind: leafWind, uSunView: { value: sunView }, uDay: day });
+    // each leaf flutters on its stalk (the stalk at the top of the shape, y = 0; the tip below moves most)
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nuniform float uWaterTime, uLeafWind;")
+      .replace("#include <begin_vertex>", `#include <begin_vertex>
+      { vec3 ip = instanceMatrix[3].xyz; float f = sin(uWaterTime * 2.1 + ip.x * 1.7 + ip.z * 1.3) + 0.5 * sin(uWaterTime * 3.7 + ip.y * 2.3);
+        transformed.z += f * uLeafWind * -position.y; transformed.x += 0.4 * f * uLeafWind * -position.y; }`);
+    // the light through the leaves: they glow where you look toward the sun through them, and a little everywhere
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform vec3 uSunView; uniform float uDay;")
+      .replace("#include <emissivemap_fragment>", `#include <emissivemap_fragment>
+      totalEmissiveRadiance += diffuseColor.rgb * (pow(max(dot(normalize(-vViewPosition), uSunView), 0.0), 3.0) * 1.3 + 0.07) * uDay;`);
+  };
+  crownMat.customProgramCacheKey = () => "bodhi-crown";
+  const N = HIGH ? 8000 : 3500, size = HIGH ? 2.2 : 2.9, crown = new THREE.InstancedMesh(new THREE.ShapeGeometry(bodhiLeafShape(), 3).scale(size, size, 1), crownMat, N);
+  const M4 = new THREE.Matrix4(), q4 = new THREE.Quaternion(), e4 = new THREE.Euler(), s4 = new THREE.Vector3(), col = new THREE.Color();
+  const dark = new THREE.Color(0x2c5418), mid = new THREE.Color(0x5a8c28), lite = new THREE.Color(0xa6c23a);
+  const lump = (x, y, z) => 0.86 + 0.14 * Math.sin(x * 0.9 + 1) * Math.sin(z * 0.8 + 2) + 0.08 * Math.sin(y * 1.6 + x * 0.5);
+  for (let i = 0; i < N; i++) {
+    let d; do { d = V(rnd() * 2 - 1, rnd() * 2 - 1, rnd() * 2 - 1); } while (d.lengthSq() > 1 || d.lengthSq() < 0.01 || d.y < -0.7);
+    d.normalize(); const f = (0.78 + 0.22 * Math.sqrt(rnd())) * lump(d.x * 6, d.y * 3, d.z * 6);
+    const x = d.x * CROWN.rx * f, z = d.z * CROWN.rx * f, h = Math.hypot(x, z) / CROWN.rx, y = CROWN.y + d.y * (d.y > 0 ? CROWN.up : CROWN.down) * f - CROWN.droop * h * h;
+    e4.set((rnd() - 0.5) * 1.1, Math.atan2(x, z) + (rnd() - 0.5) * 1.6, (rnd() - 0.5) * 0.8);
+    M4.compose(V(x, y, z), q4.setFromEuler(e4), s4.setScalar(0.8 + 0.4 * rnd())); crown.setMatrixAt(i, M4);
+    const out = Math.min(1, Math.max(0, (f - 0.78) / 0.22 * 0.5 + d.y * 0.25 + d.dot(sunDir) * 0.2 + (rnd() - 0.5) * 0.5));
+    crown.setColorAt(i, out < 0.5 ? col.copy(dark).lerp(mid, out * 2) : col.copy(mid).lerp(lite, out * 2 - 1));
+  }
+  crown.onBeforeRender = (r, sc, cam) => sunView.copy(sun.position).normalize().transformDirection(cam.matrixWorldInverse);
+  crown.castShadow = HIGH; crown.raycast = () => {}; scene.add(crown); // (taps and the cloth's fitting look past the leaves)
+  // fresh fallen leaves, yellow and brown, on the earth among the roots
+  {
+    const n = HIGH ? 160 : 80, fallen = new THREE.InstancedMesh(new THREE.ShapeGeometry(bodhiLeafShape(), 3).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ roughness: 0.8, side: THREE.DoubleSide }), n);
+    const tones = [0xd9b23c, 0xc8952f, 0xa8752a, 0xe0c25a, 0x9a8a3a];
+    for (let i = 0; i < n; i++) {
+      const a = rnd() * 6.283, r = 1.8 + Math.sqrt(rnd()) * 4.6;
+      M4.compose(V(Math.cos(a) * r, mound(r) + 0.02, Math.sin(a) * r), q4.setFromEuler(e4.set(0, rnd() * 6.283, 0)), s4.setScalar(1.6 + rnd() * 0.6)); fallen.setMatrixAt(i, M4);
+      fallen.setColorAt(i, col.setHex(tones[i % tones.length]));
+    }
+    fallen.receiveShadow = true; fallen.raycast = () => {}; scene.add(fallen);
+  }
+  // the light falling through the crown in soft shafts, in the sun's direction (capable devices only, as in the halls)
+  if (HIGH) {
+    const shaftMat = new THREE.ShaderMaterial({
+      uniforms: { uTime: waterTime, uDay: { value: 1 } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+      vertexShader: `varying vec2 vUv; varying float vFace; void main() { vUv = uv; vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vFace = abs(dot(normalize(normalMatrix * normal), normalize(-mv.xyz))); gl_Position = projectionMatrix * mv; }`,
+      fragmentShader: `uniform float uTime, uDay; varying vec2 vUv; varying float vFace;
+        void main() { float along = smoothstep(0.0, 0.25, 1.0 - vUv.y) * smoothstep(0.0, 0.45, vUv.y);
+          float shimmer = 0.8 + 0.2 * sin(vUv.x * 30.0 + uTime * 0.3) * sin(vUv.y * 7.0 - uTime * 0.2);
+          gl_FragColor = vec4(vec3(1.0, 0.9, 0.62) * pow(vFace, 2.0) * along * shimmer * 0.09 * uDay, 1.0); }` });
+    const shafts = [[-3.5, 1.6, 0.8], [1.3, -2.6, 1.1], [3.8, 2.9, 0.7], [-1, 4.2, 0.9], [2.6, -0.3, 0.85], [-4.2, -2.4, 0.75]].map(([ox, oz, w]) => {
+      const to = V(ox - sunDir.x * 4, 1.4, oz - sunDir.z * 4), len = (CROWN.y + 2 - to.y) / sunDir.y, from = to.clone().addScaledVector(sunDir, len);
+      const beam = new THREE.Mesh(new THREE.CylinderGeometry(w * 0.6, w * 1.4, len, 16, 1, true), shaftMat);
+      beam.position.copy(from).add(to).multiplyScalar(0.5); beam.quaternion.setFromUnitVectors(V(0, 1, 0), sunDir); beam.renderOrder = 4; beam.raycast = () => {}; scene.add(beam); return beam;
+    });
+    waterAnims.push(() => { const d = Math.max(0, night.d * 1.25 - 0.25); shaftMat.uniforms.uDay.value = d; for (const b of shafts) b.visible = d > 0.01; });
+  }
+  // each frame: the daylight and the wind
+  waterAnims.push(() => {
+    day.value = 0.25 + 0.75 * night.d; leafWind.value = settings.calmMotion ? 0 : 0.03 + 0.07 * windGust;
+  });
+}
+
 const leafTree = { list: [], placed: [], byId: new Map(), sel: null, label: null, glow: null, meshes: {}, hooks: {} };
 {
   const T = LEAF_TREE, g = new THREE.Group(), R0 = T.r / T.s; g.position.set(T.x, 0, T.z); g.scale.setScalar(T.s); scene.add(g); // (built at R0, then scaled)
