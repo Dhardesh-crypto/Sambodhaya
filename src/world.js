@@ -4810,10 +4810,11 @@ function startGreet(h, s) {
   wai.t = -1;
   const i = (talkTurn[s.name] || 0) % T.lines.length; talkTurn[s.name] = i + 1; write("talk", talkTurn);
   const secs = ((TALK_DUR[T.file] || {})[L] || [])[i] || 5, sp = greetSpot(h, s), [mx, mz] = h.toWorld(s.lx, s.lz);
-  // kneeling with the wai, the child first greets him (นมัสการครับ, a girl นมัสการค่ะ), then he answers
+  // kneeling with the high wai (a monk receives the highest wai: thumbs between the eyebrows, fingertips at the
+  // hairline), the child first greets him (นมัสการครับ, a girl นมัสการค่ะ), then he answers
   const g = GREET[boyKits.kind === "girl" ? "girl" : "boy"], k0 = 1.4, said = k0 + 0.2 + g.secs + 0.5, end = said + secs + 0.6; // kneel, greet, listen, a small bow of the head, and up
   kraap.merit = null; kraap.kathin = null; kraap.greet = true;
-  kraap.keys = [[0, 0, 0, 0, 0, 0], [0.3, 0, 1, 0, 0, 0], [k0, 1, 1, 0, 0, 0], [end, 1, 1, 0, 0, 0], [end + 0.5, 1, 1, 0, 0, 0.3], [end + 1.2, 1, 1, 0, 0, 0], [end + 2.7, 0, 0, 0, 0, 0]];
+  kraap.keys = [[0, 0, 0, 0, 0, 0], [0.3, 0, 0, 1, 0, 0], [k0, 1, 0, 1, 0, 0], [end, 1, 0, 1, 0, 0], [end + 0.5, 1, 0, 1, 0, 0.3], [end + 1.2, 1, 0, 1, 0, 0], [end + 2.7, 0, 0, 0, 0, 0]];
   kraap.dur = end + 2.7; kraap.spot = sp; kraap.faceYaw = Math.atan2(mx - sp.x, mz - sp.z); kraap.floorY = groundAt(sp.x, sp.z); kraap.t = 0;
   const from = s.rig ? s.rig.B.Head.getWorldPosition(new THREE.Vector3()) : s.lean.getWorldPosition(new THREE.Vector3());
   kraap.say = { at: k0 + 0.2, url: g.url, text: tx(g.th, g.en), secs: g.secs };
@@ -7339,7 +7340,7 @@ document.fonts.load("64px Itim").then(() => document.fonts.load("36px Mali")).ca
 });
 camYaw = 0; camera.position.set(0, 8, 105);
 restoreSpot(); // back from a page of the site: stand where you were
-if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, renderer, reflectors, two: () => ({ P1, P2, twoP, owner, kid }), meal, setMealTime: (v) => { mealForce = v; }, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, almsScene, almsShow, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, gardenSpots, paths, floors, ponds, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startKathin, kathinSpots, feed, startFeed, fishes, food, onBridge, merit, startMerit, meritHere, broom, fallenLeaves, can, waterPots, startWater, fold, startFold, foldPetal, altars, gildImage, bodhiBands, leafTree, showLeaf, lane, novice, birds, cat, rain, petals, catShow, catPlan, pet, startPetDog, startPetCat, petStroke, look: (eye, at) => { camera.position.set(...eye); camera.lookAt(...at); if (composer) composer.render(); else renderer.render(scene, camera); }, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
+if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, renderer, reflectors, two: () => ({ P1, P2, twoP, owner, kid }), meal, setMealTime: (v) => { mealForce = v; }, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, almsScene, almsShow, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, gardenSpots, paths, floors, ponds, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startGreet, startKathin, kathinSpots, feed, startFeed, fishes, food, onBridge, merit, startMerit, meritHere, broom, fallenLeaves, can, waterPots, startWater, fold, startFold, foldPetal, altars, gildImage, bodhiBands, leafTree, showLeaf, lane, novice, birds, cat, rain, petals, catShow, catPlan, pet, startPetDog, startPetCat, petStroke, look: (eye, at) => { camera.position.set(...eye); camera.lookAt(...at); if (composer) composer.render(); else renderer.render(scene, camera); }, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
 // (on a phone the temple shows sooner: models still on their way pop in when they arrive)
 Promise.race([Promise.all(propJobs), new Promise((r) => setTimeout(r, phone ? 4000 : 7000))]).then(() => {
   $("loading").hidden = true;
