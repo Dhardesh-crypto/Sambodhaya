@@ -571,6 +571,7 @@ function signTexture(title, sub, icon) {
 const signMats = [];
 function sign(title, sub, icon, x, y, z, w = 6) {
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: signTexture(title, sub, icon), depthWrite: false }));
+  if (signMats.length) s.material.color.copy(signMats[0].color); // (made after dusk: as dim as the others)
   signMats.push(s.material); // dimmed at night
   // drawn after everything see-through (water, waterfall spray, glows use draw orders up to 5): a label doesn't write
   // depth, so anything drawn after it would show through it however far behind; solid things still hide it
@@ -968,7 +969,9 @@ PLACES.forEach((p) => {
   const [sx, sz, sy] = h ? h.signAt : ({ garden: [-6.6, -55, 7.4], journey: [15, 49, 5] }[p.id] || [...p.pos, 5]);
   signs.push(sign(L === "en" ? p.en : p.th, p.sub[L === "en" ? 1 : 0], p.icon, sx, sy, sz, 5.2));
 });
-{ const y = CONTENT.places.yard; sign(txo(y.name), txo(y.sub), y.icon, 0, 3.3, 8.6, 5); } // (before the Bodhi tree's platform, on the entrance side)
+// before the great Bodhi tree's platform, on the entrance side: the tree's own sign, which invites a leaf (the courtyard
+// itself needs none: standing here, its place still offers "where would you like to go today?")
+sign(tx("ต้นโพธิ์เงิน-โพธิ์ทอง", "Silver & gold Bodhi tree"), tx("ร่วมแขวนใบโพธิ์ สร้างวัดด้วยกัน", "Hang a leaf · build the temple together"), "🍃", 0, 3.3, 8.6, 5);
 
 /* ---- The shrine, shared by the Learning Hall and the Universal Hall ----
    Seating follows temple custom: visitors and students sit on the floor; teachers and monks sit on a
@@ -2229,16 +2232,16 @@ const nagaScales = (() => {
   props("naga", NAGA_H, nagaHeads, { fallback: () => nagaHeads.forEach(([hx, hz, , hy]) => add(new THREE.ConeGeometry(0.35, 1.6, 8), MAT.gold, hx, hy + 0.8, hz)) });
 }
 
-/* ---------------- the silver and gold Bodhi tree (ต้นโพธิ์เงิน-โพธิ์ทอง) just inside the gate ---------------- */
-// A gilded offering tree on a white lotus, on a round court of its own just inside the main gate, right of the road:
-// the first thing you see over the wall from the bridge (the garden's shade trees keep clear of it).
-// Its branches sweep up in three tiers like the temple trees it follows (Wat Nong Khan's picture): gold at the top,
-// silver in the middle, copper below. Every leaf on it is a real gift: a donation, marked Verified by the caretakers,
-// that asked for a leaf (the public list: /.netlify/functions/leaves; no amounts). Leaves take the hooks of their
-// tier in a fixed scattered order; once every hook is taken, later leaves hang beneath earlier ones, a string of
-// leaves on each hook. They swing in the same gusts as the wind bells. Walk up and press E: the tree's list, a search
-// and the way to hang a leaf; tap a leaf to read it; world.html#leaf=<id> brings you to that leaf.
-const LEAF_TREE = { x: 13.9, z: 54.9, s: 1.35, r: 1.8 * 1.35 }; // s: the tree's scale (tall enough to show over the guardian giant from the bridge); r: its base's radius
+/* ---------------- the silver and gold Bodhi leaves (ต้นโพธิ์เงิน-โพธิ์ทอง) on the great Bodhi tree ---------------- */
+// The leaves people give hang on the great Bodhi tree at the centre of the temple, the one every hall faces: on strings
+// from its lower limbs, under the crown, seen from all round the courtyard: gold highest, silver in the middle, pink
+// gold (nak; stored as "copper") lowest. Every one is a real gift: a donation, marked Verified by the caretakers, that
+// asked for a leaf (the public list: /.netlify/functions/leaves; no amounts). Leaves take the hooks of their tier in a
+// fixed scattered order; once every hook is taken, later leaves hang beneath earlier ones, a string of leaves on each
+// hook. They swing in the same gusts as the wind bells. At the platform's wall, E: the tree's list, a search and the
+// way to hang a leaf; tap a leaf to read it; world.html#leaf=<id> brings you to that leaf.
+const LEAF_TREE = { x: 0, z: 0, r: 7 }; // r: the platform's radius (where you can stand to look up at the leaves)
+const BODHI_HOOKS = []; // [x, y, z] under the great tree's lower limbs (filled as it is built, below)
 let windGust = 0.5; // (set by the wind bells, below, which wander the gusts)
 // a Bodhi leaf, hanging point down: heart-shaped with a long drip tip (also the wind bells' sail)
 const bodhiLeafShape = () => {
@@ -2261,7 +2264,7 @@ const bodhiLeafShape = () => {
   // the wood: tubes that taper along a curve (a TubeGeometry's radius is fixed), streaked light and dark along their
   // length like the bark's ridges, greener where they meet the earth
   const wood = [];
-  const tube = (pts, r0, r1, seg, rad) => {
+  const tube = (pts, r0, r1, seg, rad, hooks = false) => {
     const c = new THREE.CatmullRomCurve3(pts), geo = new THREE.TubeGeometry(c, seg, 1, rad), p = geo.attributes.position, n = geo.attributes.normal;
     const col = new Float32Array(p.count * 3), tone = 0.85 + 0.3 * rnd(), ctr = new THREE.Vector3();
     for (let i = 0; i <= seg; i++) {
@@ -2274,6 +2277,11 @@ const bodhiLeafShape = () => {
       }
     }
     geo.setAttribute("color", new THREE.BufferAttribute(col, 3)); geo.computeVertexNormals(); wood.push(geo);
+    // the given leaves' hooks: under the limb every half metre, off the trunk and below the crown
+    if (hooks) for (let L = c.getLength(), d = 0.3; d < L - 0.3; d += 0.55) {
+      const u = d / L, p = c.getPointAt(u), r = r0 + (r1 - r0) * Math.pow(u, 0.8);
+      if (Math.hypot(p.x, p.z) > 1.5 && p.y < 10.5) BODHI_HOOKS.push([p.x, p.y - r * 0.9, p.z]);
+    }
     return c;
   };
   // the trunk: seven stems twisted round each other into one, round a core, splaying at the foot
@@ -2301,11 +2309,11 @@ const bodhiLeafShape = () => {
     const a = (i + 0.35 * rnd()) / 9 * Math.PI * 2, low = i % 2 === 0, c = Math.cos(a), s = Math.sin(a);
     const out = low ? [0.3, 1.5, 3.0, 4.4, 5.6] : [0.25, 0.9, 1.9, 2.9, 3.7], up = low ? [3.5, 4.0, 4.8, 6.0, 7.4] : [3.6, 4.8, 6.3, 7.8, 9.0];
     const pts = out.map((r, k) => within(W(c * r + (k ? (rnd() - 0.5) * 0.4 : 0), up[k], s * r + (k ? (rnd() - 0.5) * 0.4 : 0))));
-    const limb = tube(pts, 0.3 * S, 0.06 * S, 26, 8);
+    const limb = tube(pts, 0.3 * S, 0.06 * S, 26, 8, low);
     for (const u of [0.42, 0.62, 0.8]) {
       const p0 = limb.getPointAt(u), b = a + (rnd() < 0.5 ? -1 : 1) * (0.5 + 0.5 * rnd()), l = (1.4 + rnd() * 1.4) * S, rise = (low ? 0.8 + rnd() : 1.2 + rnd() * 1.2) * S;
       const p2 = within(V(p0.x + Math.cos(b) * l, p0.y + rise, p0.z + Math.sin(b) * l));
-      tube([p0, within(V(p0.x + Math.cos(b) * l * 0.5, p0.y + rise * 0.6, p0.z + Math.sin(b) * l * 0.5)), p2], 0.11 * S, 0.03 * S, 10, 5);
+      tube([p0, within(V(p0.x + Math.cos(b) * l * 0.5, p0.y + rise * 0.6, p0.z + Math.sin(b) * l * 0.5)), p2], 0.11 * S, 0.03 * S, 10, 5, low);
     }
   }
   add(mergeGeometries(wood), new THREE.MeshStandardMaterial({ vertexColors: true, color: 0xd8b48a, roughness: 0.92 }), 0, 0, 0);
@@ -2377,52 +2385,21 @@ const bodhiLeafShape = () => {
 
 const leafTree = { list: [], placed: [], byId: new Map(), sel: null, label: null, glow: null, meshes: {}, hooks: {} };
 {
-  const T = LEAF_TREE, g = new THREE.Group(), R0 = T.r / T.s; g.position.set(T.x, 0, T.z); g.scale.setScalar(T.s); scene.add(g); // (built at R0, then scaled)
-  const gold = goldLeaf(0xd9a838, { roughness: 0.32 });
-  // its court: paving like the road's, and a short path to it from the road
-  path(3.4, T.z, T.x - 4.6, T.z, 2.6);
-  add(new THREE.CylinderGeometry(5, 5, 0.15, 48), P("brick_pavement_02", 4, 4, { color: new THREE.Color(1.75, 1.5, 1.2) }), T.x, -0.05, T.z, scene, false);
-  paths.push({ x1: T.x, z1: T.z, x2: T.x, z2: T.z + 0.01, w: 10 }); // (the court as a path: stone underfoot, no grass on it)
-  // the base: two round white steps and a lotus of upturned petals the trunk rises from
-  add(new THREE.CylinderGeometry(R0, R0 + 0.08, 0.26, 40), WALL_WHITE, 0, 0.13, 0, g);
-  add(new THREE.CylinderGeometry(R0 - 0.35, R0 - 0.3, 0.24, 40), WALL_WHITE, 0, 0.38, 0, g);
-  add(new THREE.TorusGeometry(R0 - 0.33, 0.025, 6, 40), gold, 0, 0.5, 0, g, false).rotation.x = Math.PI / 2;
+  const T = LEAF_TREE;
+  // the hooks by height: the lowest 45% for pink gold, the next third for silver, the highest for gold, each tier's
+  // scattered so a new tier fills evenly all round the tree
   {
-    const petal = new THREE.SphereGeometry(1, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.55); petal.scale(0.22, 0.5, 0.11); // a cupped petal, open side out
-    const parts = [];
-    [[0.62, 0.5, 0.55, 12, 0], [0.45, 0.62, 0.3, 10, 0.3]].forEach(([rad, y, tilt, n, off]) => {
-      for (let i = 0; i < n; i++) {
-        const a = (i + off) / n * Math.PI * 2, p = petal.clone();
-        p.rotateX(-tilt); p.rotateY(-a + Math.PI / 2); p.translate(Math.cos(a) * rad, y + 0.08, Math.sin(a) * rad); parts.push(p);
-      }
+    let seed = 3; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const H = BODHI_HOOKS.slice().sort((p, q) => p[1] - q[1]), n = H.length, cut = [0, Math.round(n * 0.45), Math.round(n * 0.78), n];
+    ["copper", "silver", "gold"].forEach((metal, t) => {
+      const hooks = H.slice(cut[t], cut[t + 1]);
+      for (let i = hooks.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [hooks[i], hooks[j]] = [hooks[j], hooks[i]]; }
+      leafTree.hooks[metal] = hooks;
     });
-    add(mergeGeometries(parts), WALL_WHITE, 0, 0, 0, g);
   }
-  // the trunk and its spire, and the branches: each sweeps out, rises and curls back at the tip
-  const parts = [new THREE.CylinderGeometry(0.06, 0.15, 6.6, 12).translate(0, 0.75 + 3.3, 0), new THREE.ConeGeometry(0.07, 1.1, 10).translate(0, 7.9, 0),
-    new THREE.SphereGeometry(0.11, 12, 8).translate(0, 7.3, 0)];
-  // [the tier's metal, [height, reach] of each whorl, branches per whorl, hooks per branch]
-  const TIERS = [["copper", [[2.0, 1.95], [2.6, 1.8], [3.2, 1.6]], 9, 5], ["silver", [[3.8, 1.38], [4.35, 1.22], [4.9, 1.06]], 8, 4], ["gold", [[5.45, 0.88], [5.95, 0.72], [6.4, 0.56]], 7, 3]];
-  let seed = 3; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  for (const [metal, whorls, n, k] of TIERS) {
-    const hooks = [];
-    whorls.forEach(([y, L], w) => {
-      for (let i = 0; i < n; i++) {
-        const a = (i + w * 0.5) / n * Math.PI * 2, c = Math.cos(a), s = Math.sin(a), P = (r, h) => new THREE.Vector3(c * r, y + h, s * r);
-        const curve = new THREE.CatmullRomCurve3([P(0.05, -0.06), P(0.35 * L, 0), P(0.72 * L, 0.12 * L), P(L, 0.42 * L), P(0.96 * L, 0.62 * L), P(0.84 * L, 0.66 * L)]);
-        parts.push(new THREE.TubeGeometry(curve, 20, metal === "gold" ? 0.022 : 0.03, 5));
-        for (let j = 0; j < k; j++) { const p = curve.getPointAt(0.24 + 0.52 * j / Math.max(1, k - 1)); hooks.push([T.x + p.x * T.s, (p.y - 0.03) * T.s, T.z + p.z * T.s]); }
-      }
-    });
-    for (let i = hooks.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [hooks[i], hooks[j]] = [hooks[j], hooks[i]]; } // scattered, so a new tier fills evenly
-    leafTree.hooks[metal] = hooks;
-  }
-  add(mergeGeometries(parts), gold, 0, 0, 0, g);
-  colliders.push({ x: T.x, z: T.z, r: T.r + 0.1 });
-  sign(tx("ต้นโพธิ์เงิน-โพธิ์ทอง", "Silver & gold Bodhi tree"), tx("ร่วมแขวนใบโพธิ์ สร้างวัดด้วยกัน", "Hang a leaf · build the temple together"), "🍃", T.x, 8.2 * T.s + 1.2, T.z, 4.4);
   // the leaves: one batch per metal, each leaf on a short wire; the wire of a leaf lower on a string meets the tip above
-  const SPACING = 0.5, leafGeo = mergeGeometries([new THREE.ShapeGeometry(bodhiLeafShape(), 10).translate(0, -0.06, 0), new THREE.CylinderGeometry(0.004, 0.004, 0.08, 4).translate(0, -0.02, 0)]);
-  leafGeo.scale(1.25, 1.25, 1.25); // (0.49 m with its wire: about one string step)
+  const LEAF = 2, SPACING = 0.8, leafGeo = mergeGeometries([new THREE.ShapeGeometry(bodhiLeafShape(), 10).translate(0, -0.06, 0), new THREE.CylinderGeometry(0.004, 0.004, 0.08, 4).translate(0, -0.02, 0)]);
+  leafGeo.scale(LEAF, LEAF, LEAF); // (0.78 m with its wire: about one string step; large enough to see from the courtyard, several metres up)
   const mats = {
     gold: goldLeaf(0xe2b24c, { side: THREE.DoubleSide, roughness: 0.3 }),
     silver: new THREE.MeshStandardMaterial({ color: 0xeef1f5, metalness: 0.85, roughness: 0.25, side: THREE.DoubleSide }),
@@ -2441,7 +2418,7 @@ const leafTree = { list: [], placed: [], byId: new Map(), sel: null, label: null
     const seen = { gold: 0, silver: 0, copper: 0 };
     leafTree.placed = leafTree.list.map((l) => {
       const H = leafTree.hooks[l.metal], i = seen[l.metal]++, h = H[i % H.length];
-      return { ...l, slot: i, hook: h, depth: Math.floor(i / H.length), ph: (i * 2.39 + l.metal.length) % 6.283, pos: new THREE.Vector3(h[0], h[1] - SPACING * Math.floor(i / H.length) - 0.2, h[2]) };
+      return { ...l, slot: i, hook: h, depth: Math.floor(i / H.length), ph: (i * 2.39 + l.metal.length) % 6.283, pos: new THREE.Vector3(h[0], h[1] - SPACING * Math.floor(i / H.length) - 0.16 * LEAF, h[2]) };
     });
     leafTree.byId = new Map(leafTree.placed.map((l) => [l.id, l]));
     for (const k of Object.keys(seen)) { if (seen[k] > leafTree.meshes[k].cap) make(k, Math.ceil(seen[k] * 1.5)); leafTree.meshes[k].count = seen[k]; }
@@ -2459,40 +2436,41 @@ const leafTree = { list: [], placed: [], byId: new Map(), sel: null, label: null
       const t = time * 1.1 + l.ph;
       e.set(amp * Math.sin(t * 0.9 + l.depth), 0, amp * 0.7 * Math.sin(t * 0.73 + l.ph)); // the string swings from the hook
       M.compose(v.set(l.hook[0], l.hook[1], l.hook[2]), q.setFromEuler(e), one);
-      L2.compose(v.set(0, -SPACING * l.depth - 0.04, 0), q.setFromEuler(e.set(0, l.ph + (calm ? 0 : (0.4 + windGust) * Math.sin(time * 0.6 + l.ph * 3)), 0)), one);
+      L2.compose(v.set(0, -SPACING * l.depth - 0.03 * LEAF, 0), q.setFromEuler(e.set(0, l.ph + (calm ? 0 : (0.4 + windGust) * Math.sin(time * 0.6 + l.ph * 3)), 0)), one);
       M.multiply(L2); leafTree.meshes[l.metal].setMatrixAt(l.slot, M);
-      l.pos.set(0, -0.17, 0).applyMatrix4(M); // (the middle of the leaf: where a tap finds it)
+      l.pos.set(0, -0.135 * LEAF, 0).applyMatrix4(M); // (the middle of the leaf: where a tap finds it)
     }
     for (const k in leafTree.meshes) leafTree.meshes[k].instanceMatrix.needsUpdate = true;
     still = far;
-    if (leafTree.glow) { const l = leafTree.byId.get(leafTree.sel); if (l) { leafTree.glow.position.copy(l.pos); leafTree.glow.material.opacity = calm ? 0.8 : 0.65 + 0.25 * Math.sin(time * 3); leafTree.label.position.set(l.pos.x, l.pos.y + 0.9, l.pos.z); } }
+    if (leafTree.glow) { const l = leafTree.byId.get(leafTree.sel); if (l) { leafTree.glow.position.copy(l.pos); leafTree.glow.material.opacity = calm ? 0.8 : 0.65 + 0.25 * Math.sin(time * 3); leafTree.label.position.set(l.pos.x, l.pos.y - 1.1, l.pos.z); } }
   });
 }
 const LEAF_METAL = { gold: ["ใบโพธิ์ทอง", "Gold leaf"], silver: ["ใบโพธิ์เงิน", "Silver leaf"], copper: ["ใบโพธิ์นาก", "Pink gold leaf"] };
 const leafName = (l) => l.name || tx("ผู้ไม่ประสงค์ออกนาม", "Anonymous");
 // light one leaf and name it above; with walk, the child goes to stand before it, looking up at it
+const leafLook = { on: false, k: 0, x: 0, z: 0 }; // the camera turned up toward a leaf just walked to
 function showLeaf(id, walk = false) {
   const l = leafTree.byId.get(id); if (!l) return false;
   if (leafTree.label) { scene.remove(leafTree.label); leafTree.label.material.map.dispose(); signMats.splice(signMats.indexOf(leafTree.label.material), 1); }
   const sub = [l.dedication && tx("อุทิศแด่ ", "for ") + l.dedication, l.wish].filter(Boolean).join(" · ") || tx(...LEAF_METAL[l.metal]);
-  leafTree.label = sign(leafName(l), sub.length > 46 ? sub.slice(0, 45) + "…" : sub, "🍃", l.pos.x, l.pos.y + 0.9, l.pos.z, 2.6);
-  if (!leafTree.glow) { leafTree.glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: 0xfff0b0, transparent: true, depthWrite: false, toneMapped: false })); leafTree.glow.scale.set(0.9, 0.9, 1); leafTree.glow.renderOrder = 6; scene.add(leafTree.glow); }
+  leafTree.label = sign(leafName(l), sub.length > 46 ? sub.slice(0, 45) + "…" : sub, "🍃", l.pos.x, l.pos.y - 1.1, l.pos.z, 2.6); // (beneath it: above it, the crown would hide it)
+  if (!leafTree.glow) { leafTree.glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: 0xfff0b0, transparent: true, depthWrite: false, toneMapped: false })); leafTree.glow.scale.set(1.2, 1.2, 1); leafTree.glow.renderOrder = 6; scene.add(leafTree.glow); }
   leafTree.glow.position.copy(l.pos); leafTree.sel = id;
   if (walk) {
-    // he stands on the court on the road's side of the tree, a little toward the leaf's side, so the camera behind
-    // him is over the open road
-    const ang = ((Math.atan2(l.hook[2] - LEAF_TREE.z, l.hook[0] - LEAF_TREE.x) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI), R = LEAF_TREE.r + 2.6;
-    const side = Math.max(Math.PI * 0.92, Math.min(Math.PI * 1.08, ang)); // (pi: toward the road; the camera passes between the two lamps)
-    player.x = LEAF_TREE.x + Math.cos(side) * R; player.z = LEAF_TREE.z + Math.sin(side) * R; player.y = groundAt(player.x, player.z);
+    // he stands on the courtyard just outside the platform, on the leaf's side of the tree, looking up at it; the
+    // camera, low behind him, turns up toward the leaf (several metres up) until he walks on (leafLook, in the loop)
+    const ang = Math.atan2(l.hook[2] - LEAF_TREE.z, l.hook[0] - LEAF_TREE.x), R = LEAF_TREE.r + 2.4;
+    player.x = LEAF_TREE.x + Math.cos(ang) * R; player.z = LEAF_TREE.z + Math.sin(ang) * R; player.y = groundAt(player.x, player.z);
     player.yaw = Math.atan2(l.pos.x - player.x, l.pos.z - player.z);
-    camYaw = Math.atan2(player.x - LEAF_TREE.x, player.z - LEAF_TREE.z); camPitch = 0.02; camDist = 6.5; // (looking at the tree over his shoulder, from the road's edge: the alms row is beyond)
+    camYaw = Math.atan2(player.x - LEAF_TREE.x, player.z - LEAF_TREE.z); camPitch = 0.06; camDist = 8;
+    Object.assign(leafLook, { on: true, x: player.x, z: player.z });
   }
   return true;
 }
 // a tap: the leaf nearest the line of sight, if one is close to it (leaves are small: a near miss still counts)
 function leafAtRay() {
   if (!leafTree.placed.length || Math.hypot(camera.position.x - LEAF_TREE.x, camera.position.z - LEAF_TREE.z) > 30) return null;
-  let best = null, bestD = 0.3;
+  let best = null, bestD = 0.45;
   for (const l of leafTree.placed) { const d = ray.ray.distanceToPoint(l.pos); if (d < bestD) { best = l; bestD = d; } }
   return best;
 }
@@ -7136,6 +7114,11 @@ function frame(dt) {
   const hit = camRay.intersectObjects(camBlock, false)[0];
   if (hit) tmp.copy(head).addScaledVector(want, Math.max(1.2, hit.distance - 0.35));
   if (settings.calmMotion || hit) camera.position.copy(tmp); else camera.position.lerp(tmp, Math.min(1, dt * 8));
+  // after walking to a leaf on the great Bodhi tree, the camera turns up toward it, and back down once he walks on
+  if (leafLook.on && Math.hypot(player.x - leafLook.x, player.z - leafLook.z) > 1.2) leafLook.on = false;
+  const sel = leafLook.on && leafTree.byId.get(leafTree.sel);
+  leafLook.k += ((sel ? 0.6 : 0) - leafLook.k) * Math.min(1, dt * (settings.calmMotion ? 6 : 2.5));
+  if (leafLook.k > 0.005 && (sel || leafTree.byId.get(leafTree.sel))) head.lerp((sel || leafTree.byId.get(leafTree.sel)).pos, leafLook.k);
   camera.lookAt(head);
 
   // running water (slower with calm motion on)
@@ -7306,7 +7289,7 @@ function kidStep(dt) {
   for (const s of journeyStones) { const d = Math.hypot(player.x - s.x, player.z - s.z); if (d < 2.6 && d < bestD) { best = { ...PLACES.find((p) => p.id === "journey"), stone: s.i }; bestD = d; } }
   if (Math.hypot(player.x - BELL[0], player.z - BELL[1]) < 4.4 && 3 < bestD) { best = BELL_PLACE; bestD = 3; } // reachable from the road
   { const d = Math.hypot(player.x - DONATE.x, player.z - (DONATE.z + 0.6 * DONATE.scale)); if (d < 2.6 && d < bestD) { best = DONATE_PLACE; bestD = d; } } // only when standing at the box
-  { const d = Math.hypot(player.x - LEAF_TREE.x, player.z - LEAF_TREE.z) - LEAF_TREE.r; if (d < 3.2 && d < bestD) { best = LEAF_TREE_PLACE; bestD = d; } } // anywhere on the silver and gold Bodhi tree's court
+  { const d = Math.hypot(player.x - LEAF_TREE.x, player.z - LEAF_TREE.z) - LEAF_TREE.r; if (d < 1.6 && d + 0.5 < bestD) { best = LEAF_TREE_PLACE; bestD = d + 0.5; } } // at the wall of the great Bodhi tree's platform (the courtyard's own place and the cloth come first)
   { const d = Math.hypot(player.x - COMMUNITY.x, player.z - (COMMUNITY.z + 0.6 * COMMUNITY.scale)); if (d < 2.6 && d < bestD) { best = COMMUNITY_PLACE; bestD = d; } } // and at the community board
   { const m = monkHere(); if (m && m.d < bestD) { best = monkPlace(m.h, m.s); bestD = m.d; } }
   { const c = infoNear(); if (c && c.d + 1 < bestD) { const T = INFO_TEXT[c.id]; best = { id: "info", icon: "ℹ️", th: T.t[0], en: T.t[1], sub: ["เรื่องน่ารู้", "Good to know"], info: c.id, key: c.id }; bestD = c.d + 1; } } // (anything else here comes first)
