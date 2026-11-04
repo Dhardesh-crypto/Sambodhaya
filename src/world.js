@@ -2254,29 +2254,32 @@ const bodhiLeafShape = () => {
   return leaf;
 };
 /* ---------------- the great Bodhi tree itself, at the centre on its platform ---------------- */
-// A living Bodhi tree, about 18 m: its trunk many stems twisted into one, its roots spreading over the earth inside the
-// platform and down into it, its limbs reaching out and up into a broad dome of heart-shaped leaves that billow in
-// clusters, droop at the rim and glow yellow-green where the sun shines through them; on capable devices the light
-// falls through the crown in soft shafts. Built here, not loaded: a few draw calls, the leaves all one batch (fewer
-// and larger on phones). The platform and the earth are above.
+// A living Bodhi tree, about 18 m: its trunk many stems braided into one, flowing out into the roots that spread over the
+// earth inside the platform; its limbs forking again and again into fine twigs; and at the twigs' ends the crown, in
+// clumps of foliage with sky and branches showing between them, glowing yellow-green where the sun shines through. The
+// foliage is drawn as game trees are: each piece a flat card showing a painted spray of ten or so leaves (a 2 x 2 sheet,
+// assets/tex/bodhi_leaves.webp), all one batch, so few triangles make a great many leaves (fewer, larger cards on
+// phones). The bark is a tiling texture with its relief. On capable devices the light falls through the crown in soft
+// shafts. The textures come from .dev/tools/prep-bodhi-tex.mjs. The platform and the earth are above.
 {
   const S = 1.6, B = 1.35; // the scale it is drawn at, and the earth's height at the trunk
   const mound = (r) => 1.32 + 0.25 * (1 - Math.min(1, r / 6.7) ** 2); // (the earth inside the platform, as above)
   let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647, V = (x, y, z) => new THREE.Vector3(x, y, z);
   const W = (x, y, z) => V(x * S, B + y * S, z * S); // (trunk, limbs and crown are laid out a size down, then scaled)
-  // the wood: tubes that taper along a curve (a TubeGeometry's radius is fixed), streaked light and dark along their
-  // length like the bark's ridges, greener where they meet the earth
-  const wood = [];
-  const tube = (pts, r0, r1, seg, rad, hooks = false) => {
-    const c = new THREE.CatmullRomCurve3(pts), geo = new THREE.TubeGeometry(c, seg, 1, rad), p = geo.attributes.position, n = geo.attributes.normal;
-    const col = new Float32Array(p.count * 3), tone = 0.85 + 0.3 * rnd(), ctr = new THREE.Vector3();
+  // the wood: tubes that taper along a curve (a TubeGeometry's radius is fixed), a little lumpy, the bark's fibres running
+  // along them at its real size, greener where they meet the earth
+  const wood = [], BARK = 3.2; // (metres of wood per repeat of the bark)
+  const tube = (pts, r0, r1, seg, rad, hooks = false, lumps = 0) => {
+    const c = new THREE.CatmullRomCurve3(pts), geo = new THREE.TubeGeometry(c, seg, 1, rad), p = geo.attributes.position, n = geo.attributes.normal, uv = geo.attributes.uv;
+    const col = new Float32Array(p.count * 3), tone = 0.82 + 0.3 * rnd(), ctr = new THREE.Vector3(), L = c.getLength(), ph = rnd() * 6.28, around = Math.max(1, Math.round(6.283 * (r0 + r1) / 2 / BARK));
     for (let i = 0; i <= seg; i++) {
       const u = i / seg, r = r0 + (r1 - r0) * Math.pow(u, 0.8); c.getPointAt(u, ctr);
-      const moss = Math.max(0, 1 - (ctr.y - mound(Math.hypot(ctr.x, ctr.z))) / 0.8) * 0.3;
+      const moss = Math.max(0, 1 - (ctr.y - mound(Math.hypot(ctr.x, ctr.z))) / 1.2) * 0.45;
       for (let j = 0; j <= rad; j++) {
-        const k = i * (rad + 1) + j, ridge = 0.72 + 0.28 * Math.sin(j / rad * 6.283 * 3 + u * 9 + tone * 7) * Math.sin(u * 23 + j);
-        p.setXYZ(k, ctr.x + n.getX(k) * r, ctr.y + n.getY(k) * r, ctr.z + n.getZ(k) * r);
-        col.set([(0.5 - moss * 0.25) * ridge * tone, (0.36 + moss * 0.12) * ridge * tone, 0.23 * ridge * tone], k * 3);
+        const k = i * (rad + 1) + j, a = j / rad * 6.283, rr = r * (1 + lumps * (Math.sin(a * 2 + u * 11 + ph) * 0.6 + Math.sin(a * 3 - u * 17 + ph * 2) * 0.4));
+        p.setXYZ(k, ctr.x + n.getX(k) * rr, ctr.y + n.getY(k) * rr, ctr.z + n.getZ(k) * rr);
+        uv.setXY(k, j / rad * around + ph, u * L / BARK);
+        col.set([(1 - moss * 0.45) * tone, (1 - moss * 0.1) * tone, (1 - moss * 0.5) * tone], k * 3);
       }
     }
     geo.setAttribute("color", new THREE.BufferAttribute(col, 3)); geo.computeVertexNormals(); wood.push(geo);
@@ -2287,69 +2290,80 @@ const bodhiLeafShape = () => {
     }
     return c;
   };
-  // the trunk: seven stems twisted round each other into one, round a core, splaying at the foot
-  tube([W(0, -0.1, 0), W(0, 2, 0), W(0, 4.1, 0)], 0.62 * S, 0.3 * S, 8, 12);
-  for (let s = 0; s < 7; s++) {
-    const a0 = s / 7 * Math.PI * 2, pts = [];
-    for (let k = 0; k <= 8; k++) { const h = k / 8, a = a0 + h * 1.9, rr = 0.3 + 0.62 * Math.pow(1 - h, 2.2); pts.push(W(Math.cos(a) * rr, -0.1 + h * 3.5, Math.sin(a) * rr)); }
-    tube(pts, 0.3 * S, 0.17 * S, 26, 8);
+  // the trunk: ten stems braided round each other into one, round a core, splaying at the foot
+  tube([W(0, -0.1, 0), W(0, 2, 0), W(0, 4.3, 0)], 0.6 * S, 0.2 * S, 10, 12, false, 0.05);
+  for (let s = 0; s < 10; s++) {
+    const a0 = s / 10 * Math.PI * 2, pts = [], turn = 2.2 + (s % 3) * 0.35;
+    for (let k = 0; k <= 9; k++) { const h = k / 9, a = a0 + h * turn, rr = 0.3 + 0.7 * Math.pow(1 - h, 2.4) + 0.04 * Math.sin(h * 9 + s); pts.push(W(Math.cos(a) * rr, -0.12 + h * 4.5, Math.sin(a) * rr)); }
+    tube(pts, 0.25 * S, 0.06 * S, HIGH ? 34 : 20, HIGH ? 8 : 6, false, 0.08);
   }
   // the roots: out over the earth and down into it, some with a smaller root off them; all inside the platform's wall
-  for (let i = 0; i < 16; i++) {
-    let a = (i + rnd() * 0.6) / 16 * Math.PI * 2; const L = 3 + rnd() * 2.2, pts = [];
+  for (let i = 0; i < 20; i++) {
+    let a = (i + rnd() * 0.6) / 20 * Math.PI * 2; const L = 3 + rnd() * 2.2, pts = [];
     for (let k = 0; k <= 6; k++) { const u = k / 6, r = 1.2 + u * L; a += (rnd() - 0.5) * 0.12; pts.push(V(Math.cos(a) * r, mound(r) + 0.95 * Math.pow(1 - u, 2.5) - 0.14 * u * u, Math.sin(a) * r)); }
-    const c = tube(pts, 0.42, 0.05, 22, 7);
+    const c = tube(pts, 0.46, 0.05, 24, 7, false, 0.1);
     if (rnd() < 0.6) {
       const p0 = c.getPointAt(0.45), b = a + (rnd() < 0.5 ? -0.7 : 0.7), l = 1.2 + rnd() * 1.2, e = (k) => { const x = p0.x + Math.cos(b) * l * k, z = p0.z + Math.sin(b) * l * k; return V(x, mound(Math.hypot(x, z)) + 0.06 - 0.16 * k, z); };
       tube([p0, e(0.5), e(1)], 0.14, 0.03, 10, 5);
     }
   }
-  const CROWN = { y: B + 7.9 * S, rx: 6.6 * S, up: 3.3 * S, down: 2.5 * S, droop: 1.9 * S };
-  const within = (p) => { const k = Math.hypot(p.x, p.z) / (CROWN.rx * 0.72); if (k > 1) { p.x /= k; p.z /= k; } const h = Math.hypot(p.x, p.z) / CROWN.rx, top = CROWN.y + CROWN.up * 0.45 * Math.sqrt(1 - h * h) - CROWN.droop * h * h; p.y = Math.min(p.y, top); return p; }; // (no twig through the leaves)
-  // the limbs: from the top of the trunk out and up, the lower ones long and nearly level, the upper ones rising into
-  // the crown; each with side branches whose tips hold the leaves
-  for (let i = 0; i < 9; i++) {
-    const a = (i + 0.35 * rnd()) / 9 * Math.PI * 2, low = i % 2 === 0, c = Math.cos(a), s = Math.sin(a);
-    const out = low ? [0.3, 1.5, 3.0, 4.4, 5.6] : [0.25, 0.9, 1.9, 2.9, 3.7], up = low ? [3.5, 4.0, 4.8, 6.0, 7.4] : [3.6, 4.8, 6.3, 7.8, 9.0];
+  const CROWN = { y: B + 7.6 * S, rx: 7.4 * S, up: 2.5 * S };
+  const within = (p) => { const k = Math.hypot(p.x, p.z) / (CROWN.rx * 0.86); if (k > 1) { p.x /= k; p.z /= k; } const h = Math.hypot(p.x, p.z) / CROWN.rx; p.y = Math.min(p.y, CROWN.y + CROWN.up * Math.sqrt(1 - h * h) * 0.8 - 0.9 * S * h * h); return p; }; // (the crown's broad dome)
+  // the limbs: from the top of the trunk out and up, the lower ones long and nearly level, the upper ones rising into the
+  // crown; each forks and forks again, and the foliage clumps at the fine twigs' ends
+  const clumps = [];
+  const twig = (p0, b, l, rise, r, depth, hooks) => {
+    const p2 = within(V(p0.x + Math.cos(b) * l, p0.y + rise, p0.z + Math.sin(b) * l)), w = b + (rnd() - 0.5) * 0.7;
+    const c = tube([p0, within(V(p0.x + Math.cos(w) * l * 0.5, p0.y + rise * 0.62, p0.z + Math.sin(w) * l * 0.5)), p2], r, r * 0.45, depth > 1 ? 10 : depth ? 6 : 3, depth > 1 ? 6 : depth ? 4 : 3, hooks);
+    if (!depth || (!HIGH && depth === 1)) { clumps.push(p2); return; }
+    for (const u of [0.55, 0.8, 1]) twig(c.getPointAt(u), b + (rnd() - 0.5) * 2, l * (0.5 + rnd() * 0.2), (0.15 + rnd() * 0.55) * l * 0.8, r * 0.5, depth - 1, false);
+  };
+  const LAYERS = [[[0.15, 1.5, 3.0, 4.5, 5.8], [2.9, 3.9, 4.8, 6.0, 7.4]], [[0.15, 1.2, 2.6, 3.9, 4.9], [3.1, 4.5, 5.7, 7.0, 8.1]], [[0.1, 0.7, 1.4, 2.1, 2.7], [3.2, 5.0, 6.6, 8.0, 9.1]]];
+  for (let i = 0; i < 11; i++) {
+    const a = (i + 0.35 * rnd()) / 11 * Math.PI * 2 + (i % 3) * 0.7, low = i % 3 === 0, c = Math.cos(a), s = Math.sin(a), [out, up] = LAYERS[i % 3];
     const pts = out.map((r, k) => within(W(c * r + (k ? (rnd() - 0.5) * 0.4 : 0), up[k], s * r + (k ? (rnd() - 0.5) * 0.4 : 0))));
-    const limb = tube(pts, 0.3 * S, 0.06 * S, 26, 8, low);
-    for (const u of [0.42, 0.62, 0.8]) {
-      const p0 = limb.getPointAt(u), b = a + (rnd() < 0.5 ? -1 : 1) * (0.5 + 0.5 * rnd()), l = (1.4 + rnd() * 1.4) * S, rise = (low ? 0.8 + rnd() : 1.2 + rnd() * 1.2) * S;
-      const p2 = within(V(p0.x + Math.cos(b) * l, p0.y + rise, p0.z + Math.sin(b) * l));
-      tube([p0, within(V(p0.x + Math.cos(b) * l * 0.5, p0.y + rise * 0.6, p0.z + Math.sin(b) * l * 0.5)), p2], 0.11 * S, 0.03 * S, 10, 5, low);
-    }
+    const limb = tube(pts, 0.29 * S, 0.06 * S, 30, 9, low, 0.06);
+    for (const u of [0.34, 0.5, 0.66, 0.82, 1]) twig(limb.getPointAt(u), a + (rnd() < 0.5 ? -1 : 1) * (0.35 + 0.7 * rnd()), (1.3 + rnd() * 1.3) * S, (low ? 0.6 + rnd() : 0.9 + rnd() * 1.1) * S, 0.1 * S, 2, low);
   }
-  add(mergeGeometries(wood), new THREE.MeshStandardMaterial({ vertexColors: true, color: 0xd8b48a, roughness: 0.92 }), 0, 0, 0);
-  // the crown: a broad dome of leaves, billowing in clusters, its rim drooping; brighter and yellower outside, on top
-  // and toward the sun, deep green within
+  add(mergeGeometries(wood), P("bodhi_bark", 1, 1, { vertexColors: true }), 0, 0, 0);
+  // the crown: leaf-spray cards round the twigs' ends, brighter and yellower outside, on top and toward the sun, deep within
   const sunDir = sun.position.clone().normalize(), sunView = new THREE.Vector3(), leafWind = { value: 0 }, day = { value: 1 };
-  const crownMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.55, side: THREE.DoubleSide });
+  const leafSheet = texLoader.load("assets/tex/bodhi_leaves.webp"); leafSheet.colorSpace = THREE.SRGBColorSpace; leafSheet.anisotropy = HIGH ? 8 : 2;
+  const crownMat = new THREE.MeshStandardMaterial({ map: leafSheet, alphaTest: 0.42, roughness: 0.5, side: THREE.DoubleSide });
   crownMat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, { uWaterTime: waterTime, uLeafWind: leafWind, uSunView: { value: sunView }, uDay: day });
-    // each leaf flutters on its stalk (the stalk at the top of the shape, y = 0; the tip below moves most)
-    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nuniform float uWaterTime, uLeafWind;")
+    // each card shows one of the sheet's four sprays, and flutters from its twig (y = 0 at the top; the tip moves most)
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nuniform float uWaterTime, uLeafWind;\nattribute vec2 aTile;")
+      .replace("#include <uv_vertex>", "#include <uv_vertex>\n      vMapUv = vMapUv * 0.5 + aTile;")
       .replace("#include <begin_vertex>", `#include <begin_vertex>
       { vec3 ip = instanceMatrix[3].xyz; float f = sin(uWaterTime * 2.1 + ip.x * 1.7 + ip.z * 1.3) + 0.5 * sin(uWaterTime * 3.7 + ip.y * 2.3);
         transformed.z += f * uLeafWind * -position.y; transformed.x += 0.4 * f * uLeafWind * -position.y; }`);
     // the light through the leaves: they glow where you look toward the sun through them, and a little everywhere
     sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform vec3 uSunView; uniform float uDay;")
       .replace("#include <emissivemap_fragment>", `#include <emissivemap_fragment>
-      totalEmissiveRadiance += diffuseColor.rgb * (pow(max(dot(normalize(-vViewPosition), uSunView), 0.0), 3.0) * 1.3 + 0.07) * uDay;`);
+      totalEmissiveRadiance += diffuseColor.rgb * (pow(max(dot(normalize(-vViewPosition), uSunView), 0.0), 3.0) * 1.1 + 0.03) * uDay;
+      if (abs(dot(normalize(vNormal), normalize(vViewPosition))) < 0.2) discard; // (a card edge-on shows only streaks)`);
   };
   crownMat.customProgramCacheKey = () => "bodhi-crown";
-  const N = HIGH ? 8000 : 3500, size = HIGH ? 2.2 : 2.9, crown = new THREE.InstancedMesh(new THREE.ShapeGeometry(bodhiLeafShape(), 3).scale(size, size, 1), crownMat, N);
+  const per = Math.round((HIGH ? 7000 : 2000) / clumps.length), N = per * clumps.length, size = HIGH ? 2.5 : 3.3;
+  const card = new THREE.PlaneGeometry(size, size).translate(0, -size / 2, 0), tiles = new Float32Array(N * 2);
+  const crown = new THREE.InstancedMesh(card, crownMat, N);
   const M4 = new THREE.Matrix4(), q4 = new THREE.Quaternion(), e4 = new THREE.Euler(), s4 = new THREE.Vector3(), col = new THREE.Color();
-  const dark = new THREE.Color(0x2c5418), mid = new THREE.Color(0x5a8c28), lite = new THREE.Color(0xa6c23a);
-  const lump = (x, y, z) => 0.86 + 0.14 * Math.sin(x * 0.9 + 1) * Math.sin(z * 0.8 + 2) + 0.08 * Math.sin(y * 1.6 + x * 0.5);
-  for (let i = 0; i < N; i++) {
-    let d; do { d = V(rnd() * 2 - 1, rnd() * 2 - 1, rnd() * 2 - 1); } while (d.lengthSq() > 1 || d.lengthSq() < 0.01 || d.y < -0.7);
-    d.normalize(); const f = (0.78 + 0.22 * Math.sqrt(rnd())) * lump(d.x * 6, d.y * 3, d.z * 6);
-    const x = d.x * CROWN.rx * f, z = d.z * CROWN.rx * f, h = Math.hypot(x, z) / CROWN.rx, y = CROWN.y + d.y * (d.y > 0 ? CROWN.up : CROWN.down) * f - CROWN.droop * h * h;
-    e4.set((rnd() - 0.5) * 1.1, Math.atan2(x, z) + (rnd() - 0.5) * 1.6, (rnd() - 0.5) * 0.8);
-    M4.compose(V(x, y, z), q4.setFromEuler(e4), s4.setScalar(0.8 + 0.4 * rnd())); crown.setMatrixAt(i, M4);
-    const out = Math.min(1, Math.max(0, (f - 0.78) / 0.22 * 0.5 + d.y * 0.25 + d.dot(sunDir) * 0.2 + (rnd() - 0.5) * 0.5));
-    crown.setColorAt(i, out < 0.5 ? col.copy(dark).lerp(mid, out * 2) : col.copy(mid).lerp(lite, out * 2 - 1));
-  }
+  const deep = new THREE.Color(0.16, 0.25, 0.14), full = new THREE.Color(0.66, 0.74, 0.5), sunny = new THREE.Color(1.05, 1.02, 0.55);
+  clumps.forEach((c, ci) => {
+    const R = (HIGH ? 1 : 1.3) * S * (0.7 + rnd() * 0.6);
+    for (let j = 0; j < per; j++) {
+      const i = ci * per + j; let d; do { d = V(rnd() * 2 - 1, rnd() * 2 - 1, rnd() * 2 - 1); } while (d.lengthSq() > 1);
+      const x = c.x + d.x * R, y = c.y + d.y * R * 0.5 + 0.5, z = c.z + d.z * R;
+      e4.set((rnd() - 0.5) * 1.1, Math.atan2(x, z) + (rnd() - 0.5) * 1.8, (rnd() - 0.5) * 0.9);
+      M4.compose(V(x, y, z), q4.setFromEuler(e4), s4.setScalar(0.8 + 0.45 * rnd())); crown.setMatrixAt(i, M4);
+      tiles.set([(i % 2) * 0.5, ((i >> 1) % 2) * 0.5], i * 2);
+      // lit from outside the clump and the crown: dark low down and deep in, bright at the top and toward the sun
+      const out = Math.min(1, Math.max(0, 0.4 + d.y * 0.5 + (Math.hypot(x, z) / CROWN.rx) * 0.25 + ((y - CROWN.y) / CROWN.up) * 0.3 + (rnd() - 0.5) * 0.45));
+      col.copy(deep).lerp(full, out); if (d.dot(sunDir) > 0.45 && out > 0.5) col.lerp(sunny, 0.6); crown.setColorAt(i, col);
+    }
+  });
+  card.setAttribute("aTile", new THREE.InstancedBufferAttribute(tiles, 2));
   crown.onBeforeRender = (r, sc, cam) => sunView.copy(sun.position).normalize().transformDirection(cam.matrixWorldInverse);
   crown.castShadow = HIGH; crown.raycast = () => {}; scene.add(crown); // (taps look past the leaves)
   // fresh fallen leaves, yellow and brown, on the earth among the roots
@@ -7320,7 +7334,7 @@ document.fonts.load("64px Itim").then(() => document.fonts.load("36px Mali")).ca
 });
 camYaw = 0; camera.position.set(0, 8, 105);
 restoreSpot(); // back from a page of the site: stand where you were
-if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, renderer, reflectors, two: () => ({ P1, P2, twoP, owner, kid }), meal, setMealTime: (v) => { mealForce = v; }, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, almsScene, almsShow, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, gardenSpots, paths, floors, ponds, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startGreet, startKathin, kathinSpots, feed, startFeed, fishes, food, onBridge, merit, startMerit, meritHere, broom, fallenLeaves, can, waterPots, startWater, fold, startFold, foldPetal, altars, gildImage, leafTree, showLeaf, lane, novice, birds, cat, rain, petals, catShow, catPlan, pet, startPetDog, startPetCat, petStroke, look: (eye, at) => { camera.position.set(...eye); camera.lookAt(...at); if (composer) composer.render(); else renderer.render(scene, camera); }, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
+if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, renderer, reflectors, two: () => ({ P1, P2, twoP, owner, kid }), meal, setMealTime: (v) => { mealForce = v; }, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, almsScene, almsShow, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, gardenSpots, paths, floors, ponds, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startGreet, startKathin, kathinSpots, feed, startFeed, fishes, food, onBridge, merit, startMerit, meritHere, broom, fallenLeaves, can, waterPots, startWater, fold, startFold, foldPetal, altars, gildImage, night, leafTree, showLeaf, lane, novice, birds, cat, rain, petals, catShow, catPlan, pet, startPetDog, startPetCat, petStroke, look: (eye, at) => { camera.position.set(...eye); camera.lookAt(...at); if (composer) composer.render(); else renderer.render(scene, camera); }, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
 // (on a phone the temple shows sooner: models still on their way pop in when they arrive)
 Promise.race([Promise.all(propJobs), new Promise((r) => setTimeout(r, phone ? 4000 : 7000))]).then(() => {
   $("loading").hidden = true;
