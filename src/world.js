@@ -4411,11 +4411,11 @@ const dog = { obj: new THREE.Group(), x: 3, z: 90, y: 0, yaw: Math.PI };
 // A trotting walk for the dog model. In the model's own space the head points to +x, it stands
 // from y = -0.63 (paws) to 0.63 (ears), front legs sit near x = 0.6, back legs near x = -0.3 and the
 // tail curls up behind x = -0.55. Diagonal legs swing together; the tail wags slowly and widely, a little faster when walking.
-const dogAnim = { phase: { value: 0 }, walk: { value: 0 }, time: { value: 0 }, wag: { value: 1 }, sit: { value: 0 }, lie: { value: 0 }, nuzzle: { value: 0 } };
+const dogAnim = { phase: { value: 0 }, walk: { value: 0 }, time: { value: 0 }, wag: { value: 1 }, wagPhase: { value: 0 }, sit: { value: 0 }, lie: { value: 0 }, nuzzle: { value: 0 } };
 function animateDog(mat) {
   mat.onBeforeCompile = (sh) => {
-    sh.uniforms.uPhase = dogAnim.phase; sh.uniforms.uWalk = dogAnim.walk; sh.uniforms.uTime = dogAnim.time; sh.uniforms.uWag = dogAnim.wag; sh.uniforms.uSit = dogAnim.sit; sh.uniforms.uLie = dogAnim.lie; sh.uniforms.uNuzzle = dogAnim.nuzzle;
-    sh.vertexShader = "uniform float uPhase, uWalk, uTime, uWag, uSit, uLie, uNuzzle;\n" + sh.vertexShader.replace("#include <begin_vertex>", `#include <begin_vertex>
+    sh.uniforms.uPhase = dogAnim.phase; sh.uniforms.uWalk = dogAnim.walk; sh.uniforms.uTime = dogAnim.time; sh.uniforms.uWag = dogAnim.wag; sh.uniforms.uWagPhase = dogAnim.wagPhase; sh.uniforms.uSit = dogAnim.sit; sh.uniforms.uLie = dogAnim.lie; sh.uniforms.uNuzzle = dogAnim.nuzzle;
+    sh.vertexShader = "uniform float uPhase, uWalk, uTime, uWag, uWagPhase, uSit, uLie, uNuzzle;\n" + sh.vertexShader.replace("#include <begin_vertex>", `#include <begin_vertex>
       {
         const float HIP = -0.1, FEET = -0.634;
         float below = max(HIP - transformed.y, 0.0);                    // how far under the hip
@@ -4425,7 +4425,7 @@ function animateDog(mat) {
         transformed.x += below * 0.5 * sin(uPhase + off) * uWalk;        // swing forward and back
         transformed.y += 0.07 * legW * legW * max(0.0, cos(uPhase + off)) * uWalk; // lift the paw on the way forward
         float tailW = clamp((-0.5 - transformed.x) / 0.4, 0.0, 1.0) * smoothstep(-0.15, 0.1, transformed.y);
-        transformed.z += sin(uTime * mix(4.2, 7.0, uWalk)) * mix(0.24, 0.32, uWalk) * tailW * tailW * uWag; // an unhurried, wide wag
+        transformed.z += sin(uWagPhase) * mix(0.24, 0.32, uWalk) * tailW * tailW * uWag; // an unhurried, wide wag
         float headW = smoothstep(0.35, 0.6, transformed.x) * smoothstep(0.0, 0.3, transformed.y);
         transformed.y += sin(uPhase * 2.0) * 0.025 * uWalk * headW;
         // nuzzling: the head pushes up into the stroking hand
@@ -7192,6 +7192,8 @@ function frame(dt) {
     dogAnim.phase.value = (dogAnim.phase.value + dt * dogSpeed * 5.2) % (Math.PI * 200); // kept small so it stays precise
     if (!Number.isFinite(dogAnim.phase.value)) dogAnim.phase.value = 0;
     dogAnim.walk.value += ((dogSpeed > 0.5 ? 1 : 0) - dogAnim.walk.value) * Math.min(1, dt * 6);
+    // the wag's speed changes with the walk, so its phase is added up here: time × a changing speed would whip the tail
+    dogAnim.wagPhase.value = (dogAnim.wagPhase.value + dt * (4.2 + 2.8 * dogAnim.walk.value)) % (Math.PI * 2);
     dogAnim.time.value += dt; dogAnim.wag.value = (settings.calmMotion ? 0.4 : 1) * (petting ? 1.3 : 1); // wagging harder while petted
     dog.obj.position.set(dog.x, groundAt(dog.x, dog.z) + (onPath(dog.x, dog.z) && !insideHall(dog.x, dog.z) ? PAVING : 0), dog.z); dog.obj.rotation.y = dog.yaw; // paws on the paving, not in it
     if (!settings.calmMotion) dog.tail.rotation.y = Math.sin(performance.now() / 160) * 0.6;
