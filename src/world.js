@@ -431,33 +431,93 @@ const BRIDGE = { zc: (MOAT.r1 + MOAT.r2) / 2, half: (MOAT.r2 - MOAT.r1) / 2 + 2 
   water.rotation.x = -Math.PI / 2; water.position.y = MOAT.water; scene.add(water);
   // (its floating lotus leaves and water lilies: see "lotus ponds")
 }
+// Paving stones. Each stone of the walkways and the plaza is its own low block: a flat top with a sloping edge (eight
+// corners, ten triangles), sitting a little proud of a dark bed, so the joints are real, catch shadow and catch the
+// light at a low sun. One mesh per walkway, so a walkway still costs a single draw. The stones borrow the rock texture
+// the world already has, with its colour taken out, and each stone samples its own window of it, so nothing repeats.
+// Joints a few centimetres wide would shimmer far away, so past a few metres the bed and edges fade to the stone's
+// colour. The tops never rise above the old paving height: feet, decals and everything set on the paving stay as they were.
+const pavingMat = (() => {
+  const m = new THREE.MeshStandardMaterial({ map: tex("mossy_rock", "diff", 1, 1), vertexColors: true, roughness: 0.92 });
+  if (HIGH) { m.normalMap = tex("mossy_rock", "nor", 1, 1); m.normalScale = new THREE.Vector2(0.45, 0.45); }
+  m.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nattribute float aJoint; varying float vJoint;").replace("#include <begin_vertex>", "#include <begin_vertex>\nvJoint = aJoint;");
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying float vJoint;")
+      .replace("#include <map_fragment>", `vec4 pvT = texture2D(map, vMapUv); float pvL = dot(pvT.rgb, vec3(0.3, 0.59, 0.11));
+        diffuseColor.rgb *= mix(vec3(1.0), pvT.rgb / max(pvL, 0.02), 0.1) * clamp(0.62 + pvL * 2.6, 0.45, 1.3);`)
+      .replace("#include <color_fragment>", `#include <color_fragment>
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.40, 0.33, 0.25), vJoint * 0.85 * smoothstep(7.0, 34.0, length(vViewPosition)));`);
+  };
+  m.customProgramCacheKey = () => "paving";
+  return m;
+})();
+const srgb = (r, g, b) => new THREE.Color().setRGB(r / 255, g / 255, b / 255, THREE.SRGBColorSpace);
+const STONE = { sand: srgb(196, 180, 154), kerb: srgb(158, 140, 116), bed: srgb(84, 74, 62), algae: srgb(128, 132, 96) };
+const paveNoise = (x, z) => { // smooth value noise: slow patches of wear across the ground
+  const h = (i, j) => { const v = Math.sin(i * 127.1 + j * 311.7) * 43758.5453; return v - Math.floor(v); };
+  const i = Math.floor(x), j = Math.floor(z), u = x - i, v = z - j, a = u * u * (3 - 2 * u), b = v * v * (3 - 2 * v);
+  return (h(i, j) * (1 - a) + h(i + 1, j) * a) * (1 - b) + (h(i, j + 1) * (1 - a) + h(i + 1, j + 1) * a) * b;
+};
+function paving(seed) {
+  const P = [], N = [], C = [], U = [], J = [], I = [], col = new THREE.Color();
+  let s = seed; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  const vert = (x, y, z, n, c, u, v, j) => { P.push(x, y, z); N.push(n.x, n.y, n.z); C.push(c.r, c.g, c.b); U.push(u, v); J.push(j); return P.length / 3 - 1; };
+  // a stone over u0..u1 by w0..w1 of the ground `at` lays out; seg pieces along u (for curved stones); wear(x, z, c) shades it
+  const stone = (at, u0, u1, w0, w1, { seg = 1, top, foot, tone, bevel = 0.028, wear, rise = () => 0 }) => {
+    const jit = () => (rnd() - 0.5) * 0.018, c = [[u0 + jit(), w0 + jit()], [u1 + jit(), w0 + jit()], [u1 + jit(), w1 + jit()], [u0 + jit(), w1 + jit()]];
+    const mix = (a, b) => { // a along u, b along w, each 0..1, within the four slightly uneven corners
+      const lo = [c[0][0] + (c[1][0] - c[0][0]) * a, c[0][1] + (c[1][1] - c[0][1]) * a], hi = [c[3][0] + (c[2][0] - c[3][0]) * a, c[3][1] + (c[2][1] - c[3][1]) * a];
+      return at(lo[0] + (hi[0] - lo[0]) * b, lo[1] + (hi[1] - lo[1]) * b);
+    };
+    const bu = bevel / (u1 - u0), bw = bevel / (w1 - w0), rim = [], inner = [];
+    for (let i = 0; i <= seg; i++) { const a = i / seg; rim.push([a, 0]); inner.push([Math.min(1 - bu, Math.max(bu, a)), bw]); }
+    for (let i = seg; i >= 0; i--) { const a = i / seg; rim.push([a, 1]); inner.push([Math.min(1 - bu, Math.max(bu, a)), 1 - bw]); }
+    const y = top - rnd() * 0.005, turn = Math.floor(rnd() * 4) * Math.PI / 2, cs = Math.cos(turn), sn = Math.sin(turn), ou = rnd() * 7, ov = rnd() * 7, T = 2.1;
+    const uv = (x, z) => [(x * cs - z * sn) / T + ou, (x * sn + z * cs) / T + ov];
+    const k = 0.84 + rnd() * 0.3, warm = (rnd() - 0.5) * 0.09, tilt = [(rnd() - 0.5) * 0.05, (rnd() - 0.5) * 0.05];
+    const shade = (x, z, f) => { col.copy(tone); wear?.(x, z, col); col.multiplyScalar(k * f); col.r *= 1 + warm; col.b *= 1 - warm; return col; };
+    const flat = new THREE.Vector3(), slope = new THREE.Vector3(), n = rim.length, a = [], b = [];
+    const mid = mix(0.5, 0.5), d = 0.1, slopeX = (rise(mid[0] + d, mid[1]) - rise(mid[0] - d, mid[1])) / (2 * d), slopeZ = (rise(mid[0], mid[1] + d) - rise(mid[0], mid[1] - d)) / (2 * d);
+    flat.set(tilt[0] - slopeX, 1, tilt[1] - slopeZ).normalize();
+    for (let i = 0; i < n; i++) {
+      const [ix, iz] = mix(...inner[i]), [ox, oz] = mix(...rim[i]);
+      const t = uv(ix, iz), o = uv(ox, oz);
+      a.push(vert(ix, y + rise(ix, iz), iz, flat, shade(ix, iz, 1), t[0], t[1], 0));
+      const e = Math.hypot(ox - mid[0], oz - mid[1]) || 1; slope.set((ox - mid[0]) / e * 0.75, 0.66, (oz - mid[1]) / e * 0.75).normalize();
+      b.push(vert(ox, foot + rise(ox, oz), oz, slope, shade(ox, oz, 0.58), o[0], o[1], 0.75));
+    }
+    const p0 = mix(0, 0), p1 = mix(1, 0), p2 = mix(0, 1), flip = (p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]) > 0; // keep the faces towards the sky
+    const tri = (p, q, r) => flip ? I.push(p, q, r) : I.push(p, r, q);
+    for (let i = 0; i < seg; i++) { const p = a[i], q = a[i + 1], r = a[n - 1 - i], t = a[n - 2 - i]; tri(p, r, q); tri(q, r, t); }
+    for (let i = 0; i < n; i++) { const j = (i + 1) % n; tri(b[i], a[i], b[j]); tri(b[j], a[i], a[j]); }
+  };
+  const bed = (pts, y) => { // the dark bed in the joints: a flat fan of a strip of points, two by two
+    const v = pts.map(([x, z]) => vert(x, y, z, THREE.Object3D.DEFAULT_UP, STONE.bed, x / 2.1, z / 2.1, 1));
+    for (let i = 0; i + 3 < v.length; i += 2) { const [p, q, r, t] = [v[i], v[i + 1], v[i + 2], v[i + 3]]; const A = pts[i], B = pts[i + 1], D = pts[i + 2];
+      const ccw = (B[0] - A[0]) * (D[1] - A[1]) - (B[1] - A[1]) * (D[0] - A[0]) > 0; ccw ? I.push(p, r, q, q, r, t) : I.push(p, q, r, q, t, r); }
+  };
+  const finish = () => {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(P, 3)); g.setAttribute("normal", new THREE.Float32BufferAttribute(N, 3));
+    g.setAttribute("color", new THREE.Float32BufferAttribute(C, 3)); g.setAttribute("uv", new THREE.Float32BufferAttribute(U, 2));
+    g.setAttribute("aJoint", new THREE.Float32BufferAttribute(J, 1)); g.setIndex(I);
+    return add(g, pavingMat, 0, 0, 0, scene, false);
+  };
+  return { stone, bed, finish, rnd };
+}
+// worn paler down the middle where feet go, a little green at the damp edges
+const pathWear = (edge) => (x, z, c) => {
+  const e = edge(x, z), p = paveNoise(x * 0.45, z * 0.45), q = paveNoise(x * 1.7 + 9, z * 1.7);
+  c.multiplyScalar(0.9 + 0.14 * (1 - e) + 0.12 * (q - 0.5));
+  c.lerp(STONE.algae, Math.max(0, e - 0.55) * 0.75 * Math.max(0, p - 0.35) * 1.6);
+};
 // paving is laid flush: its surface is only a few centimetres above the grass, where feet walk.
-// The plaza: sandstone flagstones laid in rings round the Bodhi tree, each slab its own shade, joints staggered from
-// ring to ring; a ring of river pebbles at the foot of the tree's platform, and a band of darker stone at the edge.
+// The plaza: sandstone flagstones laid in rings round the Bodhi tree, joints staggered from ring to ring, and a band of
+// darker stone at the edge (real stones, below); this texture is the ring of river pebbles at the foot of the platform.
 const plazaTex = (() => {
   const N = HIGH ? 2048 : 1024, R = 16, px = N / (2 * R), c = document.createElement("canvas"); c.width = c.height = N; const g = c.getContext("2d");
   let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   g.fillStyle = "#6f6456"; g.fillRect(0, 0, N, N); // the joints
-  const slab = (r0, r1, a0, a1, base) => {
-    const k = 0.74 + rnd() * 0.36, warm = rnd() * 14 - 7, col = base.map((v, j) => Math.round(Math.min(255, v * k + (j === 0 ? warm : j === 2 ? -warm : 0))));
-    g.fillStyle = `rgb(${col})`; g.beginPath();
-    const gap = 0.035 * px, rr0 = r0 * px + gap, rr1 = r1 * px - gap, da = gap / (r1 * px);
-    g.arc(N / 2, N / 2, rr1, a0 + da, a1 - da); g.arc(N / 2, N / 2, rr0, a1 - da * r1 / r0, a0 + da * r1 / r0, true); g.closePath(); g.fill();
-    for (let i = 0; i < (r1 - r0) * (a1 - a0) * r1 * 60; i++) { // the grain of the stone
-      const a = a0 + rnd() * (a1 - a0), r = (r0 + rnd() * (r1 - r0)) * px;
-      g.fillStyle = `rgba(${rnd() < 0.5 ? "60,50,40" : "255,250,240"},${0.05 + rnd() * 0.08})`; g.fillRect(N / 2 + Math.cos(a) * r, N / 2 + Math.sin(a) * r, 1 + rnd() * 2.5, 1 + rnd() * 2.5);
-    }
-    if (rnd() < 0.25) { // a weathered patch: lichen or old stain
-      const a = (a0 + a1) / 2, r = (r0 + r1) / 2 * px, x = N / 2 + Math.cos(a) * r, y = N / 2 + Math.sin(a) * r, rad = (0.2 + rnd() * 0.3) * px;
-      const gr = g.createRadialGradient(x, y, 0, x, y, rad); gr.addColorStop(0, rnd() < 0.5 ? "rgba(95,100,70,.28)" : "rgba(70,58,45,.25)"); gr.addColorStop(1, "rgba(0,0,0,0)"); g.fillStyle = gr; g.fillRect(x - rad, y - rad, 2 * rad, 2 * rad);
-    }
-  };
-  const sand = [178, 162, 138];
-  for (let r = 7.6; r < 15.2; r += 1.1) { // rings of slabs, each slab about a metre and a quarter along the ring
-    const r1 = Math.min(15.2, r + 1.1), n = Math.round(2 * Math.PI * r1 / 1.25), off = rnd() * 6.28;
-    for (let i = 0; i < n; i++) slab(r, r1, off + i / n * 6.283, off + (i + 1) / n * 6.283, sand);
-  }
-  const n2 = 96; for (let i = 0; i < n2; i++) slab(15.2, 16, i / n2 * 6.283, (i + 1) / n2 * 6.283, [150, 132, 110]); // the border
   for (let i = 0; i < 4200; i++) { // the pebbles by the platform
     const a = rnd() * 6.283, r = (6.95 + rnd() * 0.62) * px, s = (0.035 + rnd() * 0.05) * px, v = 120 + rnd() * 110;
     g.fillStyle = `rgb(${v},${v * 0.95},${v * 0.88})`; g.beginPath(); g.ellipse(N / 2 + Math.cos(a) * r, N / 2 + Math.sin(a) * r, s, s * 0.75, rnd() * 3, 0, 6.283); g.fill();
@@ -467,15 +527,40 @@ const plazaTex = (() => {
 {
   const geo = new THREE.CylinderGeometry(16, 16, 0.2, 128), uv = geo.attributes.uv, pos = geo.attributes.position;
   for (let i = 0; i < uv.count; i++) uv.setXY(i, 0.5 + pos.getX(i) / 32, 0.5 - pos.getZ(i) / 32); // the top seen from above: the texture laid flat
-  add(geo, new THREE.MeshStandardMaterial({ map: plazaTex, color: 0xd8d2c8, roughness: 0.9 }), 0, -0.06, 0, scene, false);
+  add(geo, new THREE.MeshStandardMaterial({ map: plazaTex, color: 0xd8d2c8, roughness: 0.9 }), 0, -0.08, 0, scene, false);
+  const kit = paving(11), TOP = 0.04, FOOT = 0.022, GAP = 0.014, ring = [];
+  const wear = pathWear((x, z) => Math.min(1, Math.max(0, (Math.hypot(x, z) - 13) / 3)));
+  for (let i = 0; i <= 96; i++) { const a = i / 96 * Math.PI * 2; ring.push([Math.cos(a) * 7.6, Math.sin(a) * 7.6], [Math.cos(a) * 16, Math.sin(a) * 16]); }
+  kit.bed(ring, FOOT);
+  const round = (r0, r1, n, tone) => {
+    const rm = (r0 + r1) / 2, turn = kit.rnd() * 6.28, at = (u, w) => [Math.cos(u / rm + turn) * w, Math.sin(u / rm + turn) * w], L = 2 * Math.PI * rm / n;
+    for (let i = 0; i < n; i++) kit.stone(at, i * L + GAP, (i + 1) * L - GAP, r0 + GAP, r1 - GAP, { seg: 3, top: TOP, foot: FOOT, tone, wear });
+  };
+  for (let r = 7.6; r < 15.2; r += 1.1) { const r1 = Math.min(15.2, r + 1.1); round(r, r1, Math.round(2 * Math.PI * r1 / 1.25), STONE.sand); } // about a metre and a quarter along the ring
+  round(15.2, 16, 96, STONE.kerb);
+  kit.finish();
 }
 const paths = []; // for footsteps: stone on paths, grass elsewhere
-const path = (x1, z1, x2, z2, w = 5) => {
-  paths.push({ x1, z1, x2, z2, w });
+const pathStones = (x1, z1, x2, z2, w, rise) => { // rise(x, z): the height of the surface they lie on (the bridge's arch)
   const dx = x2 - x1, dz = z2 - z1, len = Math.hypot(dx, dz);
-  const m = add(new THREE.BoxGeometry(w, 0.15, len), P("brick_pavement_02", Math.round(w / 3), Math.round(len / 3), { color: new THREE.Color(1.75, 1.5, 1.2) }), (x1 + x2) / 2, -0.05, (z1 + z2) / 2, scene, false);
-  m.rotation.y = Math.atan2(dx, dz);
+  const tx = dx / len, tz = dz / len, at = (u, v) => [x1 + tx * u - tz * v, z1 + tz * u + tx * v]; // u along the path, v across it
+  const kit = paving(Math.round(Math.abs(x1 * 131 + z1 * 17 + x2 * 7 + z2 * 3)) + 5), TOP = 0.025, FOOT = 0.012, GAP = 0.014, KERB = 0.32, half = w / 2;
+  const wear = pathWear((x, z) => Math.min(1, Math.abs((x - x1) * -tz + (z - z1) * tx) / half));
+  const lay = (u0, u1, v0, v1, tone) => {
+    const [cx, cz] = at((u0 + u1) / 2, (v0 + v1) / 2);
+    if (Math.hypot(cx, cz) > 15.6) kit.stone(at, u0 + GAP, u1 - GAP, v0 + GAP, v1 - GAP, { top: TOP, foot: FOOT, tone, wear, rise }); // (the plaza lies over the start of the path)
+  };
+  if (!rise) kit.bed([at(0, -half), at(0, half), at(len, -half), at(len, half)], FOOT);
+  [-1, 1].forEach((sg) => { // kerbs: long, narrow, darker stones down each side
+    for (let u = 0, n; u < len; u = n) { n = u + 0.9 + kit.rnd() * 0.6; if (len - n < 0.5) n = len; lay(u, n, sg > 0 ? half - KERB : -half, sg > 0 ? half : -half + KERB, STONE.kerb); }
+  });
+  for (let u = 0, n; u < len; u = n) { // rows across the path, the joints of each row falling between those of the last
+    n = u + 0.55 + kit.rnd() * 0.4; if (len - n < 0.4) n = len;
+    for (let v = -half + KERB, e; v < half - KERB; v = e) { e = v + 0.65 + kit.rnd() * 0.6; if (half - KERB - e < 0.4) e = half - KERB; lay(u, n, v, e, STONE.sand); }
+  }
+  kit.finish();
 };
+const path = (x1, z1, x2, z2, w = 5) => { paths.push({ x1, z1, x2, z2, w }); pathStones(x1, z1, x2, z2, w); };
 // the roads start inside the plaza circle, so no grass shows where a straight edge meets the curve
 const ROAD = 7;
 // the roads run half a metre onto each end of the bridge, so road and bridge join without a gap
@@ -2196,9 +2281,10 @@ const nagaScales = (() => {
   for (let i = N; i >= 0; i--) { const u = -H + (2 * H * i) / N; sh.lineTo(u, topY(u) - 0.7); }
   const deckGeo = new THREE.ExtrudeGeometry(sh, { depth: BW, bevelEnabled: false });
   deckGeo.rotateY(Math.PI / 2); deckGeo.translate(-BW / 2, 0, 0);
-  add(deckGeo, P("brick_pavement_02", 0.35, 0.35, { color: new THREE.Color(1.75, 1.5, 1.2) }), 0, 0.02, ZC);
+  add(deckGeo, P("brick_pavement_02", 0.35, 0.35, { color: new THREE.Color(1.75, 1.5, 1.2) }), 0, 0, ZC); // (only its sides show: the road's stones lie on top)
   floors.push({ x: 0, z: ZC, c: 1, s: 0, hx: BW / 2, hz: H, y: RISE + 0.02, arch: true });
   paths.push({ x1: 0, z1: ZC - H, x2: 0, z2: ZC + H, w: BW }); // footsteps sound like stone here
+  pathStones(0, ZC - H, 0, ZC + H, BW, (x, z) => (RISE + 0.02) * (1 - ((z - ZC) / H) ** 2)); // the road's own stones, carried over the arch at the height feet walk
   const white = S(0xfbf6ec, { roughness: 0.8 });
   [-1, 1].forEach((sg) => {
     const x = sg * (BW / 2 - 0.2);
